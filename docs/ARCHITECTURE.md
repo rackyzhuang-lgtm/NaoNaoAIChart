@@ -99,6 +99,7 @@ flowchart LR
 
 ### 实现边界
 
+- `src/shared/constants.ts`：固定的公开 sub2api 服务根地址；所有适配层从该常量派生 URL，不重复硬编码。
 - `src/shared`：sub2api API DTO、错误模型、能力模型和纯函数。
 - `src/main`：控制面 HTTP client、token refresh 单飞、凭证存储、外部浏览器回调。
 - `src/preload`：按业务动作暴露受控 IPC，不暴露任意 HTTP 或原始令牌读取。

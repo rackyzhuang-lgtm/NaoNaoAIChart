@@ -1,3 +1,5 @@
+export const SUB2API_BASE_URL = 'https://naonaoai.shop'
+
 export enum ContextWindowSize {
   t16k = 16384,
   t32k = 32768,

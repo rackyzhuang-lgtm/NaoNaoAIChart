@@ -5,8 +5,9 @@
 ## 当前结论
 
 - Chatbox Community Edition 基线已导入，保留完整可达历史；基线 SHA 为 `f90fc31afd634494bdf8f074eca3e38fcf8da740`。
-- 导入提交为 `59d55feb`；当前工作分支为 `codex/batch-1-baseline`，本地 `main` 当前也指向该导入提交。
+- 导入提交为 `59d55feb`；第一批验证提交为 `1ec60fd2`，当前分支为本地 `main`。
 - 第一批只处理上游基线、Windows 可移植性和验证，不包含 sub2api 业务接入。
+- 项目所有者已确认首发固定连接 `https://naonaoai.shop`；共享常量为 `SUB2API_BASE_URL`，当前不开放任意实例配置。
 - 本地 `参考原项目源码/` 仅用于只读参考，已由 `.gitignore`、TypeScript 和 Biome 排除，不参与提交或推送。
 - Chatbox + sub2api 的技术集成可行性仍为“高”；账户控制面与模型数据面的鉴权必须分离。
 - 尚未连接项目所有者的真实 sub2api 部署，所有真实接口行为、版本和功能开关仍待确认。
@@ -57,9 +58,8 @@
 
 ## 待确认
 
-- 已部署 sub2api 的 HTTPS 根地址、部署版本/commit、standard/simple 模式和已启用功能。
+- 已部署 sub2api 的部署版本/commit、standard/simple 模式和已启用功能。
 - 可用于开发的普通用户测试账号、允许创建的测试 API Key 和模型测试额度；秘密信息不得写入仓库。
-- 首发是否只支持固定实例，还是允许用户填写任意 sub2api 实例。
 - 首发是否开放注册，以及 OAuth、2FA、Passkey、支付的范围和外部浏览器策略。
 - `origin` 的远程默认分支是否使用 `main`，以及何时允许首次推送。
 

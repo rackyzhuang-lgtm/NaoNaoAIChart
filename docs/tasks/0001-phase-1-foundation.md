@@ -26,6 +26,7 @@
 - 全量验证：TypeScript 0 error；Biome 0 error、901 warnings；Vitest 225 files passed、2 skipped，2,388 tests passed、61 skipped；生产构建通过；Electron 开发进程持续运行 30 秒后已清理。
 - `test:e2e` 当前缺少配置和 Playwright 锁定依赖，不可执行；`test:model-provider` 按约束未运行。
 - `zipfile@0.5.12` 是 `epub@1.3.0` 的可选原生加速依赖，Windows 构建失败后回退 `adm-zip`，记录为非阻塞风险。
+- 项目所有者确认首发固定连接 `https://naonaoai.shop`；已新增共享常量 `SUB2API_BASE_URL`，任意实例配置不在当前范围。
 
 ## 范围
 
