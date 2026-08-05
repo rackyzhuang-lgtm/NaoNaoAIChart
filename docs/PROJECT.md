@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-截至 2026-08-05，仓库已导入 Chatbox Community Edition 基线 `f90fc31afd634494bdf8f074eca3e38fcf8da740` 并保留完整历史。第一批完成 Windows 开发环境的安装、类型检查、lint、默认测试、生产构建和进程级桌面启动冒烟；尚未开始 sub2api 业务接入。
+截至 2026-08-05，仓库已导入 Chatbox Community Edition 基线 `f90fc31afd634494bdf8f074eca3e38fcf8da740` 并保留完整历史。第一批完成 Windows 基线验证；第二批完成 `NaoNaoAI Chat` 品牌基线、sub2api 控制面契约、主进程内存会话/HTTP client、窄业务 IPC、真实登录联调和 Windows x64/arm64 开发验收包。账户 UI、API Key 管理与模型 Provider 尚未实现。
 
 ## 产品目标
 

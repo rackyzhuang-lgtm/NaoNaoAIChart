@@ -22,7 +22,6 @@ export function createCallbackServer(
 ): { promise: Promise<CallbackResult>; close: () => void } {
   let server: http.Server | null = null
   let resolved = false
-  let resolvePromise: (value: CallbackResult) => void
   let rejectPromise: (reason: Error) => void
   let timeoutId: ReturnType<typeof setTimeout> | null = null
 
@@ -38,7 +37,6 @@ export function createCallbackServer(
   }
 
   const promise = new Promise<CallbackResult>((resolve, reject) => {
-    resolvePromise = resolve
     rejectPromise = reject
 
     server = http.createServer((req, res) => {
@@ -60,7 +58,7 @@ export function createCallbackServer(
         } else if (code) {
           res.writeHead(200, { 'Content-Type': 'text/html' })
           res.end(
-            '<html><body><h1>Authorization successful!</h1><p>You can close this window and return to Chatbox.</p></body></html>'
+            '<html><body><h1>Authorization successful!</h1><p>You can close this window and return to NaoNaoAI Chat.</p></body></html>'
           )
           if (!resolved) {
             resolved = true

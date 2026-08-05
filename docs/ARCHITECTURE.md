@@ -2,7 +2,7 @@
 
 ## 仓库现状
 
-当前仓库已导入 Chatbox Community Edition 基线，现有运行架构即下述 Electron/React/TypeScript 上游架构。sub2api 集成仍是目标架构，尚未实现；文档继续区分“现有基线”和“提议中的集成边界”。
+当前仓库已导入 Chatbox Community Edition 基线，现有运行架构即下述 Electron/React/TypeScript 上游架构。第二批已经实现 sub2api 控制面的共享契约、主进程内存会话、HTTP client 和窄业务 IPC；账户 UI、API Key 管理和模型 Provider 仍是目标架构。
 
 ## Chatbox 上游架构
 
@@ -106,7 +106,15 @@ flowchart LR
 - `src/renderer`：账户中心路由、查询缓存、表单和状态展示。
 - Provider 层：新增明确的 `sub2api` 内置 Provider，或先用自建 OpenAI Provider 完成协议验证。
 
-通过 API 对接远程 sub2api、以 Chatbox 为客户端基线的总体边界已经确认。主进程令牌存储、IPC 粒度等实现细节仍需在第一阶段通过技术验证。
+通过 API 对接远程 sub2api、以 Chatbox 为客户端基线的总体边界已经确认。当前实现细节：
+
+- `src/shared/sub2api/`：Zod 运行时 schema、错误类型、固定路由、URL 构造和 renderer API 类型。
+- `src/main/sub2api/session.ts`：access/refresh token 与 2FA temp token 仅驻留主进程内存；renderer 只得到非敏感会话状态；凭证代际用于隔离并发会话变化。
+- `src/main/sub2api/client.ts`：控制面请求、401 retry、refresh 单飞、令牌轮换、失败清理和旧会话响应丢弃。
+- `src/main/sub2api/ipc-handlers.ts`：公共设置、登录、2FA、登出、会话状态和当前用户固定动作；调用方必须是当前主窗口的受信 renderer frame。
+- `src/preload/index.ts`：静态 `sub2api` 方法桥，不提供任意 URL、header 或原始令牌读取能力。
+
+跨重启安全持久化尚未实现。Electron `safeStorage`、系统 Keychain/Credential Vault 的不可用策略、迁移和三平台行为待独立验证。现有通用 `electronAPI.invoke` 和 Store IPC 是全局安全遗留，新增 sub2api 令牌不得进入这些 Store。主窗口已阻止不受信顶层导航，但 `webSecurity: false` 和既有 IPC 仍需独立治理。
 
 ## 普通用户能力映射
 
@@ -142,6 +150,8 @@ flowchart LR
 - 上游同步：Chatbox 更新活跃，长期 fork 需要控制改动面并持续回归 Provider/设置/路由。
 - 许可证：分发修改版 Chatbox 需要满足 GPL-3.0；具体发布义务需在发布前审查。
 - 服务模式：sub2api 的 simple/standard 模式会改变可见功能，客户端需要能力探测而不是写死页面。
+- IPC：上游 preload 暴露通用 `invoke`；新增 sub2api handler 已校验 sender，但不能据此宣称 renderer 已具备全局严格 capability boundary。
+- Electron：当前窗口使用 `webSecurity: false`；不受信顶层导航已经阻止，账户 UI 接入前仍需要专项移除评估和回归验证。
 
 ## 待确认
 

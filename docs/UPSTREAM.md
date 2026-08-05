@@ -4,8 +4,8 @@
 
 截至 2026-08-05：
 
-- 当前工作分支：`codex/batch-1-baseline`
-- 本地 `main` 与工作分支的共同基点：`59d55feb`（Chatbox 基线与项目文档导入）
+- 第二批开发分支：`codex/batch-2-contract-login`
+- 第二批从本地 `main` 的 `5011363a`（固定 sub2api 地址）开始，验收后 fast-forward 合入本地 `main`
 - `origin`：`git@gitee.com:ribbog77/nao-nao-aichart.git`
 - `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
 - `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`

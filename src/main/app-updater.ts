@@ -14,11 +14,13 @@ function sendToRenderer(win: BrowserWindow | null, channel: string, data?: unkno
 
 export class AppUpdater {
   private getWindow: () => BrowserWindow | null
+  private feedUrl: string | null
   private isChecking = false
   private suppressError = false
 
-  constructor(getWindow: () => BrowserWindow | null) {
+  constructor(getWindow: () => BrowserWindow | null, feedUrl: string | null = null) {
     this.getWindow = getWindow
+    this.feedUrl = feedUrl
 
     log.transports.file.level = 'info'
     autoUpdater.logger = log
@@ -81,7 +83,7 @@ export class AppUpdater {
     })
 
     const settings = getSettings()
-    if (settings.autoUpdate) {
+    if (settings.autoUpdate && this.feedUrl) {
       setTimeout(() => this.tryUpdate().catch((e) => log.error('auto_updater: startup check failed', e)), 5_000)
       setInterval(
         () => this.tryUpdate().catch((e) => log.error('auto_updater: scheduled check failed', e)),
@@ -92,6 +94,9 @@ export class AppUpdater {
   }
 
   async tryUpdate() {
+    if (!this.feedUrl) {
+      throw new Error('NaoNaoAI Chat update service is not configured')
+    }
     if (this.isChecking) {
       log.info('auto_updater: check already in progress, skipping')
       return null
@@ -99,36 +104,12 @@ export class AppUpdater {
 
     this.isChecking = true
     try {
-      const feedUrls = [
-        'https://chatboxai.app/api/auto_upgrade',
-        'https://api.chatboxai.app/api/auto_upgrade',
-        'https://api.ai-chatbox.com/api/auto_upgrade',
-        'https://api.chatboxapp.xyz/api/auto_upgrade',
-        'https://api.chatboxai.com/api/auto_upgrade',
-      ]
-
       const settings = getSettings()
       autoUpdater.channel = settings.betaUpdate ? 'beta' : 'latest'
       autoUpdater.allowDowngrade = false
 
-      let lastError: Error | null = null
-      for (const url of feedUrls) {
-        try {
-          autoUpdater.setFeedURL(url)
-          // Suppress error events from failed URLs — only the final error matters
-          this.suppressError = true
-          const result = await autoUpdater.checkForUpdates()
-          this.suppressError = false
-          return result
-        } catch (e) {
-          lastError = e instanceof Error ? e : new Error(String(e))
-          log.error(`auto_updater: attempt failed: ${url}. `, e)
-        }
-      }
-      this.suppressError = false
-      // All URLs failed — throw so callers handle it (don't return null, which would be misread as "no update")
-      if (lastError) throw lastError
-      return null
+      autoUpdater.setFeedURL(this.feedUrl)
+      return await autoUpdater.checkForUpdates()
     } finally {
       this.isChecking = false
       this.suppressError = false

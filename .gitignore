@@ -110,6 +110,7 @@ build-web.sh
 # production
 /build
 /.toolchain
+/.pnpm-store/
 
 # misc
 .DS_Store

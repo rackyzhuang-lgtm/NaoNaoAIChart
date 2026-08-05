@@ -19,6 +19,7 @@ import './legacy-database-migration'
  */
 
 import fs from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
 import electronDebug from 'electron-debug'
 import log from 'electron-log/main'
@@ -52,6 +53,7 @@ import {
   setStoreBlob,
   store,
 } from './store-node'
+import { registerSub2ApiHandlers } from './sub2api/ipc-handlers'
 import * as windowState from './window_state'
 
 function reportMainProcessError(
@@ -200,6 +202,31 @@ log.info(`📱 URL Scheme registered: ${PROTOCOL_SCHEME}://`)
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
+function isTrustedRendererUrl(url: string): boolean {
+  try {
+    const target = new URL(url)
+    const developmentUrl = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined
+    if (developmentUrl) {
+      const trustedDevelopmentUrl = new URL(developmentUrl)
+      return target.protocol === trustedDevelopmentUrl.protocol && target.host === trustedDevelopmentUrl.host
+    }
+
+    const trustedPackagedUrl = pathToFileURL(path.join(__dirname, '../renderer/index.html'))
+    return target.protocol === trustedPackagedUrl.protocol && target.pathname === trustedPackagedUrl.pathname
+  } catch {
+    return false
+  }
+}
+
+function isTrustedSub2ApiSender(event: Electron.IpcMainInvokeEvent): boolean {
+  return (
+    mainWindow !== null &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame !== null &&
+    isTrustedRendererUrl(event.senderFrame.url)
+  )
+}
+
 // --------- 快捷键 ---------
 
 /**
@@ -304,7 +331,7 @@ function createTray() {
       accelerator: 'Command+Q',
     },
   ])
-  tray.setToolTip('Chatbox')
+  tray.setToolTip('NaoNaoAI Chat')
   tray.setContextMenu(contextMenu)
   tray.on('double-click', showOrHideWindow)
   return tray
@@ -407,6 +434,13 @@ async function createWindow() {
       operation: 'render_process_gone',
       priority: 'critical',
     })
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    if (!isTrustedRendererUrl(navigationUrl)) {
+      event.preventDefault()
+      log.warn('[Security] Blocked untrusted top-level navigation')
+    }
   })
 
   // Load the local URL for development or the local
@@ -1053,3 +1087,4 @@ ipcMain.handle('window:is-maximized', () => {
 registerSandboxHandlers()
 registerSkillsHandlers()
 registerOAuthHandlers()
+registerSub2ApiHandlers(undefined, undefined, isTrustedSub2ApiSender)

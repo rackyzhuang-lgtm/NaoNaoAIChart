@@ -2,6 +2,7 @@
 /* eslint no-unused-vars: off */
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ElectronIPC } from 'src/shared/electron-types'
+import { SUB2API_IPC_CHANNELS } from 'src/shared/sub2api/ipc'
 
 // export type Channels = 'ipc-example';
 
@@ -49,6 +50,14 @@ const electronHandler: ElectronIPC = {
     return () => ipcRenderer.off('navigate-to', listener)
   },
   onSkillsBuiltinUpdated: createListener('skills:builtin-updated'),
+  sub2api: {
+    getPublicSettings: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getPublicSettings),
+    login: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.login, request),
+    completeTwoFactor: (code) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.completeTwoFactor, code),
+    logout: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.logout),
+    getSessionState: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getSessionState),
+    getCurrentUser: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getCurrentUser),
+  },
 
   // Auto-updater events
   onUpdaterChecking: createListener('updater:checking'),
