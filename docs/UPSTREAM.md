@@ -4,13 +4,14 @@
 
 截至 2026-08-05：
 
-- 当前分支：`master`
-- 本地提交：无
+- 当前工作分支：`codex/batch-1-baseline`
+- 本地 `main` 与工作分支的共同基点：`59d55feb`（Chatbox 基线与项目文档导入）
 - `origin`：`git@gitee.com:ribbog77/nao-nao-aichart.git`
-- `origin/master`：Git 状态显示 `[gone]`
-- 远程 HEAD 读取：30 秒超时，待确认 SSH Key、Gitee 连通性和远程仓库状态
+- `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
+- `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`
+- 当前批次尚未推送；远程默认分支与 SSH 连通性待确认
 
-本轮没有新增、删除或修改 Git remote。
+Chatbox 导入提交保留 `f90fc31afd634494bdf8f074eca3e38fcf8da740` 和 bootstrap 提交 `496e5f79` 的可达历史。sub2api 不导入、不 vendoring。
 
 ## 外部上游
 
@@ -30,16 +31,25 @@
 - 许可证：LGPL-3.0
 - 用途：已部署的远程服务端及 API 行为参考；不 vendoring，不合并其源码历史
 
-## 建议 remote 布局
+## 当前 remote 布局
 
-在开始导入 Chatbox 基线时配置：
+已配置：
 
 ```powershell
 git remote add upstream-chatbox https://github.com/chatboxai/chatbox.git
 git remote add upstream-sub2api https://github.com/Wei-Shaw/sub2api.git
 ```
 
-`upstream-sub2api` 只用于检查接口和发布变化，不把两个 Git 历史合并。具体导入方法、是否保留 Chatbox 完整历史以及是否把默认分支改为 `main` 均待确认。
+`upstream-sub2api` 只用于检查接口和发布变化，不把两个 Git 历史合并。Chatbox 已按 ADR-0002 保留完整历史，目标默认分支为 `main`。
+
+## 首次导入记录
+
+- Chatbox 旧/新 SHA：空仓库 -> `f90fc31afd634494bdf8f074eca3e38fcf8da740`
+- bootstrap 提交：`496e5f79`
+- 导入合并提交：`59d55feb`
+- 冲突：仅 `.gitignore`；采用并集并保留 `/参考原项目源码/`
+- 验证：Node 22/pnpm 10 安装、TypeScript、Biome、Vitest、生产构建和 Windows Electron 进程级启动冒烟通过
+- 未验证：macOS/Linux、安装包、签名、自动更新、桌面 E2E
 
 ## 同步策略
 

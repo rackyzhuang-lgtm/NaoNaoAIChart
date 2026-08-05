@@ -34,5 +34,6 @@
     "**/*.stories.ts",
     ".storybook",
     ".pnpm-store",
+    "参考原项目源码",
   ]
 }

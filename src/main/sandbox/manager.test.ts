@@ -378,7 +378,7 @@ describe('normalizeWindowsShellPath', () => {
 })
 
 describe('validateWritePath with user-granted directories', () => {
-  test('accepts a granted directory while rejecting sibling and symlink escapes', async () => {
+  test('accepts a granted directory while rejecting sibling directories', async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'chatbox-granted-path-'))
     const workDir = path.join(root, 'sandbox')
     const grantedDir = path.join(root, 'granted')
@@ -386,7 +386,6 @@ describe('validateWritePath with user-granted directories', () => {
     mkdirSync(workDir)
     mkdirSync(grantedDir)
     mkdirSync(outsideDir)
-    symlinkSync(outsideDir, path.join(grantedDir, 'escape'), 'dir')
 
     try {
       await expect(
@@ -396,6 +395,31 @@ describe('validateWritePath with user-granted directories', () => {
         valid: false,
         error: 'Invalid path: outside sandbox or granted working directories',
       })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects symlink escapes from a granted directory', async (context) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'chatbox-granted-symlink-'))
+    const workDir = path.join(root, 'sandbox')
+    const grantedDir = path.join(root, 'granted')
+    const outsideDir = path.join(root, 'outside')
+    mkdirSync(workDir)
+    mkdirSync(grantedDir)
+    mkdirSync(outsideDir)
+    try {
+      symlinkSync(outsideDir, path.join(grantedDir, 'escape'), 'dir')
+    } catch (error) {
+      rmSync(root, { recursive: true, force: true })
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') {
+        context.skip('Windows symbol-link creation requires Developer Mode or elevated privileges')
+        return
+      }
+      throw error
+    }
+
+    try {
       await expect(
         validateWritePath(path.join(grantedDir, 'escape', 'out.txt'), workDir, [grantedDir])
       ).resolves.toEqual({

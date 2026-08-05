@@ -2,7 +2,7 @@
 
 ## 仓库现状
 
-当前仓库没有业务源码、依赖文件或现有模块，因此“当前项目架构”尚不存在。下面分为上游已确认架构和建议目标架构，避免把规划写成现状。
+当前仓库已导入 Chatbox Community Edition 基线，现有运行架构即下述 Electron/React/TypeScript 上游架构。sub2api 集成仍是目标架构，尚未实现；文档继续区分“现有基线”和“提议中的集成边界”。
 
 ## Chatbox 上游架构
 
@@ -13,7 +13,7 @@
 - Provider 使用注册表架构；OpenAI 兼容服务可通过自建 Provider 接入，也可新增内置 Provider。
 - Provider 模型实现、设置、模型注册表和 OAuth 能力已有清晰扩展点。
 - Node 版本文件为 `v22.14.0`，`package.json` 要求 Node `>=22.13.0 <23`、pnpm `>=10.17.0`。
-- 单元/集成测试使用 Vitest，桌面 E2E 使用 Playwright；真实模型 Provider 测试默认排除。
+- 单元/集成测试使用 Vitest；`package.json` 声明了 Playwright E2E 脚本，但当前基线缺少 `test/e2e/playwright.config.ts` 和锁定依赖，因此 E2E 尚不可执行。真实模型 Provider 测试默认排除。
 
 主要目录：
 

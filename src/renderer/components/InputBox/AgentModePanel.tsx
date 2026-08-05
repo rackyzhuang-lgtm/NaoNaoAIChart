@@ -93,6 +93,139 @@ const MCPServerItem: FC<{
   )
 }
 
+interface ModeButtonProps {
+  value: Extract<AgentModeValue, 'on' | 'off'>
+  label: string
+  isActive: boolean
+  isDisabled: boolean
+  tooltipLabel: string
+  onModeSelect: (value: Extract<AgentModeValue, 'on' | 'off'>) => void
+}
+
+const ModeButton: FC<ModeButtonProps> = ({ value, label, isActive, isDisabled, tooltipLabel, onModeSelect }) => (
+  <Tooltip label={tooltipLabel} disabled={!isDisabled} withArrow>
+    <Button
+      size="xs"
+      variant={isActive ? 'filled' : 'default'}
+      color={isActive ? 'chatbox-brand' : undefined}
+      fullWidth
+      disabled={isDisabled}
+      onClick={() => onModeSelect(value)}
+    >
+      {label}
+    </Button>
+  </Tooltip>
+)
+
+interface ExtensionRowProps {
+  icon: React.ReactNode
+  label: string
+  badge?: string | number
+  subtitle?: string
+  active?: boolean
+  page: PanelPage
+  rightContent?: React.ReactNode
+  subPanelAlign?: 'top' | 'bottom'
+  disabled?: boolean
+  onExtensionHover: (target: PanelPage, event?: React.MouseEvent, align?: 'top' | 'bottom') => void
+  onClearSubPanelOpenTimer: () => void
+  onSubPanelLeave: () => void
+  onResetSubPanel: () => void
+}
+
+const ExtensionRow: FC<ExtensionRowProps> = ({
+  icon,
+  label,
+  badge,
+  subtitle,
+  active,
+  page,
+  rightContent,
+  subPanelAlign = 'bottom',
+  disabled = false,
+  onExtensionHover,
+  onClearSubPanelOpenTimer,
+  onSubPanelLeave,
+  onResetSubPanel,
+}) => (
+  <Flex
+    justify="space-between"
+    align="center"
+    px="sm"
+    py={6}
+    tabIndex={0}
+    role="button"
+    aria-expanded={active}
+    aria-disabled={disabled}
+    className={`rounded outline-none focus-visible:ring-2 focus-visible:ring-[var(--chatbox-tint-brand)] ${
+      active
+        ? 'bg-[var(--mantine-color-gray-1)] dark:bg-[var(--mantine-color-dark-5)]'
+        : 'hover:bg-[var(--mantine-color-gray-0)] dark:hover:bg-[var(--mantine-color-dark-5)]'
+    } ${disabled ? '' : 'cursor-pointer'}`}
+    onMouseEnter={(event) => onExtensionHover(page, event, subPanelAlign)}
+    onMouseLeave={onClearSubPanelOpenTimer}
+    onFocus={(event) => onExtensionHover(page, event as unknown as React.MouseEvent, subPanelAlign)}
+    onBlur={onSubPanelLeave}
+    onKeyDown={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onExtensionHover(page, event as unknown as React.MouseEvent, subPanelAlign)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        onResetSubPanel()
+      }
+    }}
+  >
+    <Flex gap="xs" align="center" className="min-w-0">
+      {icon}
+      <Text size="sm">{label}</Text>
+      {badge !== undefined && (
+        <Badge size="xs" variant="light">
+          {badge}
+        </Badge>
+      )}
+      {subtitle && (
+        <Text size="xs" c="dimmed" truncate className="max-w-[100px]">
+          {subtitle}
+        </Text>
+      )}
+    </Flex>
+    {rightContent ?? <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] shrink-0" />}
+  </Flex>
+)
+
+interface SubPanelHeaderProps {
+  title: string
+  settingsPath?: string
+  disabled?: boolean
+  onSettingsNavigate: (settingsPath: string) => void
+}
+
+const SubPanelHeader: FC<SubPanelHeaderProps> = ({
+  title,
+  settingsPath,
+  disabled = false,
+  onSettingsNavigate,
+}) => (
+  <Flex justify="space-between" align="center" px="sm" py="xs">
+    <Text fw={600} size="sm">
+      {title}
+    </Text>
+    {settingsPath && (
+      <ActionIcon
+        variant="subtle"
+        size={20}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) onSettingsNavigate(settingsPath)
+        }}
+      >
+        <ScalableIcon icon={IconSettings2} size={16} color="var(--chatbox-tint-tertiary)" />
+      </ActionIcon>
+    )}
+  </Flex>
+)
+
 // --- Main component ---
 
 const AgentModePanel: FC<AgentModePanelProps> = ({
@@ -392,31 +525,6 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     subPanelRef.current?.scrollTo({ top: 0 })
   }, [page])
 
-  // --- Mode button ---
-  const ModeButton: FC<{ value: Extract<AgentModeValue, 'on' | 'off'>; label: string }> = ({ value, label }) => {
-    const isActive = agentModeUIState.displayValue === value
-    const isLockedDisabled = entry.locked && value !== 'on'
-    const isModelDisabled = !modelSupportsAgentMode && value !== 'off'
-    const isDisabled = isLockedDisabled || isModelDisabled
-    const tooltipLabel = isModelDisabled
-      ? t('This model does not support Agent Mode')
-      : t('Locked after the chat starts to keep tools and context consistent — start a new chat to change')
-    return (
-      <Tooltip label={tooltipLabel} disabled={!isDisabled} withArrow>
-        <Button
-          size="xs"
-          variant={isActive ? 'filled' : 'default'}
-          color={isActive ? 'chatbox-brand' : undefined}
-          fullWidth
-          disabled={isDisabled}
-          onClick={() => handleModeChange(value)}
-        >
-          {label}
-        </Button>
-      </Tooltip>
-    )
-  }
-
   const isChatModeSelected = agentModeUIState.displayValue === 'off'
   const smartSwitchingEnabled = entry.value === 'auto' && isChatModeSelected
   const smartSwitchingExpired =
@@ -429,100 +537,20 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     ? t('Only available before the first message.')
     : t('Suggest Work Mode on the first message.')
 
-  // --- Extension row ---
-  const ExtensionRow: FC<{
-    icon: React.ReactNode
-    label: string
-    badge?: string | number
-    subtitle?: string
-    active?: boolean
-    page: PanelPage
-    rightContent?: React.ReactNode
-    subPanelAlign?: 'top' | 'bottom'
-    disabled?: boolean
-  }> = ({
-    icon,
-    label,
-    badge,
-    subtitle,
-    active,
-    page: targetPage,
-    rightContent,
-    subPanelAlign = 'bottom',
-    disabled = false,
-  }) => (
-    <Flex
-      justify="space-between"
-      align="center"
-      px="sm"
-      py={6}
-      tabIndex={0}
-      role="button"
-      aria-expanded={active}
-      aria-disabled={disabled}
-      className={`rounded outline-none focus-visible:ring-2 focus-visible:ring-[var(--chatbox-tint-brand)] ${
-        active
-          ? 'bg-[var(--mantine-color-gray-1)] dark:bg-[var(--mantine-color-dark-5)]'
-          : 'hover:bg-[var(--mantine-color-gray-0)] dark:hover:bg-[var(--mantine-color-dark-5)]'
-      } ${disabled ? '' : 'cursor-pointer'}`}
-      onMouseEnter={(e) => handleExtensionHover(targetPage, e, subPanelAlign)}
-      onMouseLeave={clearSubPanelOpenTimer}
-      onFocus={(e) => handleExtensionHover(targetPage, e as unknown as React.MouseEvent, subPanelAlign)}
-      onBlur={handleSubPanelLeave}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          handleExtensionHover(targetPage, e as unknown as React.MouseEvent, subPanelAlign)
-        } else if (e.key === 'Escape') {
-          e.preventDefault()
-          resetSubPanel()
-        }
-      }}
-    >
-      <Flex gap="xs" align="center" className="min-w-0">
-        {icon}
-        <Text size="sm">{label}</Text>
-        {badge !== undefined && (
-          <Badge size="xs" variant="light">
-            {badge}
-          </Badge>
-        )}
-        {subtitle && (
-          <Text size="xs" c="dimmed" truncate className="max-w-[100px]">
-            {subtitle}
-          </Text>
-        )}
-      </Flex>
-      {rightContent ?? <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] shrink-0" />}
-    </Flex>
+  const handleSettingsNavigation = useCallback(
+    (settingsPath: string) => {
+      onClose()
+      navigateToSettings(settingsPath)
+    },
+    [onClose]
   )
 
-  // --- Sub-panel header ---
-  const SubPanelHeader: FC<{ title: string; settingsPath?: string; disabled?: boolean }> = ({
-    title,
-    settingsPath,
-    disabled = false,
-  }) => (
-    <Flex justify="space-between" align="center" px="sm" py="xs">
-      <Text fw={600} size="sm">
-        {title}
-      </Text>
-      {settingsPath && (
-        <ActionIcon
-          variant="subtle"
-          size={20}
-          disabled={disabled}
-          onClick={() => {
-            if (disabled) return
-            onClose()
-            navigateToSettings(settingsPath)
-          }}
-        >
-          <ScalableIcon icon={IconSettings2} size={16} color="var(--chatbox-tint-tertiary)" />
-        </ActionIcon>
-      )}
-    </Flex>
-  )
+  const extensionRowHandlers = {
+    onExtensionHover: handleExtensionHover,
+    onClearSubPanelOpenTimer: clearSubPanelOpenTimer,
+    onSubPanelLeave: handleSubPanelLeave,
+    onResetSubPanel: resetSubPanel,
+  }
 
   const handleWebSearchProviderChange = useCallback(
     (provider: WebSearchProviderValue) => {
@@ -538,7 +566,12 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'web-search') {
       return (
         <>
-          <SubPanelHeader title={t('Web Search')} settingsPath="/web-search" disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title={t('Web Search')}
+            settingsPath="/web-search"
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           {WEB_SEARCH_PROVIDERS.map((provider) => {
             const available = isProviderAvailable(provider.value)
@@ -589,7 +622,11 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'code-execution') {
       return (
         <>
-          <SubPanelHeader title={t('Code Execution')} disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title={t('Code Execution')}
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           <Flex
             justify="space-between"
@@ -650,7 +687,12 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'skills') {
       return (
         <>
-          <SubPanelHeader title="Skills" settingsPath="/skills" disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title="Skills"
+            settingsPath="/skills"
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           {skillsLoading ? (
             <Flex justify="center" py="md">
@@ -712,7 +754,12 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'mcp') {
       return (
         <>
-          <SubPanelHeader title="MCP" settingsPath="/mcp" disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title="MCP"
+            settingsPath="/mcp"
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           {isPremium && (
             <>
@@ -763,7 +810,12 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'knowledge-base') {
       return (
         <>
-          <SubPanelHeader title={t('Knowledge Base')} settingsPath="/knowledge-base" disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title={t('Knowledge Base')}
+            settingsPath="/knowledge-base"
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           {knowledgeBases && knowledgeBases.length > 0 ? (
             knowledgeBases.map((kb) => (
@@ -825,7 +877,11 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     if (page === 'working-directory') {
       return (
         <>
-          <SubPanelHeader title={t('Working Directory')} disabled={capabilitiesDisabled} />
+          <SubPanelHeader
+            title={t('Working Directory')}
+            disabled={capabilitiesDisabled}
+            onSettingsNavigate={handleSettingsNavigation}
+          />
           <Divider my={4} />
           <Text size="xs" c="dimmed" px="sm" pb={4}>
             {t('Grant the agent read/write access to local folders without per-action approval.')}
@@ -897,8 +953,26 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
             {t('Mode')}
           </Text>
           <Flex gap={6}>
-            <ModeButton value="off" label={t('Chat Mode')} />
-            <ModeButton value="on" label={t('Work Mode')} />
+            <ModeButton
+              value="off"
+              label={t('Chat Mode')}
+              isActive={agentModeUIState.displayValue === 'off'}
+              isDisabled={entry.locked}
+              tooltipLabel={t('Locked after the chat starts to keep tools and context consistent — start a new chat to change')}
+              onModeSelect={handleModeChange}
+            />
+            <ModeButton
+              value="on"
+              label={t('Work Mode')}
+              isActive={agentModeUIState.displayValue === 'on'}
+              isDisabled={!modelSupportsAgentMode}
+              tooltipLabel={
+                !modelSupportsAgentMode
+                  ? t('This model does not support Agent Mode')
+                  : t('Locked after the chat starts to keep tools and context consistent — start a new chat to change')
+              }
+              onModeSelect={handleModeChange}
+            />
           </Flex>
           <Text size="xs" c="chatbox-secondary" className="leading-snug">
             {modeDescription}
@@ -934,6 +1008,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
           <Divider my={4} mx="sm" label={t('Built-in')} labelPosition="left" />
 
           <ExtensionRow
+            {...extensionRowHandlers}
             icon={<IconWorldWww size={16} className="text-[var(--chatbox-tint-secondary)]" />}
             label={t('Web Search')}
             subtitle={webBrowsingMode ? webSearchProviderLabel : undefined}
@@ -969,6 +1044,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
           />
 
           <ExtensionRow
+            {...extensionRowHandlers}
             icon={<IconCode size={16} className="text-[var(--chatbox-tint-secondary)]" />}
             label={t('Code Execution')}
             active={page === 'code-execution'}
@@ -995,6 +1071,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
           <Divider my={4} mx="sm" label={t('Extensions')} labelPosition="left" />
 
           <ExtensionRow
+            {...extensionRowHandlers}
             icon={<IconWand size={16} className="text-[var(--chatbox-tint-secondary)]" />}
             label="Skills"
             badge={enabledSkillNames.length > 0 ? enabledSkillNames.length : undefined}
@@ -1004,6 +1081,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
           />
 
           <ExtensionRow
+            {...extensionRowHandlers}
             icon={<IconHammer size={16} className="text-[var(--chatbox-tint-secondary)]" />}
             label="MCP"
             badge={enabledMCPCount > 0 ? enabledMCPCount : undefined}
@@ -1013,6 +1091,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
           />
 
           <ExtensionRow
+            {...extensionRowHandlers}
             icon={<IconVocabulary size={16} className="text-[var(--chatbox-tint-secondary)]" />}
             label={t('Knowledge Base')}
             subtitle={selectedKB?.name}
@@ -1023,6 +1102,7 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
 
           {supportsWorkingDirectories && (
             <ExtensionRow
+              {...extensionRowHandlers}
               icon={<IconFolderCog size={16} className="text-[var(--chatbox-tint-secondary)]" />}
               label={t('Working Directory')}
               badge={workingDirectories.length > 0 ? workingDirectories.length : undefined}

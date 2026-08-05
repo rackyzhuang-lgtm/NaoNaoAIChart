@@ -4,12 +4,22 @@ import type { Message } from '@shared/types'
 import { IconLoader } from '@tabler/icons-react'
 import { useAtomValue } from 'jotai'
 import { Loader } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import { Trans, useTranslation } from 'react-i18next'
 import { buildChatboxUrl } from '@/packages/remote'
 import { getToolName } from '@/packages/tools'
 import * as atoms from '@/stores/atoms'
 import * as settingActions from '@/stores/settingActions'
 import LinkTargetBlank from '../common/Link'
+
+type PreparingToolCallStatus = {
+  type: 'preparing_tool_call'
+  toolName?: string
+  progress?: {
+    kind: 'size_kb' | 'lines'
+    value: number
+  }
+}
 
 export default function MessageStatuses(props: { statuses: Message['status'] }) {
   const { statuses } = props
@@ -103,7 +113,7 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
 }
 
 export function PreparingToolCallStatus(props: {
-  status: Extract<NonNullable<Message['status']>[number], { type: 'preparing_tool_call' }>
+  status: PreparingToolCallStatus
 }) {
   const { status } = props
   const { t } = useTranslation()
@@ -126,8 +136,8 @@ export function PreparingToolCallStatus(props: {
 }
 
 function formatPreparingProgress(
-  progress: Extract<NonNullable<Message['status']>[number], { type: 'preparing_tool_call' }>['progress'],
-  t: ReturnType<typeof useTranslation>['t']
+  progress: PreparingToolCallStatus['progress'],
+  t: TFunction
 ): string | null {
   if (!progress) return null
   if (progress.kind === 'lines') {

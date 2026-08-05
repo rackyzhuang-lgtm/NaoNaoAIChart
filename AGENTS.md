@@ -4,7 +4,7 @@
 
 本仓库用于长期维护一个基于 Chatbox Community Edition 的桌面 AI 客户端二开项目，并与用户自建的 sub2api 服务集成。目标是让普通用户在桌面软件内完成日常 AI 使用和账户自助操作，减少反复登录 sub2api Web 控制台。
 
-当前仓库仍处于“文档初始化”阶段，尚未导入任何业务源码。项目所有者已确认：本项目基于 Chatbox 二开，通过 HTTP API 对接已经部署的 sub2api 服务。
+当前仓库已导入 Chatbox Community Edition 基线并完成第一批 Windows 基线验证，尚未开始 sub2api 业务接入。项目所有者已确认：本项目基于 Chatbox 二开，通过 HTTP API 对接已经部署的 sub2api 服务。
 
 ## 固定约束
 
@@ -59,22 +59,24 @@
 
 ## 验证命令
 
-当前仓库只有文档，最低验证为：
+最低验证为：
 
 ```powershell
 git diff --check
 git status --short --branch
 ```
 
-Chatbox 基线导入后，预期使用以下命令；在实际导入前均属“待确认”：
+Chatbox 要求 Node `>=22.13.0 <23`、pnpm `>=10.17.0`，锁定 pnpm `10.33.0`。常规验证命令：
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check
 pnpm lint
 pnpm test
-pnpm test:e2e
+pnpm run build
 ```
+
+当前 `test:e2e` 脚本引用不存在的 `test/e2e/playwright.config.ts`，且仓库未锁定 Playwright 依赖。在补齐基础设施前不得声称 E2E 通过，也不得用 `npx` 临时下载未锁定版本规避该缺口。
 
 不得默认运行 `pnpm test:model-provider`，它是需要显式启用真实模型 API 的集成测试。
 

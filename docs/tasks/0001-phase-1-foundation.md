@@ -20,6 +20,12 @@
 - sub2api 本地参考基线：`00b8596176809906993169c283671811ad04f58d`，分支 `main`，工作区干净。
 - 当前全局运行时为 Node `v24.18.0`、pnpm `11.9.0`；Chatbox 要求 Node 22、pnpm 10，需使用兼容运行时后再安装依赖。
 - 多 Agent：主 Agent 负责导入、合并和验收；三个 `gpt-5.6-terra` 工作 Agent 分别审计 Git 导入、构建前置条件和文件冲突。
+- 已创建 bootstrap 提交 `496e5f79`、Chatbox 基线标签 `baseline/chatbox-f90fc31` 和导入合并提交 `59d55feb`；本地 `main` 已建立。
+- 已使用被忽略的本地工具链 Node `v22.14.0`、Corepack `0.31.0`、pnpm `10.33.0` 完成冻结锁文件安装。
+- 已修复上游基线的 TypeScript/Biome 阻断错误和 Windows 测试可移植性问题；主 Agent 审查后保留 symlink 基础路径覆盖。
+- 全量验证：TypeScript 0 error；Biome 0 error、901 warnings；Vitest 225 files passed、2 skipped，2,388 tests passed、61 skipped；生产构建通过；Electron 开发进程持续运行 30 秒后已清理。
+- `test:e2e` 当前缺少配置和 Playwright 锁定依赖，不可执行；`test:model-provider` 按约束未运行。
+- `zipfile@0.5.12` 是 `epub@1.3.0` 的可选原生加速依赖，Windows 构建失败后回退 `adm-zip`，记录为非阻塞风险。
 
 ## 范围
 
@@ -48,7 +54,7 @@
 
 ## 验收标准
 
-- [ ] Chatbox 基线的安装、类型检查、lint 和默认测试通过。
+- [x] Chatbox 基线的安装、类型检查、lint、默认测试、生产构建和 Windows 启动冒烟通过。
 - [ ] 可配置并验证 sub2api HTTPS 地址。
 - [ ] access token 过期时只有一次 refresh 请求，失败后安全退出。
 - [ ] renderer 无法通过通用接口读取 refresh token。
@@ -59,15 +65,17 @@
 
 ## 验证命令
 
-命令将在 Chatbox 基线导入后以实际脚本为准，预期至少包括：
+当前实际验证命令：
 
 ```powershell
 pnpm check
 pnpm lint
 pnpm test
-pnpm test:e2e
+pnpm run build
 git diff --check
 ```
+
+`pnpm test:e2e` 待补齐配置和锁定依赖后再纳入门禁；不得使用 `npx` 临时下载未锁定版本来伪造通过结果。
 
 ## 风险与待确认
 
