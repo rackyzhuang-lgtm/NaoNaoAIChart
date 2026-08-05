@@ -2,14 +2,14 @@
 
 ## 当前 Git 状态
 
-截至 2026-08-05：
+截至 2026-08-06：
 
 - 第二批开发分支：`codex/batch-2-contract-login`
 - 第二批从本地 `main` 的 `5011363a`（固定 sub2api 地址）开始，验收后 fast-forward 合入本地 `main`
 - `origin`：`git@gitee.com:ribbog77/nao-nao-aichart.git`
 - `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
 - `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`
-- 当前批次尚未推送；远程默认分支与 SSH 连通性待确认
+- 项目所有者已确认 `origin` SSH 配置完成；本地 `main` 的第二批及后续品牌资产更新推送至 `origin/main`
 
 Chatbox 导入提交保留 `f90fc31afd634494bdf8f074eca3e38fcf8da740` 和 bootstrap 提交 `496e5f79` 的可达历史。sub2api 不导入、不 vendoring。
 

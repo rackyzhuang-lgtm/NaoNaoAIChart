@@ -53,7 +53,7 @@
 
 ## 完成记录
 
-- 品牌：产品名、HTML 标题、菜单、托盘、启动项和 Windows/macOS/Linux 构建图标已更新。源图未修改；其可见水印仍存在。
+- 品牌：产品名、HTML 标题、菜单、托盘、启动项和 Windows/macOS/Linux 构建图标已更新。项目所有者于 2026-08-06 替换了无可见水印的源图，全部构建图标已同步重新生成。
 - 契约：依据 sub2api 参考源码建立 panel 成功包络、两种错误包络、登录/2FA、refresh、当前用户、API Key 分页和 `/v1/models` schema。
 - 客户端：`src/main/sub2api/` 实现主进程内存会话、登录、2FA、当前用户、logout、401 retry 和 refresh 单飞；凭证代际校验覆盖 refresh、重新登录、退出和旧成功响应的并发竞态。
 - IPC：preload 仅新增固定业务方法；登录结果、会话状态和当前用户响应不包含 access token、refresh token 或 2FA temp token。sub2api handler 校验当前主窗口与受信 frame，不受信顶层导航会被阻止。

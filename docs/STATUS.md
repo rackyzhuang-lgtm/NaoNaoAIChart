@@ -1,12 +1,13 @@
 # 项目状态
 
-更新时间：2026-08-05（Asia/Shanghai）
+更新时间：2026-08-06（Asia/Shanghai）
 
 ## 当前结论
 
 - Chatbox Community Edition 基线已导入，保留完整可达历史；基线 SHA 为 `f90fc31afd634494bdf8f074eca3e38fcf8da740`。
 - 导入提交为 `59d55feb`；第一批验证提交为 `1ec60fd2`。第二批工作分支为 `codex/batch-2-contract-login`。
 - 第二批已完成 `NaoNaoAI Chat` 品牌基线、sub2api 契约、主进程登录会话 client 和窄业务 IPC；账户 UI 尚未实现。
+- 项目所有者已于 2026-08-06 提供无可见水印的新 `logo.png`，Windows、macOS、Linux 和托盘图标资产已重新生成。
 - 项目所有者已确认首发固定连接 `https://naonaoai.shop`；共享常量为 `SUB2API_BASE_URL`，当前不开放任意实例配置。
 - 本地 `参考原项目源码/` 仅用于只读参考，已由 `.gitignore`、TypeScript 和 Biome 排除，不参与提交或推送。
 - Chatbox + sub2api 的技术集成可行性仍为“高”；账户控制面与模型数据面的鉴权必须分离。
@@ -82,7 +83,6 @@
 - 本批只在 Windows 验证；macOS、Linux 构建和启动仍待 CI 或对应环境验证。
 - 当前 sub2api 会话只保存在主进程内存，应用重启后需要重新登录；安全持久化待三平台验证。
 - 上游 preload 仍暴露通用 `invoke`，既有通用 IPC 尚未整体收紧，`BrowserWindow` 仍使用 `webSecurity: false`。本批已阻止不受信顶层导航并保护 sub2api IPC sender，但账户 UI 开发前仍需完成全局安全专项。
-- 当前品牌源图带有可见“豆包”水印，正式发行前建议替换为无水印源图。
 - 本机缺少 symlink 权限，正式 exe 资源编辑所需的 `winCodeSign` 无法正常解压；开发验收包使用临时 CLI 覆盖跳过该步骤。正式 Windows 包仍需在 Developer Mode/提权构建机完成资源编辑和代码签名。
 
 ## 待确认
