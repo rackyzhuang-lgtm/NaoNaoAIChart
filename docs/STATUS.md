@@ -44,7 +44,7 @@
 - `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
 - `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`，仅用于接口变化比较，不合并其源码历史。
 - 标签：`checkpoint/docs-bootstrap`、`baseline/chatbox-f90fc31`。
-- 当前批次尚未推送；`origin` 的 SSH 连通性和远程默认分支待确认。
+- 已于 2026-08-06 通过 SSH 将本地 `main` 首次推送至 `origin/main`，并建立上游跟踪关系；远程托管平台的仓库默认分支设置仍待确认。
 
 ## OpenAI Developer Docs MCP
 

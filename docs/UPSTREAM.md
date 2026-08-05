@@ -9,7 +9,7 @@
 - `origin`：`git@gitee.com:ribbog77/nao-nao-aichart.git`
 - `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
 - `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`
-- 项目所有者已确认 `origin` SSH 配置完成；本地 `main` 的第二批及后续品牌资产更新推送至 `origin/main`
+- 已于 2026-08-06 通过 SSH 将本地 `main` 的第二批及后续品牌资产更新首次推送至 `origin/main`，并建立上游跟踪关系；远程托管平台的仓库默认分支设置仍待确认
 
 Chatbox 导入提交保留 `f90fc31afd634494bdf8f074eca3e38fcf8da740` 和 bootstrap 提交 `496e5f79` 的可达历史。sub2api 不导入、不 vendoring。
 
