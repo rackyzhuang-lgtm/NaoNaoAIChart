@@ -52,6 +52,8 @@ describe('registerSub2ApiHandlers', () => {
       getPlatformQuotas: vi.fn(),
       getChannelMonitors: vi.fn(),
       getModelPlaza: vi.fn(),
+      getAnnouncements: vi.fn(),
+      markAnnouncementRead: vi.fn(),
       listApiKeys: vi.fn(async () => ({
         items: [
           {
@@ -125,6 +127,8 @@ describe('registerSub2ApiHandlers', () => {
       getPlatformQuotas: vi.fn(),
       getChannelMonitors: vi.fn(),
       getModelPlaza: vi.fn(),
+      getAnnouncements: vi.fn(),
+      markAnnouncementRead: vi.fn(),
       listApiKeys: vi.fn(),
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),

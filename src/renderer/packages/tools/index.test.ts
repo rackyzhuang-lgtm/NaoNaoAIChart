@@ -27,7 +27,7 @@ describe('getToolName', () => {
   it('supports legacy account aliases and safe fallback names', () => {
     expect(getToolName('chatbox_cli', { argv: ['quota'] })).toBe('Quota Details')
     expect(getToolName('chatbox_cli', { argv: ['license', 'refresh'] })).toBe('Refresh Account Status')
-    expect(getToolName('chatbox_cli', { argv: ['help'] })).toBe('Chatbox')
-    expect(getToolName('chatbox_cli', { command: '"unterminated' })).toBe('Chatbox')
+    expect(getToolName('chatbox_cli', { argv: ['help'] })).toBe('App Tool')
+    expect(getToolName('chatbox_cli', { command: '"unterminated' })).toBe('App Tool')
   })
 })

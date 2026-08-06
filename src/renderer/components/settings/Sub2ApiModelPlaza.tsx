@@ -144,13 +144,13 @@ export default function Sub2ApiModelPlaza({ api, enabled = true }: Props) {
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <TextInput
               leftSection={<IconSearch size={16} />}
-              placeholder={t('Search models')}
-              aria-label={t('Search models')}
+              placeholder={String(t('Search models'))}
+              aria-label={String(t('Search models'))}
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
             />
             <NativeSelect
-              aria-label={t('Filter by platform')}
+              aria-label={String(t('Filter by platform'))}
               data={platformOptions}
               value={platform}
               onChange={(event) => setPlatform(event.currentTarget.value)}

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import {
+  sub2ApiAnnouncementIdSchema,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyIdSchema,
   sub2ApiApiKeySummarySchema,
@@ -128,6 +129,14 @@ export function registerSub2ApiHandlers(
   registrar.handle(SUB2API_IPC_CHANNELS.getModelPlaza, (event) => {
     requireTrustedSender(event)
     return client.getModelPlaza()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.getAnnouncements, (event) => {
+    requireTrustedSender(event)
+    return client.getAnnouncements()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.markAnnouncementRead, (event, id) => {
+    requireTrustedSender(event)
+    return client.markAnnouncementRead(sub2ApiAnnouncementIdSchema.parse(id))
   })
   registrar.handle(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
     requireTrustedSender(event)

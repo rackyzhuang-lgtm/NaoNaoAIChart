@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import {
   SUB2API_ROUTES,
+  type Sub2ApiAnnouncement,
   type Sub2ApiApiKeyCreateRequest,
   type Sub2ApiApiKeyPage,
   type Sub2ApiApiKeyUpdateRequest,
@@ -22,6 +23,9 @@ import {
   type Sub2ApiUsageErrorRequestPage,
   type Sub2ApiUsageRecordPage,
   type Sub2ApiUser,
+  sub2ApiAnnouncementIdSchema,
+  sub2ApiAnnouncementReadResponseSchema,
+  sub2ApiAnnouncementsSchema,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyDeleteResponseSchema,
   sub2ApiApiKeyPageSchema,
@@ -266,6 +270,24 @@ export class Sub2ApiClient {
       sub2ApiModelPlazaResponseSchema
     )
     return data
+  }
+
+  async getAnnouncements(): Promise<Sub2ApiAnnouncement[]> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.announcements,
+      { method: 'GET' },
+      sub2ApiAnnouncementsSchema
+    )
+    return data
+  }
+
+  async markAnnouncementRead(id: number): Promise<void> {
+    const parsedId = sub2ApiAnnouncementIdSchema.parse(id)
+    await this.requestAuthenticated(
+      `${SUB2API_ROUTES.announcements}/${parsedId}/read`,
+      { method: 'POST' },
+      sub2ApiAnnouncementReadResponseSchema
+    )
   }
 
   async createApiKey(request: Sub2ApiApiKeyCreateRequest) {

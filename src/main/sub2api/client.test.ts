@@ -338,6 +338,37 @@ describe('Sub2ApiClient', () => {
     await expect(client.getModelPlaza()).resolves.toEqual(modelPlaza)
   })
 
+  it('uses panel JWT for announcements and validates the read id', async () => {
+    const announcements = [
+      {
+        id: 9,
+        title: 'Maintenance',
+        content: 'Service window',
+        notify_mode: 'popup',
+        read_at: null,
+        created_at: '2026-08-06T00:00:00Z',
+        updated_at: '2026-08-06T01:00:00Z',
+      },
+    ]
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/announcements') && init?.method === 'GET')
+        return Promise.resolve(success(announcements))
+      if (url.endsWith('/api/v1/announcements/9/read') && init?.method === 'POST') {
+        return Promise.resolve(success({ message: 'read' }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getAnnouncements()).resolves.toEqual(announcements)
+    await expect(client.markAnnouncementRead(9)).resolves.toBeUndefined()
+    await expect(client.markAnnouncementRead(0)).rejects.toThrow()
+  })
+
   it('uses panel JWT for read-only trend and model summaries', async () => {
     const trend = { trend: [], start_date: '2026-07-30', end_date: '2026-08-05', granularity: 'day' }
     const models = { models: [], start_date: '2026-07-30', end_date: '2026-08-05' }

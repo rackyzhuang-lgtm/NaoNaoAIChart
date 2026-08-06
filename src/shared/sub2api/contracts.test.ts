@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  sub2ApiAnnouncementsSchema,
   sub2ApiAuthResponseSchema,
   sub2ApiChannelMonitorResponseSchema,
   sub2ApiLoginResponseSchema,
@@ -315,5 +316,32 @@ describe('sub2api contracts', () => {
         },
       ],
     })
+  })
+
+  it('validates user announcements and strips read statistics', () => {
+    expect(
+      sub2ApiAnnouncementsSchema.parse([
+        {
+          id: 9,
+          title: 'Maintenance',
+          content: 'Service window',
+          notify_mode: 'popup',
+          read_at: null,
+          created_at: '2026-08-06T00:00:00Z',
+          updated_at: '2026-08-06T01:00:00Z',
+          read_count: 42,
+        },
+      ])
+    ).toEqual([
+      {
+        id: 9,
+        title: 'Maintenance',
+        content: 'Service window',
+        notify_mode: 'popup',
+        read_at: null,
+        created_at: '2026-08-06T00:00:00Z',
+        updated_at: '2026-08-06T01:00:00Z',
+      },
+    ])
   })
 })

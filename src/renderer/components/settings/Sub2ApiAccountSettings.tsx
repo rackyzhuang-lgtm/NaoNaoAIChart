@@ -30,6 +30,7 @@ import {
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import Sub2ApiAnnouncements from './Sub2ApiAnnouncements'
 import Sub2ApiChannelMonitors from './Sub2ApiChannelMonitors'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
 import Sub2ApiModelPlaza from './Sub2ApiModelPlaza'
@@ -374,6 +375,8 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
           />
           <Divider />
           <Sub2ApiModelPlaza api={api} enabled={publicSettings?.model_plaza_enabled} />
+          <Divider />
+          <Sub2ApiAnnouncements api={api} />
           <Divider />
           <Sub2ApiRedeem api={api} user={user} onUserChange={setUser} />
           <Divider />

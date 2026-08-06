@@ -249,3 +249,19 @@
 2. 会话过期、断网、限流和服务关闭的恢复体验。
 
 下一步：实现普通用户公告读取；随后统一完成会话过期、断网、限流和服务关闭的恢复体验。
+
+## 第十五批：普通用户公告
+
+- 已接入 `GET /api/v1/announcements` 与 `POST /api/v1/announcements/:id/read` 的白名单 zod 契约、主进程面板 JWT client、受信 IPC 和 preload typed API。
+- 账户页已展示公告标题、正文、发布时间、已读状态和未读数，支持展开/收起、刷新与单条标记已读；列表加载和标记已读失败均为局部状态，不清除登录会话或其他账户数据。
+- renderer 只接收白名单公告 DTO；未实现公告创建、编辑、删除、阅读统计或管理员能力。
+- 同批将工具调用界面的 Chatbox 回退名称改为 `App Tool`，并修复模型广场/兑换码输入控件的翻译返回值类型与重复翻译键，恢复整仓 TypeScript/Biome 验收。
+- 固定实例公告 GET 返回 HTTP 200、`code=0` 和 1 条记录，字段与契约一致；未调用标记已读 POST，未输出公告正文或用户数据。
+- 定向 Vitest 9 个文件、61 项通过；TypeScript 与 `git diff --check` 通过；变更文件 Biome 0 error，仅保留 preload 既有 `noExplicitAny` warning。
+- 使用 8 GB Node 堆的生产构建通过，产物在 `release/app/dist`；保留既有依赖 `eval`、循环分块、Browserslist 和大 chunk warning。
+
+当前阶段剩余 MVP 任务（1 项）：
+
+1. 会话过期、断网、限流和服务关闭的恢复体验。
+
+下一步：统一错误分类和账户页恢复交互，并继续删除可达路径中的 Chatbox 网络调用与界面字眼。

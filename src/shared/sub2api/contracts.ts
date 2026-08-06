@@ -508,6 +508,24 @@ export const sub2ApiModelPlazaResponseSchema = z
 
 export type Sub2ApiModelPlazaResponse = z.infer<typeof sub2ApiModelPlazaResponseSchema>
 
+export const sub2ApiAnnouncementSchema = z
+  .object({
+    id: z.number().int().positive(),
+    title: z.string().min(1),
+    content: z.string(),
+    notify_mode: z.string().min(1),
+    read_at: z.string().nullable().optional(),
+    created_at: z.string().min(1),
+    updated_at: z.string().min(1),
+  })
+  .strip()
+
+export type Sub2ApiAnnouncement = z.infer<typeof sub2ApiAnnouncementSchema>
+
+export const sub2ApiAnnouncementsSchema = z.array(sub2ApiAnnouncementSchema)
+export const sub2ApiAnnouncementIdSchema = z.number().int().positive()
+export const sub2ApiAnnouncementReadResponseSchema = z.unknown()
+
 export const sub2ApiSubscriptionSummaryItemSchema = z
   .object({
     id: z.number().int().positive(),
@@ -578,5 +596,6 @@ export const SUB2API_ROUTES = {
   platformQuotas: 'user/platform-quotas',
   channelMonitors: 'channel-monitors',
   modelPlaza: 'model-plaza',
+  announcements: 'announcements',
   models: 'models',
 } as const

@@ -186,6 +186,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     }),
     getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
     getModelPlaza: vi.fn().mockResolvedValue({ groups: [] }),
+    getAnnouncements: vi.fn().mockResolvedValue([]),
+    markAnnouncementRead: vi.fn(),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),

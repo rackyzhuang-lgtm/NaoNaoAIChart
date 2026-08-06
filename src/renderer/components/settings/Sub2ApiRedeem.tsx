@@ -109,8 +109,8 @@ export default function Sub2ApiRedeem({ api, user, onUserChange }: Props) {
 
       <Group align="flex-end">
         <TextInput
-          label={t('Redemption code')}
-          placeholder={t('Enter your code')}
+          label={String(t('Redemption code'))}
+          placeholder={String(t('Enter your code'))}
           value={code}
           onChange={(event) => setCode(event.currentTarget.value.slice(0, 256))}
           disabled={busy}
