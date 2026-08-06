@@ -21,7 +21,6 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import platform from '@/platform'
 import storage, { StorageKey } from '@/storage'
 import { migrateOnData } from '@/stores/migration'
-import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
 
 interface Props {
   settingsEdit: Settings
@@ -188,7 +187,7 @@ function ExportAndImport(props: { onCancel: () => void }) {
     data['__exported_items'] = exportItems
     data['__exported_at'] = date.toISOString()
     const dateStr = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
-    platform.exporter.exportTextFile(`chatbox-exported-data-${dateStr}.json`, JSON.stringify(data))
+    platform.exporter.exportTextFile(`naonaoai-exported-data-${dateStr}.json`, JSON.stringify(data))
   }
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const errTip = t('Import failed, unsupported data format')
@@ -323,35 +322,7 @@ export function AnalyticsSetting() {
   const { t } = useTranslation()
   return (
     <Box>
-      <div>
-        <p className="opacity-70">
-          {t(
-            'Chatbox respects your privacy and only uploads anonymous error data and events when necessary. You can change your preferences at any time in the settings.'
-          )}
-        </p>
-      </div>
-      <div className="my-2">
-        <AllowReportingAndTrackingCheckbox />
-      </div>
+      <p className="opacity-70">{t('Diagnostic reporting is disabled in this build.')}</p>
     </Box>
-  )
-}
-
-export function AllowReportingAndTrackingCheckbox(props: { className?: string }) {
-  const { t } = useTranslation()
-  const allowReportingAndTracking = useSettingsStore((state) => state.allowReportingAndTracking)
-  return (
-    <span className={props.className}>
-      <input
-        type="checkbox"
-        checked={allowReportingAndTracking}
-        onChange={(e) =>
-          settingsStore.setState({
-            allowReportingAndTracking: e.target.checked,
-          })
-        }
-      />
-      {t('Enable optional anonymous reporting of crash and event data')}
-    </span>
   )
 }

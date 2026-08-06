@@ -331,6 +331,68 @@ export type Sub2ApiUsageErrorRequestDetail = z.infer<typeof sub2ApiUsageErrorReq
 
 export const sub2ApiUsageErrorIdSchema = z.number().int().positive()
 
+export const sub2ApiRedeemCodeRequestSchema = z.object({
+  code: z.string().trim().min(1).max(256),
+})
+
+export type Sub2ApiRedeemCodeRequest = z.infer<typeof sub2ApiRedeemCodeRequestSchema>
+
+export const sub2ApiRedeemResultSchema = z
+  .object({
+    message: z.string(),
+    type: z.string().min(1),
+    value: z.number(),
+    new_balance: z.number().nonnegative().optional(),
+    new_concurrency: z.number().int().nonnegative().optional(),
+  })
+  .strip()
+
+export type Sub2ApiRedeemResult = z.infer<typeof sub2ApiRedeemResultSchema>
+
+export const sub2ApiRedeemHistoryItemSchema = z
+  .object({
+    id: z.number().int().positive(),
+    code: z.string().min(1),
+    type: z.string().min(1),
+    value: z.number(),
+    status: z.string().min(1),
+    used_at: z.string().nullable().optional(),
+    created_at: z.string().min(1),
+    expires_at: z.string().nullable().optional(),
+    group_id: z.number().int().positive().nullable().optional(),
+    validity_days: z.number().int().nonnegative().optional(),
+    group: z
+      .object({
+        id: z.number().int().positive(),
+        name: z.string(),
+      })
+      .strip()
+      .nullable()
+      .optional(),
+  })
+  .strip()
+
+export type Sub2ApiRedeemHistoryItem = z.infer<typeof sub2ApiRedeemHistoryItemSchema>
+
+export const sub2ApiRedeemHistorySchema = z.array(sub2ApiRedeemHistoryItemSchema)
+
+export const sub2ApiRedeemHistorySummarySchema = z
+  .object({
+    id: z.number().int().positive(),
+    code_hint: z.string().min(1),
+    type: z.string().min(1),
+    value: z.number(),
+    status: z.string().min(1),
+    used_at: z.string().nullable().optional(),
+    created_at: z.string().min(1),
+    expires_at: z.string().nullable().optional(),
+    validity_days: z.number().int().nonnegative().optional(),
+    group_name: z.string().optional(),
+  })
+  .strip()
+
+export type Sub2ApiRedeemHistorySummary = z.infer<typeof sub2ApiRedeemHistorySummarySchema>
+
 export const sub2ApiPlatformQuotaItemSchema = z
   .object({
     platform: z.string().min(1),
@@ -423,6 +485,8 @@ export const SUB2API_ROUTES = {
   usageDashboardModels: 'usage/dashboard/models?period=week',
   usageRecords: 'usage',
   usageErrors: 'usage/errors',
+  redeem: 'redeem',
+  redeemHistory: 'redeem/history',
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
   models: 'models',

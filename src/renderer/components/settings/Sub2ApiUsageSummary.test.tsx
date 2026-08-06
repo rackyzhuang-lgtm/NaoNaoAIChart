@@ -153,6 +153,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       error_body: '{"error":"rate limited"}',
       upstream_status_code: 429,
     }),
+    redeemCode: vi.fn(),
+    getRedeemHistory: vi.fn().mockResolvedValue([]),
     getSubscriptionSummary: vi.fn().mockResolvedValue({
       active_count: 1,
       total_used_usd: 2,

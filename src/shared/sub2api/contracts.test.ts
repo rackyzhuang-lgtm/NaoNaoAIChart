@@ -3,6 +3,9 @@ import {
   sub2ApiAuthResponseSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiPlatformQuotasResponseSchema,
+  sub2ApiRedeemCodeRequestSchema,
+  sub2ApiRedeemHistoryItemSchema,
+  sub2ApiRedeemResultSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiSubscriptionSummarySchema,
   sub2ApiUsageDashboardModelsSchema,
@@ -220,5 +223,27 @@ describe('sub2api contracts', () => {
         upstream_status_code: 429,
       })
     ).toMatchObject({ error_body: '{"error":"rate limited"}' })
+  })
+
+  it('validates redemption results and history records without admin fields', () => {
+    expect(sub2ApiRedeemCodeRequestSchema.parse({ code: '  redeem-code  ' })).toEqual({ code: 'redeem-code' })
+    expect(sub2ApiRedeemResultSchema.parse({ message: 'ok', type: 'balance', value: 5, internal: 'hidden' })).toEqual({
+      message: 'ok',
+      type: 'balance',
+      value: 5,
+    })
+    expect(
+      sub2ApiRedeemHistoryItemSchema.parse({
+        id: 1,
+        code: 'secret-code',
+        type: 'balance',
+        value: 5,
+        status: 'used',
+        used_at: null,
+        created_at: '2026-08-06T00:00:00Z',
+        notes: 'admin-only',
+      })
+    ).not.toHaveProperty('notes')
+    expect(() => sub2ApiRedeemCodeRequestSchema.parse({ code: ' ' })).toThrow()
   })
 })

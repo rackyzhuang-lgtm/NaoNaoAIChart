@@ -8,6 +8,9 @@ import type {
   Sub2ApiPlatformQuotasResponse,
   Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
+  Sub2ApiRedeemCodeRequest,
+  Sub2ApiRedeemHistorySummary,
+  Sub2ApiRedeemResult,
   Sub2ApiSessionState,
   Sub2ApiSubscriptionSummary,
   Sub2ApiUsageDashboardModels,
@@ -32,6 +35,8 @@ export const SUB2API_IPC_CHANNELS = {
   getUsageRecords: 'sub2api:get-usage-records',
   getUsageErrors: 'sub2api:get-usage-errors',
   getUsageErrorDetail: 'sub2api:get-usage-error-detail',
+  redeemCode: 'sub2api:redeem-code',
+  getRedeemHistory: 'sub2api:get-redeem-history',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
   getPlatformQuotas: 'sub2api:get-platform-quotas',
   listApiKeys: 'sub2api:list-api-keys',
@@ -54,6 +59,8 @@ export interface Sub2ApiRendererApi {
   getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage>
   getUsageErrors(page: number): Promise<Sub2ApiUsageErrorRequestPage>
   getUsageErrorDetail(id: number): Promise<Sub2ApiUsageErrorRequestDetail>
+  redeemCode(request: Sub2ApiRedeemCodeRequest): Promise<Sub2ApiRedeemResult>
+  getRedeemHistory(): Promise<Sub2ApiRedeemHistorySummary[]>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>

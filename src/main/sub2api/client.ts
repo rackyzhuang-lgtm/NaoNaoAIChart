@@ -9,6 +9,9 @@ import {
   type Sub2ApiPlatformQuotasResponse,
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
+  type Sub2ApiRedeemCodeRequest,
+  type Sub2ApiRedeemHistoryItem,
+  type Sub2ApiRedeemResult,
   type Sub2ApiSubscriptionSummary,
   type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
@@ -29,6 +32,9 @@ import {
   sub2ApiPlatformQuotasResponseSchema,
   sub2ApiProviderBindingSchema,
   sub2ApiPublicSettingsSchema,
+  sub2ApiRedeemCodeRequestSchema,
+  sub2ApiRedeemHistorySchema,
+  sub2ApiRedeemResultSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiSubscriptionSummarySchema,
   sub2ApiUsageDashboardModelsSchema,
@@ -208,6 +214,25 @@ export class Sub2ApiClient {
       `${SUB2API_ROUTES.usageErrors}/${parsedId}`,
       { method: 'GET' },
       sub2ApiUsageErrorRequestDetailSchema
+    )
+    return data
+  }
+
+  async redeemCode(request: Sub2ApiRedeemCodeRequest): Promise<Sub2ApiRedeemResult> {
+    const parsedRequest = sub2ApiRedeemCodeRequestSchema.parse(request)
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.redeem,
+      { method: 'POST', body: JSON.stringify(parsedRequest) },
+      sub2ApiRedeemResultSchema
+    )
+    return data
+  }
+
+  async getRedeemHistory(): Promise<Sub2ApiRedeemHistoryItem[]> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.redeemHistory,
+      { method: 'GET' },
+      sub2ApiRedeemHistorySchema
     )
     return data
   }

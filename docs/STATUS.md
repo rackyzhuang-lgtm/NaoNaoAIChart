@@ -190,7 +190,7 @@
 - 定向 Vitest：6 个文件、34 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 `noExplicitAny` warning。
 - 生产构建 `corepack pnpm exec electron-vite build --mode production` 通过，产物在 `release/app/dist`；保留既有 eval、循环依赖、Browserslist 和大 chunk 警告。
 
-当前阶段剩余 MVP 任务（5 项）：
+第十一批完成时剩余 MVP 任务（5 项）：
 
 1. 兑换码。
 2. 可用渠道。
@@ -199,3 +199,22 @@
 5. 会话过期、断网、限流和服务关闭的恢复体验。
 
 下一步：继续实现兑换码或可用渠道等只读/普通用户能力；保持 sub2api 只通过面板 JWT 接入，并继续删除 Chatbox 相关网络调用和界面字眼。Electron/Playwright 锁定验证环境、跨平台构建和安全持久化仍待补齐。
+
+## 第十二批：普通用户兑换码
+
+- 已接入 `POST /api/v1/redeem` 与 `GET /api/v1/redeem/history` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API；两类请求均使用面板 JWT。
+- 账户页已增加兑换码输入、提交中/成功/失败状态、余额/并发结果和兑换历史；兑换成功后会刷新当前用户摘要与历史。
+- 兑换码输入经过 trim、非空和最大 256 字符校验；历史接口返回的兑换码原文只在主进程短暂解析，IPC 转为 `code_hint`，同时剥离用户对象、管理员备注和其他未建模字段。
+- 固定实例只读验证：登录后历史接口返回 HTTP 200、`code=0`，当前有 1 条记录且字段与 schema 一致；未输出记录值，未调用兑换 POST，未修改线上数据。
+- 同批移除 macOS/Windows/Linux 桌面帮助菜单中的 Chatbox GitHub/Issues 网络入口；先进设置改为准确的诊断上报禁用状态，导出文件名改为 `naonaoai-exported-data-*`。
+- 定向 Vitest：7 个文件、38 项通过；TypeScript 通过；变更文件 Biome 0 error，保留 preload 与先进设置既有 warning。
+- 生产构建 `corepack pnpm exec electron-vite build --mode production` 通过，产物在 `release/app/dist`；保留既有 eval、循环依赖、Browserslist 和大 chunk 警告。
+
+当前阶段剩余 MVP 任务（4 项）：
+
+1. 可用渠道。
+2. 模型广场。
+3. 公告。
+4. 会话过期、断网、限流和服务关闭的恢复体验。
+
+下一步：实现可用渠道或公告等普通用户只读能力；继续清理可达路径中的 Chatbox 网络入口和界面字眼。Electron/Playwright 锁定验证环境、跨平台构建和安全持久化仍待补齐。

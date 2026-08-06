@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, Menu, MenuItem, type MenuItemConstructorOptions, shell } from 'electron'
+import { app, type BrowserWindow, Menu, type MenuItemConstructorOptions, shell } from 'electron'
 import Locale from './locales'
 
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
@@ -208,24 +208,12 @@ export default class MenuBuilder {
             shell.openExternal('https://naonaoai.shop')
           },
         },
-        {
-          label: 'Github Repo',
-          click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox')
-          },
-        },
         // {
         //   label: 'Community Discussions',
         //   click() {
         //     shell.openExternal('https://www.electronjs.org/community');
         //   },
         // },
-        {
-          label: 'Search Issues',
-          click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
-          },
-        },
       ],
     }
 
@@ -299,24 +287,12 @@ export default class MenuBuilder {
               shell.openExternal('https://naonaoai.shop')
             },
           },
-          {
-            label: 'Github Repo',
-            click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox')
-            },
-          },
           // {
           //   label: 'Community Discussions',
           //   click() {
           //     shell.openExternal('https://www.electronjs.org/community');
           //   },
           // },
-          {
-            label: 'Search Issues',
-            click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
-            },
-          },
         ],
       },
     ]

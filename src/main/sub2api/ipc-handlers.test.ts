@@ -36,6 +36,18 @@ describe('registerSub2ApiHandlers', () => {
       getUsageRecords: vi.fn(),
       getUsageErrors: vi.fn(),
       getUsageErrorDetail: vi.fn(),
+      redeemCode: vi.fn(async () => ({ message: 'Redeemed', type: 'balance', value: 5 })),
+      getRedeemHistory: vi.fn(async () => [
+        {
+          id: 1,
+          code: 'secret-code',
+          type: 'balance',
+          value: 5,
+          status: 'used',
+          used_at: '2026-08-06T00:00:00Z',
+          created_at: '2026-08-06T00:00:00Z',
+        },
+      ]),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(async () => ({
@@ -80,6 +92,9 @@ describe('registerSub2ApiHandlers', () => {
     const keyPage = await handlers.get(SUB2API_IPC_CHANNELS.listApiKeys)?.({})
     expect(keyPage).toMatchObject({ items: [{ key_hint: 'synthe...-key' }] })
     expect(JSON.stringify(keyPage)).not.toContain('synthetic-user-api-key')
+    const history = await handlers.get(SUB2API_IPC_CHANNELS.getRedeemHistory)?.({})
+    expect(history).toMatchObject([{ code_hint: 'secr...code' }])
+    expect(JSON.stringify(history)).not.toContain('secret-code')
   })
 
   it('rejects a remote sender before invoking the client', () => {
@@ -102,6 +117,8 @@ describe('registerSub2ApiHandlers', () => {
       getUsageRecords: vi.fn(),
       getUsageErrors: vi.fn(),
       getUsageErrorDetail: vi.fn(),
+      redeemCode: vi.fn(),
+      getRedeemHistory: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(),

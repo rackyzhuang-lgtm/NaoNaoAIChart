@@ -5,6 +5,8 @@ import {
   sub2ApiApiKeySummarySchema,
   sub2ApiApiKeyUpdateRequestSchema,
   sub2ApiLoginRequestSchema,
+  sub2ApiRedeemCodeRequestSchema,
+  sub2ApiRedeemHistorySummarySchema,
   sub2ApiTotpCodeSchema,
   sub2ApiUsageErrorIdSchema,
   sub2ApiUsagePageRequestSchema,
@@ -24,6 +26,22 @@ function toApiKeySummary(apiKey: Awaited<ReturnType<Sub2ApiClient['listApiKeys']
   return sub2ApiApiKeySummarySchema.parse({
     ...summary,
     key_hint: key.length > 10 ? `${key.slice(0, 6)}...${key.slice(-4)}` : '****',
+  })
+}
+
+function toRedeemHistorySummary(item: Awaited<ReturnType<Sub2ApiClient['getRedeemHistory']>>[number]) {
+  const codeHint = item.code.length > 8 ? `${item.code.slice(0, 4)}...${item.code.slice(-4)}` : '****'
+  return sub2ApiRedeemHistorySummarySchema.parse({
+    id: item.id,
+    code_hint: codeHint,
+    type: item.type,
+    value: item.value,
+    status: item.status,
+    used_at: item.used_at,
+    created_at: item.created_at,
+    expires_at: item.expires_at,
+    validity_days: item.validity_days,
+    group_name: item.group?.name,
   })
 }
 
@@ -85,6 +103,15 @@ export function registerSub2ApiHandlers(
   registrar.handle(SUB2API_IPC_CHANNELS.getUsageErrorDetail, (event, id) => {
     requireTrustedSender(event)
     return client.getUsageErrorDetail(sub2ApiUsageErrorIdSchema.parse(id))
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.redeemCode, (event, request) => {
+    requireTrustedSender(event)
+    return client.redeemCode(sub2ApiRedeemCodeRequestSchema.parse(request))
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.getRedeemHistory, async (event) => {
+    requireTrustedSender(event)
+    const history = await client.getRedeemHistory()
+    return history.map(toRedeemHistorySummary)
   })
   registrar.handle(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
     requireTrustedSender(event)

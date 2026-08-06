@@ -361,6 +361,42 @@ describe('Sub2ApiClient', () => {
     await expect(client.getUsageErrorDetail(0)).rejects.toThrow()
   })
 
+  it('uses panel JWT for redemption and history', async () => {
+    const history = [
+      {
+        id: 1,
+        code: 'secret-code',
+        type: 'balance',
+        value: 5,
+        status: 'used',
+        used_at: '2026-08-06T00:00:00Z',
+        created_at: '2026-08-06T00:00:00Z',
+      },
+    ]
+    const redeemed = { message: 'Redeemed', type: 'balance', value: 5, new_balance: 15 }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/redeem') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ code: 'redeem-code' })
+        return Promise.resolve(success(redeemed))
+      }
+      if (url.endsWith('/api/v1/redeem/history')) {
+        return Promise.resolve(success(history))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.redeemCode({ code: ' redeem-code ' })).resolves.toEqual(redeemed)
+    await expect(client.getRedeemHistory()).resolves.toEqual(history)
+    await expect(client.redeemCode({ code: ' ' })).rejects.toThrow()
+  })
+
   it('does not let an old refresh overwrite a newer login', async () => {
     const secondUser = { ...user, id: 2, username: 'second-user', email: 'second@example.test' }
     let resolveOldRefresh: ((response: Response) => void) | undefined

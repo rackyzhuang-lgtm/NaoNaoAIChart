@@ -59,6 +59,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     getUsageRecords: vi.fn(),
     getUsageErrors: vi.fn(),
     getUsageErrorDetail: vi.fn(),
+    redeemCode: vi.fn(),
+    getRedeemHistory: vi.fn().mockResolvedValue([]),
     getSubscriptionSummary: vi.fn(),
     getPlatformQuotas: vi.fn(),
     listApiKeys: vi.fn().mockResolvedValue({ items: [keySummary], total: 1, page: 1, page_size: 100, pages: 1 }),
