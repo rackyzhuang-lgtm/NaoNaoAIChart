@@ -1,0 +1,75 @@
+version: '1.0'
+name: linux-package
+displayName: NaoNaoAI Linux package
+triggers:
+  trigger: auto
+  push:
+    branches:
+      precise:
+        - main
+stages:
+  - name: build-linux
+    displayName: Build Linux packages
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: build@gcc
+        name: build_linux_x64
+        displayName: Build Linux x64
+        gccVersion: 10.3
+        commands: |
+          set -euxo pipefail
+
+          NODE_VERSION=22.16.0
+          PNPM_VERSION=10.33.0
+          NODE_ROOT="$PWD/.tools/node-v${NODE_VERSION}-linux-x64"
+
+          if [ ! -x "$NODE_ROOT/bin/node" ]; then
+            mkdir -p "$NODE_ROOT"
+            wget -q "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -O node.tar.gz
+            tar -xzf node.tar.gz --strip-components=1 -C "$NODE_ROOT"
+            rm node.tar.gz
+          fi
+
+          export PATH="$NODE_ROOT/bin:$PATH"
+          export NODE_OPTIONS=--max-old-space-size=8192
+
+          node --version
+          corepack enable
+          corepack prepare "pnpm@${PNPM_VERSION}" --activate
+          pnpm --version
+          pnpm config set store-dir .pnpm-store
+
+          pnpm install --frozen-lockfile
+          pnpm check
+          pnpm lint
+          pnpm test
+
+          pnpm tsx ./.erb/scripts/clean.js
+          pnpm run build
+          pnpm exec electron-builder build --publish never --linux AppImage deb --x64
+
+          mkdir -p artifacts/gitee/linux-x64
+          find release/build -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.yml' -o -name '*.blockmap' \) -exec cp -v {} artifacts/gitee/linux-x64/ \;
+          find artifacts/gitee/linux-x64 -maxdepth 1 -type f -print
+          test -n "$(find artifacts/gitee/linux-x64 -maxdepth 1 -type f -print -quit)"
+        artifacts:
+          - name: LINUX_X64_PACKAGES
+            path:
+              - ./artifacts/gitee/linux-x64
+        caches:
+          - ./.tools
+          - ./.pnpm-store
+          - ~/.cache/electron
+          - ~/.cache/electron-builder
+        notify: []
+        strategy:
+          retry: '0'
+      - step: publish@general_artifacts
+        name: publish_linux_x64
+        displayName: Upload Linux x64 packages
+        dependsOn: build_linux_x64
+        dependArtifact: LINUX_X64_PACKAGES
+        artifactRepository: default
+        artifactName: naonaoai-linux-x64

@@ -188,7 +188,7 @@ alpha 通道沿用原行为，不注入签名 secrets，因此会跳过 Windows 
 
 ## CI/CD 流水线
 
-GitHub Actions 自动化完整的构建发布流程，通过 git tag（`vX.X.X`）触发。CI 覆盖 5 个构建目标：
+以下 GitHub Actions 内容来自上游构建体系，用作跨平台发布设计参考；当前 NaoNaoAI 仓库尚未把这套上游发布任务作为可用发布通道。上游 CI 覆盖 5 个构建目标：
 
 | Job | 平台 | 产物 |
 |-----|------|------|
@@ -209,6 +209,20 @@ pnpm 迁移后，CI 的关键变更：
 - `CHATBOX_BUILD_PLATFORM`：`'ios'` | `'android'` | `'web'` | 默认
 - `USE_LOCAL_API=true`：开发环境使用本地后端
 - `UPDATE_CHANNEL`：更新通道（stable/alpha），传递给 S3 publish path
+
+### NaoNaoAI Gitee Go 安装包流水线
+
+当前仓库的可执行流水线配置为 `.workflow/LinuxPackage.yml`，使用 Gitee Go 官方 YAML 1.0 格式：
+
+1. `main` 分支 push 自动触发；项目成员也可在 Gitee Go 控制台手动执行。
+2. 使用 `build@gcc` 的 Ubuntu 20.04 环境，并固定下载 Node.js `22.16.0`。Gitee Go 的 `build@nodejs` 官方镜像最高只提供 Node.js 15，不符合本项目 `>=22.13.0 <23` 的约束。
+3. 通过 Corepack 固定 pnpm `10.33.0`，执行锁定安装、TypeScript、Biome、全量 Vitest、生产构建和 electron-builder Linux x64 打包。
+4. 只暂存 AppImage、deb、YAML 和 blockmap 文件，再通过 `publish@general_artifacts` 上传为默认制品库中的 `naonaoai-linux-x64`。
+5. electron-builder 始终使用 `--publish never`；Gitee 制品上传是流水线独立步骤，不会触发 Chatbox 上游发布或客户端自动更新。
+
+流水线产出路径为 `release/build`，上传前复制到 `artifacts/gitee/linux-x64`。Gitee Go 的“发布记录/制品库”提供远端下载；本地同名目录只是流水线工作区中的筛选目录。
+
+当前只建立 Linux x64 云构建。Windows NSIS 必须在 Windows runner 上验证，macOS dmg 必须在 macOS runner 上构建并完成签名/公证；不得把 Linux 流水线视为三平台发布矩阵完成。未配置签名的产物仅用于内部验收。
 
 ---
 

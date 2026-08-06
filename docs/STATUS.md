@@ -284,3 +284,19 @@
 - `corepack pnpm test:e2e` 通过：生产 main/preload/renderer 构建完成，1 项桌面烟测通过。构建保留既有依赖 `eval`、循环分块、Browserslist 数据过期和大 chunk warning。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。
+
+## 第十八批：Gitee Go Linux 安装包流水线
+
+- 新增 `.workflow/LinuxPackage.yml`，使用 Gitee Go 官方 YAML 1.0、`build@gcc` 暂存产物和 `publish@general_artifacts` 制品上传步骤。
+- 流水线固定 Node.js `22.16.0` 和 pnpm `10.33.0`，在 Ubuntu 20.04 云构建环境中执行锁定安装、TypeScript、Biome、全量 Vitest、生产构建和 Linux x64 AppImage/deb 打包。
+- 仅将安装包及 YAML/blockmap 元数据复制到 `artifacts/gitee/linux-x64`，并上传为默认制品库中的 `naonaoai-linux-x64`；electron-builder 继续固定 `--publish never`。
+- 未加入账号、令牌、签名证书或 sub2api 数据；流水线不登录服务、不调用真实模型，也不向 Chatbox 上游发布。
+- 本地 YAML 解析：通过；解析到 1 个 stage，包含 `build@gcc` 和 `publish@general_artifacts`。
+- `corepack pnpm check`：通过，TypeScript 0 error。
+- `corepack pnpm lint`：通过，0 error，保留 888 个既有 warning。
+- `corepack pnpm test`：通过；242 个文件通过、3 个跳过，2,453 项通过、61 项跳过。
+- `corepack pnpm run build`：通过；main、preload、renderer 生产构建完成，保留既有依赖 `eval`、循环分块、Browserslist 和大 chunk warning。
+- `git diff --check`：通过。
+- 本机 Windows 交叉执行 Linux x64 electron-builder 已进入解包阶段，但 Electron Linux 运行时下载长时间无进展后中止，未生成安装包；不代表 Gitee Go 远端执行结果。Gitee Go 首次远端执行只能在推送后确认，当前不得写成通过。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（已完成 Linux x64 配置，仍待首次远端执行及 Windows/macOS/Linux arm64）、安全持久化验证。

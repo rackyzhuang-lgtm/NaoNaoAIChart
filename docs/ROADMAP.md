@@ -94,6 +94,7 @@ Runtime boundary update: the default path no longer uses hosted Chatbox network,
 ## 阶段 5：发布与长期维护
 
 - Windows、macOS、Linux 安装包和升级策略。
+- 已新增 Gitee Go Linux x64 AppImage/deb 云打包与制品上传配置；首次远端执行、Linux arm64、Windows runner 和 macOS runner 仍待验证。
 - 代码签名、公证、更新通道和回滚演练。
 - GPL/LGPL 许可证、源代码和第三方声明审查。
 - 定期同步 Chatbox 与 sub2api API 变化。
