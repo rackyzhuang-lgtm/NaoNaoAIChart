@@ -76,7 +76,7 @@ pnpm test
 pnpm run build
 ```
 
-当前 `test:e2e` 脚本引用不存在的 `test/e2e/playwright.config.ts`，且仓库未锁定 Playwright 依赖。在补齐基础设施前不得声称 E2E 通过，也不得用 `npx` 临时下载未锁定版本规避该缺口。
+`test:e2e` 使用仓库锁定的 Playwright 版本，先构建生产产物，再用临时用户目录执行桌面启动烟测。不得用 `npx` 临时下载未锁定版本；真实模型 Provider 测试仍不属于该 E2E 烟测。
 
 不得默认运行 `pnpm test:model-provider`，它是需要显式启用真实模型 API 的集成测试。
 

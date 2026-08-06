@@ -409,7 +409,6 @@ export async function prepareFileAttachment(
 
         case 'chatbox-ai': {
           throw new Error('document_parser_not_configured')
-          break
         }
 
         case 'mineru': {
@@ -511,7 +510,6 @@ export async function preprocessLink(
 }> {
   try {
     const uniqKey = StorageKeyGenerator.linkUniqKey(url)
-    const parsed = { storageKey: uniqKey, title: url }
 
     // 检查是否已经处理过这个链接
     const existingContent = await storage.getBlob(uniqKey).catch(() => null)
@@ -541,64 +539,29 @@ export async function preprocessLink(
       }
     }
 
-    if (false) {
-      // ChatboxAI 方案：使用远程解析
-      throw new Error('remote_link_parser_disabled')
+    const { key, title } = await localParser.parseUrl(url)
+    const content = (await storage.getBlob(key).catch(() => '')) || ''
 
-      // 获取解析后的内容
-      const content = (await storage.getBlob(parsed.storageKey).catch(() => '')) || ''
+    if (content) {
+      await storage.setBlob(uniqKey, content)
+    }
 
-      // 将内容存储到唯一键下
-      if (content) {
-        await storage.setBlob(uniqKey, content)
-      }
+    const { lineCount, byteLength, tokenCountMap } = content
+      ? computePreviewMetadata(content)
+      : { lineCount: undefined, byteLength: undefined, tokenCountMap: {} }
 
-      // Calculate token counts including preview metadata
-      const { lineCount, byteLength, tokenCountMap } = content
-        ? computePreviewMetadata(content)
-        : { lineCount: undefined, byteLength: undefined, tokenCountMap: {} }
+    if (content) {
+      await storage.setItem(`${uniqKey}_tokenMap`, tokenCountMap)
+    }
 
-      // Store token map for future use
-      if (content) {
-        await storage.setItem(`${uniqKey}_tokenMap`, tokenCountMap)
-      }
-
-      return {
-        url,
-        title: parsed.title,
-        content,
-        storageKey: uniqKey,
-        tokenCountMap,
-        lineCount,
-        byteLength,
-      }
-    } else {
-      // 本地方案：解析链接内容
-      const { key, title } = await localParser.parseUrl(url)
-      const content = (await storage.getBlob(key).catch(() => '')) || ''
-
-      // 将内容存储到唯一键下
-      if (content) {
-        await storage.setBlob(uniqKey, content)
-      }
-
-      const { lineCount, byteLength, tokenCountMap } = content
-        ? computePreviewMetadata(content)
-        : { lineCount: undefined, byteLength: undefined, tokenCountMap: {} }
-
-      if (content) {
-        await storage.setItem(`${uniqKey}_tokenMap`, tokenCountMap)
-      }
-
-      return {
-        url,
-        title,
-        content,
-        storageKey: uniqKey,
-        tokenCountMap,
-        lineCount,
-        byteLength,
-      }
+    return {
+      url,
+      title,
+      content,
+      storageKey: uniqKey,
+      tokenCountMap,
+      lineCount,
+      byteLength,
     }
   } catch (error) {
     return {

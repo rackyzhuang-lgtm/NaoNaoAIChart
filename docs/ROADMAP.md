@@ -36,7 +36,7 @@ Runtime boundary update: the default path no longer uses hosted Chatbox network,
 6. 用自建 Provider 完成协议探针，再决定首发是否立即新增内置 `sub2api` Provider。
 7. 完成登录 -> 创建/选择 API Key -> `/v1/models` -> 流式对话的端到端闭环。
 
-进度：步骤 1、2 已在 Windows 完成。步骤 3 已完成公共设置、登录、刷新、当前用户、API Key 列表和模型列表 schema，并完成 Key CRUD 与模型列表的定向验证。步骤 4 已完成固定 HTTPS 地址、严格 URL 构造和真实连接验证。步骤 5 已完成主进程内存会话、refresh 单飞和凭证代际竞态防护，跨重启安全持久化仍待验证。步骤 6 已确认复用现有 OpenAI Provider，不新增平行 Provider。步骤 7 已完成离线 SSE 流式契约测试和显式 opt-in 真实测试骨架；真实模型调用仍需用户明确授权并提供临时 API Key/model 环境变量。当前 E2E 脚本缺少上游配置与依赖，需在涉及桌面真实端到端闭环前补齐或替换。
+进度：步骤 1、2 已在 Windows 完成。步骤 3 已完成公共设置、登录、刷新、当前用户、API Key 列表和模型列表 schema，并完成 Key CRUD 与模型列表的定向验证。步骤 4 已完成固定 HTTPS 地址、严格 URL 构造和真实连接验证。步骤 5 已完成主进程内存会话、refresh 单飞和凭证代际竞态防护，跨重启安全持久化仍待验证。步骤 6 已确认复用现有 OpenAI Provider，不新增平行 Provider。步骤 7 已完成离线 SSE 流式契约测试和显式 opt-in 真实测试骨架；真实模型调用仍需用户明确授权并提供临时 API Key/model 环境变量。锁定的 Playwright 桌面启动与品牌烟测已通过，但不替代需要临时 API Key/model 的真实流式调用验证。
 
 退出条件：
 
@@ -72,7 +72,7 @@ Runtime boundary update: the default path no longer uses hosted Chatbox network,
 
 当前阶段剩余 MVP 任务（0 项）。模型广场、公告和会话异常恢复均已完成接入；当前服务端关闭模型广场开关，客户端不会请求关闭的路由并会明确显示该状态。
 
-第十六批已完成：统一会话过期、断网、超时、限流和服务关闭的恢复提示，补充错误分类/IPC/账户页回归测试，并清理默认可达的 Chatbox 托管网络调用和界面字眼。E2E 基础设施、跨平台构建和安全持久化仍属于后续发布阶段工作，不计入当前 MVP 待办。
+第十六批已完成：统一会话过期、断网、超时、限流和服务关闭的恢复提示，补充错误分类/IPC/账户页回归测试，并清理默认可达的 Chatbox 托管网络调用和界面字眼。第十七批已补齐 Windows 全量测试和锁定的桌面 E2E 基础设施。跨平台构建和安全持久化仍属于后续发布阶段工作，不计入当前 MVP 待办。
 
 ## 阶段 3：账户、安全与支付
 

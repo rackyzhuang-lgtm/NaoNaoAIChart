@@ -400,6 +400,8 @@ async function createWindow() {
 
   const [state] = windowState.getState()
 
+  const usePackagedAssetLayout = app.isPackaged || process.env.E2E_TEST === '1'
+
   mainWindow = new BrowserWindow({
     show: false,
     // remove the default titlebar
@@ -422,7 +424,7 @@ async function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
-      preload: app.isPackaged
+      preload: usePackagedAssetLayout
         ? path.join(__dirname, '../preload/index.js')
         : path.join(__dirname, '../../out/preload/index.js'),
     },

@@ -273,3 +273,14 @@
 - 生产构建 `corepack pnpm exec electron-vite build --mode production` 通过，产物在 `release/app/dist`。E2E 仍不可执行，因为仓库缺少 Playwright 配置和锁定依赖。
 
 当前阶段剩余 MVP 任务（0 项）。后续工作属于发布阶段：补齐 E2E 基础设施、跨平台构建矩阵和安全持久化验证。
+
+## 第十七批：Windows 全量测试与桌面 E2E 基础设施
+
+- 已恢复锁定的 Electron `35.7.5` Windows 运行时；本机手工恢复时产生的 `path.txt` 尾随换行已移除，Playwright 可正确解析 Electron 可执行路径。
+- 已统一沙箱产物路径的 Windows 原生 realpath 语义，不存在的叶子路径会继承最近存在父目录的规范路径。
+- 已锁定 Playwright `1.62.1`，补齐桌面 E2E 配置和品牌启动烟测；测试使用临时用户目录，不登录、不调用真实模型、不写线上 sub2api 数据。
+- 已删除托管链接解析移除后遗留的不可达代码，当前链接预处理只进入本地解析路径；整仓 Biome 从 3 个 error 恢复为 0 error，保留 888 个既有 warning。
+- `corepack pnpm test` 通过：242 个文件通过、3 个跳过；2,453 项通过、61 项跳过。既有 Electron 套件加载失败和 `persist-artifact` 的 2 个 Windows 路径失败均已消失。
+- `corepack pnpm test:e2e` 通过：生产 main/preload/renderer 构建完成，1 项桌面烟测通过。构建保留既有依赖 `eval`、循环分块、Browserslist 数据过期和大 chunk warning。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。

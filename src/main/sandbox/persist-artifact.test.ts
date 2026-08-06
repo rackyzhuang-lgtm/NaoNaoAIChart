@@ -52,7 +52,7 @@ describe('persistSandboxArtifact', () => {
 
     expect(result.success).toBe(true)
     expect(result.artifactPath).toBeTruthy()
-    const artifactsRoot = realpathSync(getSandboxArtifactsRoot())
+    const artifactsRoot = realpathSync.native(getSandboxArtifactsRoot())
     expect(result.artifactPath?.startsWith(artifactsRoot + path.sep)).toBe(true)
     expect(existsSync(result.artifactPath!)).toBe(true)
     expect(readFileSync(result.artifactPath!, 'utf-8')).toBe('a,b,c\n1,2,3\n')
@@ -136,7 +136,7 @@ describe('persistSandboxArtifact', () => {
       try {
         const result = await persistSandboxArtifact(realpathSync(tempFile), SESSION_ID)
         expect(result.success).toBe(true)
-        const artifactsRoot = realpathSync(getSandboxArtifactsRoot())
+        const artifactsRoot = realpathSync.native(getSandboxArtifactsRoot())
         expect(result.artifactPath?.startsWith(artifactsRoot + path.sep)).toBe(true)
         expect(readFileSync(result.artifactPath!, 'utf-8')).toBe('from-tmp')
       } finally {

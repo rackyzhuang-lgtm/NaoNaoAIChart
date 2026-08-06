@@ -111,12 +111,25 @@ function getOrCreateSession(sessionId?: string): SandboxSession {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Resolve symlinks with the same native semantics as fs.promises.realpath(). */
+/** Resolve symlinks with native semantics, including for a not-yet-existing leaf path. */
 function safeRealpathSync(p: string): string {
+  const resolved = path.resolve(p)
+  let existingAncestor = resolved
+  const missingSegments: string[] = []
+
+  while (!existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor)
+    if (parent === existingAncestor) {
+      return path.normalize(resolved)
+    }
+    missingSegments.unshift(path.basename(existingAncestor))
+    existingAncestor = parent
+  }
+
   try {
-    return realpathSync.native(p)
+    return path.join(realpathSync.native(existingAncestor), ...missingSegments)
   } catch {
-    return path.normalize(p)
+    return path.normalize(resolved)
   }
 }
 
