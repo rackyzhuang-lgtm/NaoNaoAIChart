@@ -2,13 +2,12 @@ import { cachified } from '@epic-web/cachified'
 import type { SearchResultItem } from '@shared/types'
 import { truncate } from 'lodash'
 import platform from '@/platform'
-import { getExtensionSettings, getLanguage, getLicenseKey } from '@/stores/settingActions'
+import { getExtensionSettings, getLanguage } from '@/stores/settingActions'
 import { ChatboxAIAPIError } from '../../../shared/models/errors'
 import type WebSearch from './base'
 import { BingSearch } from './bing'
 import { BingNewsSearch } from './bing-news'
 import { BochaSearch } from './bocha'
-import { ChatboxSearch } from './chatbox-search'
 import { QueritSearch } from './querit'
 import { TavilySearch } from './tavily'
 
@@ -17,7 +16,6 @@ const MAX_CONTEXT_ITEMS = 10
 // 根据配置的搜索提供方来选择搜索服务
 function getSearchProviders() {
   const settings = getExtensionSettings()
-  const licenseKey = getLicenseKey()
 
   const selectedProviders: WebSearch[] = []
   const provider = settings.webSearch.provider
@@ -25,14 +23,6 @@ function getSearchProviders() {
 
   switch (provider) {
     case 'build-in':
-      if (!licenseKey) {
-        throw ChatboxAIAPIError.fromCodeName(
-          'chatbox_search_license_key_required',
-          'chatbox_search_license_key_required'
-        )
-      }
-      selectedProviders.push(new ChatboxSearch(licenseKey))
-      break
     case 'bing':
       selectedProviders.push(new BingSearch())
       if (language !== 'zh-Hans' && platform.type !== 'mobile') {
@@ -76,7 +66,6 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
     providers.map(async (provider) => {
       try {
         const result = await provider.search(query, signal)
-        console.debug(`web search result for "${query}":`, result.items)
         return result
       } catch (err) {
         console.error(err)
@@ -102,8 +91,6 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
     }
     i++
   } while (hasMore && items.length < MAX_CONTEXT_ITEMS)
-
-  console.debug('web search items', items)
 
   return items.map((item) => ({
     title: item.title,
@@ -132,7 +119,7 @@ export const webSearchExecutor = async (
  * Single source of truth: which configured providers offer the parse_link tool.
  * Keep in sync with the provider classes' `supportsParseLink` flags.
  */
-export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily'])
+export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['tavily'])
 
 /**
  * Returns the first configured search provider that supports parseLink.

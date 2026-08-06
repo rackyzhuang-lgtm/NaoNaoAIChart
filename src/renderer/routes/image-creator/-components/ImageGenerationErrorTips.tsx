@@ -1,15 +1,8 @@
 import { ActionIcon, Button, Flex, Paper, Text, Tooltip } from '@mantine/core'
-import { ChatboxAIAPIError } from '@shared/models/errors'
 import type { ImageGeneration } from '@shared/types'
-import { IconCheck, IconCopy, IconRefresh, IconSettings, IconX } from '@tabler/icons-react'
+import { IconCheck, IconCopy, IconRefresh, IconX } from '@tabler/icons-react'
 import { Trans, useTranslation } from 'react-i18next'
-import LinkTargetBlank from '@/components/common/Link'
 import { useCopied } from '@/hooks/useCopied'
-import { navigateToSettings } from '@/modals/Settings'
-import { trackingEvent } from '@/packages/event'
-import { buildChatboxUrl } from '@/packages/remote'
-import platform from '@/platform'
-import * as settingActions from '@/stores/settingActions'
 
 export interface ImageGenerationErrorTipsProps {
   record: ImageGeneration
@@ -42,19 +35,15 @@ function ImageGenerationTaskErrorMessage({ errorCode }: { errorCode: ImageGenera
 export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageGenerationErrorTipsProps) {
   const { t } = useTranslation()
 
-  const chatboxAIErrorDetail =
-    typeof record.errorCode === 'number' ? ChatboxAIAPIError.getDetail(record.errorCode) : null
   const imageGenerationTaskErrorCode = isImageGenerationTaskErrorCode(record.errorCode) ? record.errorCode : undefined
   const errorDebugInfo = [
     record.errorItemUuid ? `UUID: ${record.errorItemUuid}` : undefined,
     record.taskId ? `Task ID: ${record.taskId}` : undefined,
   ].filter((item): item is string => !!item)
   const showErrorDebugInfo = Boolean(
-    (chatboxAIErrorDetail || imageGenerationTaskErrorCode) && errorDebugInfo.length > 0
+    Boolean(imageGenerationTaskErrorCode && errorDebugInfo.length > 0)
   )
   const { copied, copy } = useCopied(errorDebugInfo.join('\n'))
-  const isLicenseError =
-    chatboxAIErrorDetail && ['license_not_found', 'expired_license'].includes(chatboxAIErrorDetail.name)
 
   return (
     <Paper
@@ -71,49 +60,12 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
           {t('Generation Failed')}
         </Text>
 
-        {chatboxAIErrorDetail ? (
-          <Text size="sm" c="dimmed" ta="center" maw={400}>
-            <Trans
-              i18nKey={chatboxAIErrorDetail.i18nKey}
-              values={{
-                model: record.model.modelId,
-              }}
-              components={{
-                OpenSettingButton: (
-                  <Text
-                    component="span"
-                    className="cursor-pointer underline"
-                    c="chatbox-brand"
-                    onClick={() => navigateToSettings()}
-                  />
-                ),
-                OpenMorePlanButton: (
-                  <Text
-                    component="span"
-                    className="cursor-pointer underline"
-                    c="chatbox-brand"
-                    onClick={() => {
-                      platform.openLink(
-                        buildChatboxUrl(
-                          `/redirect_app/view_more_plans/${settingActions.getLanguage()}?utm_source=app&utm_content=image_creator_upgrade_required`
-                        )
-                      )
-                      trackingEvent('click_view_more_plans_button_from_image_creator', {
-                        event_category: 'user',
-                      })
-                    }}
-                  />
-                ),
-                LinkToHomePage: <LinkTargetBlank href="https://chatboxai.app" />,
-              }}
-            />
-          </Text>
-        ) : imageGenerationTaskErrorCode ? (
+        {imageGenerationTaskErrorCode ? (
           <Text size="sm" c="dimmed" ta="center" maw={400}>
             <ImageGenerationTaskErrorMessage errorCode={imageGenerationTaskErrorCode} />
           </Text>
         ) : (
-          <Text size="sm" c="dimmed" ta="center" className="whitespace-pre-wrap" maw={400}>
+          <Text size="sm" c="dimmed" ta="center" maw={400}>
             {record.error}
           </Text>
         )}
@@ -141,17 +93,6 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
         )}
 
         <Flex gap="sm">
-          {isLicenseError && (
-            <Button
-              variant="light"
-              color="gray"
-              leftSection={<IconSettings size={16} />}
-              onClick={() => navigateToSettings()}
-              radius="md"
-            >
-              {t('Settings')}
-            </Button>
-          )}
           <Button
             variant="light"
             color="chatbox-error"

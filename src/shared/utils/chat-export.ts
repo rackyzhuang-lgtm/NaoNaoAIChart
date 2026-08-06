@@ -103,7 +103,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: ExportableThr
           return
         }
         const sanitized = textBuffer.join('\n').replaceAll(/```\w*/g, '')
-        content += '```\n' + sanitized + '\n```\n\n'
+        content += `\`\`\`\n${sanitized}\n\`\`\`\n\n`
         textBuffer.length = 0
       }
       content += `**${msg.role}**: \n\n`
@@ -136,7 +136,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: ExportableThr
         }
         flushTextBuffer()
       } else {
-        content += '```\n' + getMessageText(msg).replaceAll(/```\w*/g, '') + '\n```\n\n'
+        content += `\`\`\`\n${getMessageText(msg).replaceAll(/```\w*/g, '')}\n\`\`\`\n\n`
       }
       if (attachments.length > 0) {
         content += 'Attachments:\n'
@@ -149,12 +149,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: ExportableThr
     content += '\n\n'
   }
   content += '--------------------\n\n'
-  content += `
-<a href="https://chatboxai.app" style="display: flex; align-items: center;">
-<img src='https://chatboxai.app/icon.png' style='width: 40px; height: 40px; padding-right: 6px'>
-<b style='font-size:30px'>Chatbox AI</b>
-</a>
-`
+  content += 'NaoNaoAI Chat\n'
   return content
 }
 
@@ -219,6 +214,6 @@ export function formatChatAsTxt(sessionName: string, threads: ExportableThread[]
     content += '\n\n\n\n'
   }
   content += `========================================================================\n\n`
-  content += `Chatbox AI (https://chatboxai.app)`
+  content += 'NaoNaoAI Chat'
   return content
 }

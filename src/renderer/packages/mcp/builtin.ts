@@ -51,6 +51,11 @@ export function getBuiltinServerConfig(id: string, licenseKey?: string): MCPServ
   if (!config) {
     return null
   }
+  // The upstream-hosted catalog is intentionally disabled until a first-party
+  // endpoint is selected; do not create requests to the legacy service.
+  if (new URL(config.url).hostname.endsWith('chatboxai.app')) {
+    return null
+  }
   const license = licenseKey || getLicenseKey()
   return {
     id,

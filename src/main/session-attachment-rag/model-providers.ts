@@ -1,33 +1,27 @@
 import type { EmbeddingModel } from 'ai'
 import { CohereClient } from 'cohere-ai'
 import { getProviderSettings } from '../../shared/models'
-import { getChatboxAPIOrigin } from '../../shared/request/chatboxai_pool'
 import { parseKnowledgeBaseModelString } from '../../shared/utils/knowledge-base-model-parser'
 import { sentry } from '../adapters/sentry'
 import { cache } from '../cache'
 import { createEmbeddingProviderFromModelString } from '../knowledge-base/model-providers'
 import { getDefaultEmbeddingModelString, getDefaultRerankModelString } from '../rag-default-models'
-import { getSettings, store } from '../store-node'
+import { getSettings } from '../store-node'
 import { getLogger } from '../util'
 
 const log = getLogger('session-attachment-rag:model-providers')
 
-const SESSION_ATTACHMENT_EMBEDDING_MODEL = 'chatbox-ai:text-embedding-3-small'
-
 export type SessionAttachmentEmbeddingProviderResolution = {
   provider: EmbeddingModel
   modelString: string
-  source: 'chatbox-ai-license' | 'default-embedding-model'
+  source: 'default-embedding-model'
 }
 
 export async function getSessionAttachmentEmbeddingProviderWithResolution(): Promise<SessionAttachmentEmbeddingProviderResolution> {
   const settings = getSettings()
-  const hasLicense = Boolean(store.get('settings.licenseKey'))
   const defaultEmbeddingModel = getDefaultEmbeddingModelString(settings)
-  const embeddingModel = defaultEmbeddingModel || (hasLicense ? SESSION_ATTACHMENT_EMBEDDING_MODEL : undefined)
-  const source: SessionAttachmentEmbeddingProviderResolution['source'] = defaultEmbeddingModel
-    ? 'default-embedding-model'
-    : 'chatbox-ai-license'
+  const embeddingModel = defaultEmbeddingModel
+  const source: SessionAttachmentEmbeddingProviderResolution['source'] = 'default-embedding-model'
 
   if (!embeddingModel) {
     throw new Error('session attachment embedding model not set')
@@ -89,10 +83,7 @@ export async function getSessionAttachmentRerankProvider(modelString?: string | 
 
         let apiHost = formattedApiHost
         let token = providerSetting.apiKey
-        if (providerId === 'chatbox-ai') {
-          apiHost = getChatboxAPIOrigin()
-          token = store.get('settings.licenseKey')
-        }
+        if (providerId === 'chatbox-ai') throw new Error('provider chatbox-ai is unavailable')
 
         if (!token) {
           throw new Error(`Missing token for rerank provider: ${providerId}`)

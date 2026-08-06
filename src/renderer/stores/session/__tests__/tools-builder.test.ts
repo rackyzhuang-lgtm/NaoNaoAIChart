@@ -328,7 +328,8 @@ describe('buildToolsForSession', () => {
     expect(result.instructions).toContain('structured file tools for host paths outside it')
   })
 
-  test('webBrowsing=true exposes parse_link when configured search provider supports it', async () => {
+  test('webBrowsing=true exposes parse_link for a capable third-party provider', async () => {
+    webSearchProvider.current = 'tavily'
     const model = createMockModel()
     const result = await buildToolsForSession(model, {
       webBrowsing: true,
@@ -345,8 +346,7 @@ describe('buildToolsForSession', () => {
     expect(result.instructions).toContain('## parse_link')
   })
 
-  test('webBrowsing=true does not expose parse_link when configured search provider does not support it', async () => {
-    webSearchProvider.current = 'bing'
+  test('webBrowsing=true does not expose parse_link for the built-in provider', async () => {
     const model = createMockModel()
 
     const result = await buildToolsForSession(model, {

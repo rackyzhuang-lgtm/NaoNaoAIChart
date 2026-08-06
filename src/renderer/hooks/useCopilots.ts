@@ -3,7 +3,6 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useAtom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { useMemo } from 'react'
-import * as remote from '@/packages/remote'
 import storage, { StorageKey } from '@/storage'
 import { useLanguage } from '@/stores/settingsStore'
 
@@ -61,7 +60,8 @@ export function useRemoteCopilotTags() {
   const language = useLanguage()
   const { data: tags, ...others } = useQuery({
     queryKey: ['remote-copilot-tags', language],
-    queryFn: () => remote.listCopilotTags(language),
+    queryFn: async (): Promise<string[]> => [],
+    enabled: false,
     initialData: [],
     initialDataUpdatedAt: 0,
     staleTime: 3600 * 1000,
@@ -81,7 +81,11 @@ export function useRemoteCopilotsByCursor(filters?: RemoteCopilotsByCursorFilter
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, ...others } = useInfiniteQuery({
     queryKey: ['remote-copilots-cursor', language, limit, tag, search],
-    queryFn: ({ pageParam }) => remote.listCopilotsByCursor(language, { limit, cursor: pageParam, tag, search }),
+    queryFn: async (): Promise<{ data: CopilotDetail[]; next_cursor: string | null }> => ({
+      data: [],
+      next_cursor: null,
+    }),
+    enabled: false,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
     initialPageParam: undefined as string | undefined,
     staleTime: 60 * 1000,

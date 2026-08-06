@@ -93,12 +93,12 @@ function Copilots() {
         )}
       </section>
 
-      {/* Chatbox Featured Section */}
+      {/* Featured section */}
       {remoteCopilots.length > 0 && (
         <section>
           <Flex align="center" gap="md" justify="space-between" mb="md">
             <Title order={5} c="chatbox-primary" className="font-normal">
-              {t('Chatbox Featured')}
+              {t('Featured')}
             </Title>
             {showRemoteCopilotsSeeAll && (
               <Flex

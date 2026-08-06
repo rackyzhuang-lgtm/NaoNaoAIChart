@@ -1,7 +1,6 @@
 import { isUsingOAuth, mergeSharedOAuthProviderSettings } from '@shared/oauth'
 import { ModelProviderEnum, ModelProviderType, type ProviderModelInfo, type Settings } from '@shared/types'
 import { getLogger } from '@/lib/utils'
-import { getModelManifest, type RemoteModelInfo } from '@/packages/remote'
 import platform from '@/platform'
 import { settingsStore } from '@/stores/settingsStore'
 
@@ -16,13 +15,6 @@ export interface AvailableImageModel {
   provider: string
   modelId: string
   nickname: string
-}
-
-export function remoteImageModelToOption(model: RemoteModelInfo): ImageModelOption {
-  return {
-    modelId: model.modelId,
-    displayName: model.modelName || model.modelId,
-  }
 }
 
 export function manualImageModelToOption(model: ProviderModelInfo): ImageModelOption {
@@ -47,16 +39,11 @@ export function mergeImageModels(
   return [...modelsById.values()]
 }
 
-export async function loadProviderImageModels(
-  provider: ModelProviderEnum,
-  options: { licenseKey?: string; language?: string } = {}
+export function loadProviderImageModels(
+  _provider: ModelProviderEnum,
+  _options: { licenseKey?: string; language?: string } = {}
 ): Promise<ImageModelOption[]> {
-  const manifest = await getModelManifest({
-    aiProvider: provider,
-    language: options.language,
-    licenseKey: provider === ModelProviderEnum.ChatboxAI ? options.licenseKey : undefined,
-  })
-  return manifest.imageModels.map(remoteImageModelToOption)
+  return Promise.resolve([])
 }
 
 function isBuiltinProviderConfigured(provider: ModelProviderEnum, settings: Settings): boolean {

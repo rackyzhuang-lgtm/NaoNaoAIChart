@@ -27,7 +27,7 @@ export function RouteComponent() {
 
   // Determine current page title
   const getSubPageTitle = () => {
-    if (isFeatured) return t('Chatbox Featured')
+    if (isFeatured) return t('Featured')
     if (isMy) return t('My Created & Added Copilots')
     if (isSearch) return t('Search')
     return null

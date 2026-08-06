@@ -50,7 +50,6 @@ import '@/modals'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
 import { prefetchModelRegistry } from '@/packages/model-registry'
 import { getOS } from '@/packages/navigator'
-import * as remote from '@/packages/remote'
 import PictureDialog from '@/pages/PictureDialog'
 import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
@@ -155,9 +154,7 @@ function Root() {
       await Promise.all([initSettingsStore(), initOnboardingStore()])
       void prefetchModelRegistry()
 
-      const remoteConfig = await remote
-        .getRemoteConfig('setting_chatboxai_first')
-        .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
+      const remoteConfig = { setting_chatboxai_first: false } as RemoteConfig
       setRemoteConfig(async (prev) => ({ ...(await prev), ...remoteConfig }))
 
       // Skip guide-related checks if already on guide, dev tools, or settings/mcp page
@@ -190,7 +187,7 @@ function Root() {
 
       // Auto-navigate to guide for new users who need setup
       if (!isExceeded && !onboardingCompleted && needsSetup) {
-        router.navigate({ to: '/guide', replace: true })
+        router.navigate({ to: platform.type === 'desktop' ? '/settings/account' : '/settings/provider', replace: true })
         return
       }
 

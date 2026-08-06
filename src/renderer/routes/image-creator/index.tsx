@@ -26,18 +26,14 @@ import {
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { JK_PAGE_NAMES } from '@/analytics/jk-events'
-import { ChatboxWelcomeCard } from '@/components/common/ChatboxWelcomeCard'
 import { ImageModelSelect } from '@/components/ImageModelSelect'
 import Page from '@/components/layout/Page'
 import { type ImageModelGroup, useImageModelGroups } from '@/hooks/useImageModelGroups'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
-import useVersion from '@/hooks/useVersion'
 import { getLogger } from '@/lib/utils'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
-import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { cancelGeneration, createAndGenerate, resumeGeneration, retryGeneration } from '@/stores/imageGenerationActions'
 import {
   deleteRecord,
@@ -49,9 +45,7 @@ import {
   useImageGenerationRecord,
 } from '@/stores/imageGenerationStore'
 import { queryClient } from '@/stores/queryClient'
-import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
 import * as toastActions from '@/stores/toastActions'
-import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 import {
   getRatioOptionsForModel,
   HISTORY_IMAGE_MODEL_DISPLAY_NAMES,
@@ -214,21 +208,6 @@ function ImageCreatorPage() {
   const isSmallScreen = useIsSmallScreen()
   const { providers } = useProviders()
   const imageModelGroups = useImageModelGroups()
-  const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
-  const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
-  const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
-  const { isExceeded, isExceededResolved } = useVersion()
-  const welcomeCardMode = useMemo(
-    () =>
-      getHomeWelcomeCardMode({
-        providerCount: providers.length,
-        isLoggedIn,
-        hasLicense,
-        hasExpiredLicense,
-        hideForStoreReview: isExceeded || !isExceededResolved,
-      }),
-    [providers.length, isLoggedIn, hasLicense, hasExpiredLicense, isExceeded, isExceededResolved]
-  )
 
   const [prompt, setPrompt] = useState('')
   const [referenceImages, setReferenceImages] = useState<
@@ -239,7 +218,7 @@ function ImageCreatorPage() {
   const tempUploadKeysRef = useRef<Set<string>>(new Set())
   const [showHistory, setShowHistory] = useState(true)
   const [showMobileHistory, setShowMobileHistory] = useState(false)
-  const [selectedProvider, setSelectedProvider] = useState<string>(ModelProviderEnum.ChatboxAI)
+  const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedRatio, setSelectedRatio] = useState<string>('auto')
   const [showModelDrawer, setShowModelDrawer] = useState(false)
@@ -368,11 +347,6 @@ function ImageCreatorPage() {
       return
     }
 
-    if (selectedProvider === ModelProviderEnum.ChatboxAI && !settingsStore.getState().licenseKey) {
-      toastActions.add(t('Please log in to Chatbox AI first'))
-      return
-    }
-
     try {
       // Collect all unique source record IDs from reference images (DAG support)
       const parentIds = [
@@ -405,11 +379,6 @@ function ImageCreatorPage() {
       if (isCurrentlyGenerating) return
       if (!selectedModel) {
         toastActions.add(t('Please select a model'))
-        return
-      }
-
-      if (selectedProvider === ModelProviderEnum.ChatboxAI && !settingsStore.getState().licenseKey) {
-        toastActions.add(t('Please log in to Chatbox AI first'))
         return
       }
 
@@ -607,10 +576,6 @@ function ImageCreatorPage() {
           {/* Input Area */}
           <Box py="md" px="sm">
             <Stack gap="sm" maw={800} mx="auto">
-              {!currentRecord && welcomeCardMode !== 'none' && (
-                <ChatboxWelcomeCard mode={welcomeCardMode} pageName={JK_PAGE_NAMES.IMAGE_PAGE} />
-              )}
-
               <ReferenceImagesPreview
                 images={referenceImages}
                 onRemove={handleRemoveReferenceImage}

@@ -5,11 +5,11 @@ import { ModelProviderEnum } from '../types'
 export { getModel, getProviderSettings } from '../providers'
 
 export const aiProviderNameHash: Record<ModelProviderEnum, string> = {
+  [ModelProviderEnum.ChatboxAI]: 'Legacy Provider',
   [ModelProviderEnum.OpenAI]: 'OpenAI API',
   [ModelProviderEnum.OpenAIResponses]: 'OpenAI Responses API',
   [ModelProviderEnum.Azure]: 'Azure OpenAI API',
   [ModelProviderEnum.ChatGLM6B]: 'ChatGLM API',
-  [ModelProviderEnum.ChatboxAI]: 'Chatbox AI',
   [ModelProviderEnum.Claude]: 'Claude API',
   [ModelProviderEnum.Gemini]: 'Google Gemini API',
   [ModelProviderEnum.Qwen]: 'Qwen API',
@@ -34,12 +34,6 @@ export const aiProviderNameHash: Record<ModelProviderEnum, string> = {
 }
 
 export const AIModelProviderMenuOptionList = [
-  {
-    value: ModelProviderEnum.ChatboxAI,
-    label: aiProviderNameHash[ModelProviderEnum.ChatboxAI],
-    featured: true,
-    disabled: false,
-  },
   {
     value: ModelProviderEnum.OpenAI,
     label: aiProviderNameHash[ModelProviderEnum.OpenAI],

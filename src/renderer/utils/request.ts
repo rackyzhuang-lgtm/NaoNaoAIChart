@@ -1,6 +1,5 @@
 import platform from '@/platform'
 import { ApiError, BaseError, NetworkError } from '../../shared/models/errors'
-import { isLocalHost } from '../../shared/utils/network_utils'
 import { handleMobileRequest } from './mobile-request'
 
 interface RequestOptions {
@@ -38,28 +37,17 @@ async function retryRequest<T>(fn: () => Promise<T>, retry: number, url: string)
   throw requestError || new Error('Unknown error')
 }
 
-function buildHeaders(options: RequestOptions, url: string): Headers {
+function buildHeaders(options: RequestOptions, _url: string): Headers {
   const headers = new Headers(options.headers)
   headers.set('Content-Type', 'application/json')
-
-  if (options.useProxy && !isLocalHost(url) && platform.type !== 'mobile') {
-    headers.set('CHATBOX-TARGET-URI', url)
-    headers.set('CHATBOX-PLATFORM', platform.type)
-  }
 
   return headers
 }
 
 async function doRequest(url: string, options: RequestOptions): Promise<Response> {
   const { signal, retry = 3, useProxy = false, body, method } = options
-  let requestUrl = url
+  const requestUrl = url
   const headers = buildHeaders(options, url)
-
-  if (useProxy && !isLocalHost(url) && platform.type !== 'mobile') {
-    const version = await platform.getVersion()
-    headers.set('CHATBOX-VERSION', version || 'unknown')
-    requestUrl = 'https://cors-proxy.chatboxai.app/proxy-api/completions'
-  }
 
   const makeRequest = async () => {
     if (platform.type === 'mobile' && useProxy) {

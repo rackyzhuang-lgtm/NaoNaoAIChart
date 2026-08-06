@@ -16,7 +16,6 @@ import ActionMenu from '@/components/ActionMenu'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { ImageInStorage } from '@/components/Image'
 import { useMyCopilots } from '@/hooks/useCopilots'
-import * as remote from '@/packages/remote'
 import CopilotDetailModal from './CopilotDetailModal'
 
 export interface CopilotItemProps {
@@ -33,10 +32,6 @@ export function CopilotItem({ copilot, type = 'local', highlightTerm = '' }: Cop
   const { name, avatar, picUrl, description, prompt, tags, createdAt } = copilot
 
   const handleUse = (detail: CopilotDetail) => {
-    void remote
-      .recordCopilotUsage({ id: detail.id, action: 'use_copilot' })
-      .catch((error) => console.warn('[recordCopilotUsage] failed', error))
-
     navigate({ to: '/', search: { copilot: JSON.stringify(detail) } })
   }
 

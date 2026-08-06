@@ -522,10 +522,7 @@ const BlockCode = memo(
     const shikiTheme: ShikiTheme = colorScheme !== 'light' ? 'one-dark-pro' : 'one-light'
     const languageName = useMemo(() => language.toUpperCase(), [language])
     const isRenderableCode = useMemo(() => isRenderableCodeLanguage(language), [language])
-    const canDeploy = useMemo(
-      () => isRenderableCode && String(children).trim().length > 0,
-      [children, isRenderableCode]
-    )
+    const canDeploy = false
 
     const icon = useMemo(() => CodeIcons[languageName] || IconCode, [languageName])
 

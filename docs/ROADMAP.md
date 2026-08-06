@@ -22,6 +22,8 @@
 
 ## 阶段 1：基线与技术验证
 
+Runtime boundary update: the default path no longer uses hosted Chatbox network, telemetry, branding, or hosted Provider entry points; only compatibility reads and user-configured third-party network remain.
+
 目标：先证明“可安全登录、可管理 Key、可完成真实模型调用”。
 
 计划：

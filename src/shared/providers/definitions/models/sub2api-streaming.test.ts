@@ -30,7 +30,7 @@ function createDependencies(): ModelDependencies {
 describe('Sub2API OpenAI-compatible streaming', () => {
   it('posts the expected request and assembles SSE text deltas', async () => {
     let request: Request | undefined
-    const customFetch: typeof globalThis.fetch = (input, init) => {
+    const customFetch: typeof globalThis.fetch = async (input, init) => {
       request = new Request(input, init)
       const body = [
         'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"sub2api"},"finish_reason":null}]}',

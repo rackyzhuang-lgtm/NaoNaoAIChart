@@ -1,5 +1,9 @@
 # 架构说明
 
+### Runtime ownership boundary
+
+Chatbox remains the code baseline only. The default product runtime does not use Chatbox-hosted configuration, model catalogs, onboarding, telemetry, hosted parsing, hosted search, skill synchronization, or hosted MCP endpoints. Default model traffic is OpenAI-compatible and may be bound to the configured sub2api service. Legacy Chatbox enums, schemas, migrations, and unreachable compatibility components remain only for reading historical data; they must not be reintroduced into the default provider or startup path.
+
 ## 仓库现状
 
 当前仓库已导入 Chatbox Community Edition 基线，现有运行架构即下述 Electron/React/TypeScript 上游架构。第二批已经实现 sub2api 控制面的共享契约、主进程内存会话、HTTP client 和窄业务 IPC；账户 UI、API Key 管理和模型 Provider 仍是目标架构。

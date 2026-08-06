@@ -1033,3 +1033,9 @@ mindmap
 
 defaultSessionsForCN.unshift(artifactSessionCN, mermaidSessionCN)
 defaultSessionsForEN.unshift(artifactSessionEN, mermaidSessionEN)
+
+// Legacy built-in demos reference upstream Chatbox assets and copy. Keep the
+// exported templates available for migration code, but do not seed them into
+// new installations or expose their hosted resources at runtime.
+defaultSessionsForCN.splice(0)
+defaultSessionsForEN.splice(0)

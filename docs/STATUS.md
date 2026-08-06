@@ -60,6 +60,14 @@
 
 ## Git 与上游
 
+## 第六批：移除 Chatbox 运行时网络与界面入口
+
+- 已完成默认运行路径清理：不再自动请求 Chatbox 远程配置、版本、模型目录、遥测、引导、云端文件/链接解析、内置搜索、内置技能同步或内置 MCP 配置。
+- 默认 Provider 和新会话模型改为 OpenAI-compatible 配置；内置搜索默认改为 Bing。旧 Chatbox enum/schema/migration 数据仍可读取，但旧 Provider、旧解析器和旧目录不会激活网络请求。
+- 用户可见的设置、About、首页、错误提示、文件导出和加载页不再提供 Chatbox 登录、购买、FAQ、官网或试用入口。
+- 保留边界：用户主动配置的 sub2api/OpenAI-compatible、第三方模型、MinerU、Bing、Tavily、BoCha、Querit 请求仍允许；上游兼容模块、旧组件和测试夹具可能保留字符串，但不在默认可达路径。
+- 本批验证：直接 TypeScript 编译通过；最终定向 Vitest 及初始化/迁移回归测试通过；全量 Vitest 235 个文件、2,417 项测试通过、61 项跳过。仅有既有 Windows `src/main/sandbox/persist-artifact.test.ts` 的 2 项路径/realpath 断言失败，与本批改动无关。直接 `electron-vite` 生产构建和 `git diff --check` 通过，保留既有 eval、循环 chunk 和大 chunk 警告。
+
 - `origin`：`git@gitee.com:ribbog77/nao-nao-aichart.git`
 - `upstream-chatbox`：`https://github.com/chatboxai/chatbox.git`
 - `upstream-sub2api`：`https://github.com/Wei-Shaw/sub2api.git`，仅用于接口变化比较，不合并其源码历史。

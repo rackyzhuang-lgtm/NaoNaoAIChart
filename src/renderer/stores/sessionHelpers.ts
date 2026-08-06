@@ -19,12 +19,10 @@ import { formatChatAsHtml, formatChatAsMarkdown, formatChatAsTxt } from '@/lib/f
 import { getLogger } from '@/lib/utils'
 import { PREVIEW_LINES } from '@/packages/context-management/attachment-payload'
 import * as localParser from '@/packages/local-parser'
-import * as remote from '@/packages/remote'
 import { estimateTokens } from '@/packages/token'
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKey, StorageKeyGenerator } from '@/storage/StoreStorage'
-import { authInfoStore } from '@/stores/authInfoStore'
 import { getMetaStorage } from '@/stores/chatStore'
 import { migrateSession, sortSessions } from '@/utils/session-utils'
 import * as defaults from '../../shared/defaults'
@@ -37,7 +35,6 @@ import {
   SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING,
   SESSION_ATTACHMENT_RAG_PARSED_CONTENT_TOO_LARGE_ERROR,
 } from './sessionAttachmentRagErrors'
-import * as settingActions from './settingActions'
 import { getPlatformDefaultDocumentParser, settingsStore } from './settingsStore'
 
 export {
@@ -169,21 +166,6 @@ function hasParsedText(content: string): boolean {
   return content.trim().length > 0
 }
 
-function canFallbackToChatboxAI(): boolean {
-  return Boolean(settingActions.getLicenseKey())
-}
-
-function hasUsableSessionAttachmentRagLicense(): boolean {
-  const settings = settingsStore.getState()
-  if (!settings.licenseKey) {
-    return false
-  }
-  if (settings.licenseActivationMethod === 'login') {
-    return !!authInfoStore.getState().getTokens()
-  }
-  return true
-}
-
 function hasDefaultSessionAttachmentEmbeddingModel(): boolean {
   const defaultEmbeddingModel = settingsStore.getState().defaultEmbeddingModel
   return Boolean(defaultEmbeddingModel?.provider && defaultEmbeddingModel.model)
@@ -197,42 +179,24 @@ function getDefaultSessionAttachmentEmbeddingModelLabel(): string {
 }
 
 async function canUseSessionAttachmentRag(): Promise<boolean> {
-  const licenseKey = settingActions.getLicenseKey() || ''
-  const hasUsableLicense = hasUsableSessionAttachmentRagLicense()
   const hasDefaultEmbeddingModel = hasDefaultSessionAttachmentEmbeddingModel()
-  const capabilityCacheKey = `${licenseKey}:${hasUsableLicense ? 'active' : 'inactive'}:${
-    hasDefaultEmbeddingModel ? 'default-embedding' : 'no-default-embedding'
-  }`
+  const capabilityCacheKey = hasDefaultEmbeddingModel ? 'default-embedding' : 'no-default-embedding'
   if (sessionRagCapabilityCache?.key === capabilityCacheKey) {
-    log.debug(
-      `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability cache hit: embedding=${sessionRagCapabilityCache.value}, hasLicense=${Boolean(licenseKey)}`
-    )
+    log.debug(`${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability cache hit: embedding=${sessionRagCapabilityCache.value}`)
     return sessionRagCapabilityCache.value
   }
 
   if (hasDefaultEmbeddingModel) {
     log.debug(
-      `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability enabled by default embedding model, hasLicense=${Boolean(licenseKey)}, platform=${platform.type}, embeddingModel=${getDefaultSessionAttachmentEmbeddingModelLabel()}`
+      `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability enabled by default embedding model, platform=${platform.type}, embeddingModel=${getDefaultSessionAttachmentEmbeddingModelLabel()}`
     )
     sessionRagCapabilityCache = { key: capabilityCacheKey, value: true }
     return true
   }
 
-  if (!hasUsableLicense) {
-    log.debug(
-      `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability skipped: missing active Chatbox license, hasLicense=${Boolean(licenseKey)}, method=${settingsStore.getState().licenseActivationMethod ?? 'none'}, platform=${platform.type}`
-    )
-    sessionRagCapabilityCache = { key: capabilityCacheKey, value: false }
-    return false
-  }
-
-  const value = !!(await remote.getSessionRagConfig({ licenseKey: licenseKey || undefined }).catch(() => undefined))
-    ?.capabilities?.session_attachment_embedding
-  log.debug(
-    `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability fetched: embedding=${value}, hasLicense=${Boolean(licenseKey)}, platform=${platform.type}`
-  )
-  sessionRagCapabilityCache = { key: capabilityCacheKey, value }
-  return value
+  log.debug(`${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Capability skipped: no default embedding model`)
+  sessionRagCapabilityCache = { key: capabilityCacheKey, value: false }
+  return false
 }
 
 /**
@@ -261,30 +225,14 @@ async function parseFileWithLocalParser(
   return { content, storageKey: uniqKey, tokenCountMap: {}, parserType: 'local' }
 }
 
-async function fallbackToChatboxAIParser(
-  file: File,
-  uniqKey: string,
-  reason: 'local_parser_failed' | 'empty_content'
-): Promise<{ content: string; storageKey: string; tokenCountMap: Record<string, number>; parserType: string }> {
-  log.warn(`Falling back to Chatbox AI parser for "${file.name}" due to ${reason}`)
-
-  try {
-    return await parseFileWithChatboxAI(file, uniqKey)
-  } catch (error) {
-    log.error(`Chatbox AI fallback parsing failed for "${file.name}":`, error)
-    throw new Error('chatbox_ai_parser_failed')
-  }
-}
-
 async function parseFileWithLocalFallback(
   file: File,
-  uniqKey: string,
-  options: { forceChatboxAIFallback?: boolean } = {}
+  uniqKey: string
 ): Promise<{ content: string; storageKey: string; tokenCountMap: Record<string, number>; parserType: string }> {
   try {
     const result = await parseFileWithLocalParser(file, uniqKey)
-    if (!hasParsedText(result.content) && (options.forceChatboxAIFallback || canFallbackToChatboxAI())) {
-      return await fallbackToChatboxAIParser(file, uniqKey, 'empty_content')
+    if (!hasParsedText(result.content)) {
+      throw new Error('local_parser_failed')
     }
     return result
   } catch (error) {
@@ -297,33 +245,8 @@ async function parseFileWithLocalFallback(
       throw error
     }
 
-    if (options.forceChatboxAIFallback || canFallbackToChatboxAI()) {
-      return await fallbackToChatboxAIParser(file, uniqKey, 'local_parser_failed')
-    }
-
     throw new Error('local_parser_failed')
   }
-}
-
-/**
- * Parse file using Chatbox AI cloud service
- */
-async function parseFileWithChatboxAI(
-  file: File,
-  uniqKey: string
-): Promise<{ content: string; storageKey: string; tokenCountMap: Record<string, number>; parserType: string }> {
-  const licenseKey = settingActions.getLicenseKey()
-  const uploadedKey = await remote.uploadAndCreateUserFile(licenseKey || '', file)
-
-  // Get uploaded file content
-  const content = (await storage.getBlob(uploadedKey).catch(() => '')) || ''
-
-  // Store content to unique key
-  if (content) {
-    await storage.setBlob(uniqKey, content)
-  }
-
-  return { content, storageKey: uniqKey, tokenCountMap: {}, parserType: 'chatbox-ai' }
 }
 
 /**
@@ -485,7 +408,7 @@ export async function prepareFileAttachment(
         }
 
         case 'chatbox-ai': {
-          result = await parseFileWithLocalFallback(file, uniqKey, { forceChatboxAIFallback: true })
+          throw new Error('document_parser_not_configured')
           break
         }
 
@@ -587,8 +510,8 @@ export async function preprocessLink(
   error?: string
 }> {
   try {
-    const isPro = settingActions.isPro()
     const uniqKey = StorageKeyGenerator.linkUniqKey(url)
+    const parsed = { storageKey: uniqKey, title: url }
 
     // 检查是否已经处理过这个链接
     const existingContent = await storage.getBlob(uniqKey).catch(() => null)
@@ -618,10 +541,9 @@ export async function preprocessLink(
       }
     }
 
-    if (isPro) {
+    if (false) {
       // ChatboxAI 方案：使用远程解析
-      const licenseKey = settingActions.getLicenseKey()
-      const parsed = await remote.parseUserLinkPro({ licenseKey: licenseKey || '', url })
+      throw new Error('remote_link_parser_disabled')
 
       // 获取解析后的内容
       const content = (await storage.getBlob(parsed.storageKey).catch(() => '')) || ''

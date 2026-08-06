@@ -13,10 +13,6 @@ vi.mock('@/lib/utils', () => ({ getLogger: () => ({ error: vi.fn() }) }))
 
 import { getAvailableImageModels } from './image-model-catalog'
 
-function manifest(imageModels: Array<{ modelId: string; modelName: string }>) {
-  return { groupName: 'Images', models: [], imageModels }
-}
-
 function createSettings(): Settings {
   return defaultSettings()
 }
@@ -26,29 +22,12 @@ describe('image model catalog', () => {
     vi.clearAllMocks()
   })
 
-  it('loads the Chatbox manifest, applies exclusions, and preserves server order', async () => {
+  it('does not load the removed Chatbox manifest', async () => {
     const settings = createSettings()
     settings.licenseKey = 'license'
-    settings.providers = {
-      [ModelProviderEnum.ChatboxAI]: { excludedModels: ['disabled-image'] },
-    }
-    getModelManifestMock.mockResolvedValue(
-      manifest([
-        { modelId: 'other-image', modelName: 'Other Image' },
-        { modelId: 'gpt-image-1.5', modelName: 'GPT Image 1.5' },
-        { modelId: 'disabled-image', modelName: 'Disabled Image' },
-      ])
-    )
 
-    await expect(getAvailableImageModels(settings)).resolves.toEqual([
-      { provider: ModelProviderEnum.ChatboxAI, modelId: 'other-image', nickname: 'Other Image' },
-      { provider: ModelProviderEnum.ChatboxAI, modelId: 'gpt-image-1.5', nickname: 'GPT Image 1.5' },
-    ])
-    expect(getModelManifestMock).toHaveBeenCalledWith({
-      aiProvider: ModelProviderEnum.ChatboxAI,
-      language: settings.language,
-      licenseKey: 'license',
-    })
+    await expect(getAvailableImageModels(settings)).resolves.toEqual([])
+    expect(getModelManifestMock).not.toHaveBeenCalled()
   })
 
   it('merges remote and manual models for configured built-in and custom providers', async () => {
@@ -74,20 +53,12 @@ describe('image model catalog', () => {
         isCustom: true,
       },
     ]
-    getModelManifestMock.mockImplementation(({ aiProvider }: { aiProvider: ModelProviderEnum }) => {
-      if (aiProvider === ModelProviderEnum.Gemini) {
-        return Promise.resolve(manifest([{ modelId: 'gemini-remote', modelName: 'Remote Gemini Name' }]))
-      }
-      return Promise.resolve(manifest([{ modelId: 'openai-remote', modelName: 'Remote OpenAI' }]))
-    })
-
     await expect(getAvailableImageModels(settings)).resolves.toEqual([
       { provider: ModelProviderEnum.Gemini, modelId: 'gemini-remote', nickname: 'Manual Gemini Name' },
-      { provider: 'custom-provider-gemini', modelId: 'gemini-remote', nickname: 'Remote Gemini Name' },
       { provider: 'custom-provider-gemini', modelId: 'custom-image', nickname: 'Custom Image' },
-      { provider: ModelProviderEnum.OpenAI, modelId: 'openai-remote', nickname: 'Remote OpenAI' },
       { provider: ModelProviderEnum.OpenAI, modelId: 'openai-manual', nickname: 'Manual OpenAI' },
     ])
+    expect(getModelManifestMock).not.toHaveBeenCalled()
   })
 
   it('omits unconfigured providers', async () => {
@@ -97,7 +68,7 @@ describe('image model catalog', () => {
     expect(getModelManifestMock).not.toHaveBeenCalled()
   })
 
-  it('keeps manually configured image models when a manifest request fails', async () => {
+  it('keeps manually configured image models without a manifest request', async () => {
     const settings = createSettings()
     settings.providers = {
       [ModelProviderEnum.OpenAI]: {
@@ -105,10 +76,9 @@ describe('image model catalog', () => {
         models: [{ modelId: 'manual-only', type: 'image', nickname: 'Manual Only' }],
       },
     }
-    getModelManifestMock.mockRejectedValue(new Error('offline'))
-
     await expect(getAvailableImageModels(settings)).resolves.toEqual([
       { provider: ModelProviderEnum.OpenAI, modelId: 'manual-only', nickname: 'Manual Only' },
     ])
+    expect(getModelManifestMock).not.toHaveBeenCalled()
   })
 })

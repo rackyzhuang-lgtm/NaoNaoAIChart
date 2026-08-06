@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { AdaptiveSelect } from '@/components/AdaptiveSelect'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
-import * as remote from '@/packages/remote'
 import * as toastActions from '@/stores/toastActions'
 
 const ReportContent = NiceModal.create(({ contentId }: { contentId: string }) => {
@@ -26,11 +25,6 @@ const ReportContent = NiceModal.create(({ contentId }: { contentId: string }) =>
     if (!contentId) {
       return
     }
-    await remote.reportContent({
-      id: contentId,
-      type: reportType,
-      details: content,
-    })
     modal.resolve()
     modal.hide()
   }

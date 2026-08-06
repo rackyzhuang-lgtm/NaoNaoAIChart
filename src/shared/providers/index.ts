@@ -1,12 +1,9 @@
-import type { ModelInterface } from '../models/types'
 import { enrichModelFromRegistry } from '../model-registry/enrich'
+import type { ModelInterface } from '../models/types'
 import { mergeSharedOAuthProviderSettings, resolveEffectiveApiKey } from '../oauth'
-import type { Config, ProviderModelInfo, ProviderSettings, SessionSettings, Settings } from '../types'
+import type { Config, ProviderModelInfo, SessionSettings, Settings } from '../types'
 import type { ModelDependencies } from '../types/adapters'
 import { apiStyleFromProviderType } from './api-style'
-// ChatboxAI must be imported first to ensure it appears at the top of provider lists
-// Import order determines display order in UI (side-effect registration into Map)
-import './definitions/chatboxai'
 import './definitions/openai'
 import './definitions/openai-responses'
 import './definitions/gemini'
@@ -64,7 +61,6 @@ export function getBuiltinProviderIds(): string[] {
  * This is a helper function that extracts and formats provider-related settings.
  */
 export function getProviderSettings(setting: SessionSettings, globalSettings: Settings) {
-  console.debug('getProviderSettings', setting.provider, setting.modelId)
   const provider = setting.provider
   if (!provider) {
     throw new Error('Model provider must not be empty.')
@@ -149,8 +145,6 @@ export function getModel(
   config: Config,
   dependencies: ModelDependencies
 ): ModelInterface {
-  console.debug('getModel (registry)', settings.provider, settings.modelId)
-
   const provider = settings.provider
   if (!provider) {
     throw new Error('Model provider must not be empty.')

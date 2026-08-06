@@ -56,7 +56,7 @@ const ArtifactPreview = NiceModal.create((props: ArtifactPreviewProps) => {
   const [reloadSign, setReloadSign] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [deploying, setDeploying] = useState(false)
-  const canPublish = useMemo(() => htmlCode.trim().length > 0 || !!sandboxPath, [htmlCode, sandboxPath])
+  const canPublish = false
   const canOpenInBrowser = useMemo(() => !!previewUrl, [previewUrl])
   const onReload = () => {
     setReloadSign(Math.random())

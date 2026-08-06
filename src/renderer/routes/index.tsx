@@ -30,7 +30,6 @@ import { useMyCopilots, useRemoteCopilotsByCursor } from '@/hooks/useCopilots'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import useVersion from '@/hooks/useVersion'
-import * as remote from '@/packages/remote'
 import { router } from '@/router'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { createSession as createSessionStore } from '@/stores/chatStore'
@@ -51,8 +50,8 @@ const scenarioAgentModeOff = {
 } satisfies AgentModeEntry
 
 const firstChatScenarioDefaultModel = {
-  provider: ModelProviderEnum.ChatboxAI,
-  modelId: 'chatboxai-3.5',
+  provider: ModelProviderEnum.OpenAI,
+  modelId: 'gpt-4o-mini',
 } satisfies Pick<SessionSettings, 'provider' | 'modelId'>
 
 export const Route = createFileRoute('/')({
@@ -298,12 +297,6 @@ function Index() {
           ...options?.settingsOverride,
         },
       })
-
-      if (session.copilotId) {
-        void remote
-          .recordCopilotUsage({ id: session.copilotId, action: 'create_session' })
-          .catch((error) => console.warn('[recordCopilotUsage] failed', error))
-      }
 
       // Transfer knowledge base / Work Mode settings from newSessionState to the actual
       // session, then clear it so nothing bleeds into the next new chat. (workingDirectories

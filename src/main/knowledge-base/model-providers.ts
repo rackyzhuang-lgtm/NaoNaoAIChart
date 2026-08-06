@@ -2,7 +2,6 @@ import type { EmbeddingModel } from 'ai'
 import { CohereClient } from 'cohere-ai'
 import { getProviderSettings } from '../../shared/models'
 import type { CallChatCompletionOptions, ModelInterface } from '../../shared/models/types'
-import { getChatboxAPIOrigin } from '../../shared/request/chatboxai_pool'
 import { SessionSettingsSchema } from '../../shared/types'
 import { parseKnowledgeBaseModelString } from '../../shared/utils/knowledge-base-model-parser'
 import { createModel } from '../adapters'
@@ -272,10 +271,7 @@ export async function getRerankProvider(kbId: number) {
 
         let apiHost = formattedApiHost
         let token = providerSetting.apiKey
-        if (providerId === 'chatbox-ai') {
-          apiHost = getChatboxAPIOrigin()
-          token = store.get('settings.licenseKey')
-        }
+        if (providerId === 'chatbox-ai') throw new Error('provider chatbox-ai is unavailable')
 
         const client = new CohereClient({
           environment: apiHost,

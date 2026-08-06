@@ -1,16 +1,10 @@
 import { Group, Text } from '@mantine/core'
-import { Typography } from '@mui/material'
 import type { Message } from '@shared/types'
 import { IconLoader } from '@tabler/icons-react'
-import { useAtomValue } from 'jotai'
-import { Loader } from 'lucide-react'
 import type { TFunction } from 'i18next'
-import { Trans, useTranslation } from 'react-i18next'
-import { buildChatboxUrl } from '@/packages/remote'
+import { Loader } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getToolName } from '@/packages/tools'
-import * as atoms from '@/stores/atoms'
-import * as settingActions from '@/stores/settingActions'
-import LinkTargetBlank from '../common/Link'
 
 type PreparingToolCallStatus = {
   type: 'preparing_tool_call'
@@ -28,8 +22,8 @@ export default function MessageStatuses(props: { statuses: Message['status'] }) 
   }
   return (
     <>
-      {statuses.map((status, index) => (
-        <MessageStatus key={index} status={status} />
+      {statuses.map((status) => (
+        <MessageStatus key={status.type} status={status} />
       ))}
     </>
   )
@@ -38,7 +32,6 @@ export default function MessageStatuses(props: { statuses: Message['status'] }) 
 function MessageStatus(props: { status: NonNullable<Message['status']>[number] }) {
   const { status } = props
   const { t } = useTranslation()
-  const remoteConfig = useAtomValue(atoms.remoteConfigAtom)
   if (status.type === 'sending_file') {
     return (
       <div>
@@ -52,22 +45,6 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
             )}
           </span>
         </LoadingBubble>
-        {status.mode === 'local' && remoteConfig.setting_chatboxai_first && (
-          <Typography variant="body2" sx={{ opacity: 0.5 }} className="pb-1">
-            <Trans
-              i18nKey="Due to local processing limitations, <Link>Chatbox AI Service</Link> is recommended for enhanced document processing capabilities and better results."
-              components={{
-                Link: (
-                  <LinkTargetBlank
-                    href={buildChatboxUrl(
-                      `/redirect_app/advanced_file_processing/${settingActions.getLanguage()}?utm_source=app&utm_content=msg_local_limitation`
-                    )}
-                  ></LinkTargetBlank>
-                ),
-              }}
-            />
-          </Typography>
-        )}
       </div>
     )
   }
@@ -84,22 +61,6 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
             )}
           </span>
         </LoadingBubble>
-        {status.mode === 'local' && remoteConfig.setting_chatboxai_first && (
-          <Typography variant="body2" sx={{ opacity: 0.5 }} className="pb-1">
-            <Trans
-              i18nKey="Due to local processing limitations, <Link>Chatbox AI Service</Link> is recommended to enhance webpage parsing capabilities, especially for dynamic pages."
-              components={{
-                Link: (
-                  <LinkTargetBlank
-                    href={buildChatboxUrl(
-                      `/redirect_app/advanced_url_processing/${settingActions.getLanguage()}?utm_source=app&utm_content=msg_local_limitation`
-                    )}
-                  ></LinkTargetBlank>
-                ),
-              }}
-            />
-          </Typography>
-        )}
       </div>
     )
   }
@@ -112,9 +73,7 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
   return null
 }
 
-export function PreparingToolCallStatus(props: {
-  status: PreparingToolCallStatus
-}) {
+export function PreparingToolCallStatus(props: { status: PreparingToolCallStatus }) {
   const { status } = props
   const { t } = useTranslation()
   const label = status.toolName ? `${t('Preparing')} ${getToolName(status.toolName)}` : t('Preparing tool call')
@@ -135,10 +94,7 @@ export function PreparingToolCallStatus(props: {
   )
 }
 
-function formatPreparingProgress(
-  progress: PreparingToolCallStatus['progress'],
-  t: TFunction
-): string | null {
+function formatPreparingProgress(progress: PreparingToolCallStatus['progress'], t: TFunction): string | null {
   if (!progress) return null
   if (progress.kind === 'lines') {
     return t('{{count}} lines', { count: progress.value })

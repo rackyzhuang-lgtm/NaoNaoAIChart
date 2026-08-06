@@ -5,7 +5,7 @@ import path from 'node:path'
 import type { MarketplaceSkill } from '@shared/types/skills'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { getLogger } from '../util'
-import { discoverBuiltinSkills, ensureBuiltinSeeded, syncBuiltinSkills } from './builtin-sync'
+import { discoverBuiltinSkills, ensureBuiltinSeeded } from './builtin-sync'
 import { discoverAgentSkills, discoverClaudeSkills, discoverSkills } from './discovery'
 import { detectSkillsInRepo } from './github-fetcher'
 import {
@@ -68,25 +68,9 @@ function getOrBuildSkillCache(): Map<string, string> {
 export function registerSkillsHandlers() {
   // 确保打包种子已落地，保证内置 skill 立即可用（含离线）
   ensureBuiltinSeeded()
-  // 后台静默从后端同步内置 skill，有更新则覆盖快照并通知 renderer 刷新
-  syncBuiltinSkills()
-    .then((changed) => {
-      if (changed) {
-        invalidateSkillCache()
-        broadcastBuiltinUpdated()
-      }
-    })
-    .catch((error) => log.warn('initial builtin skills sync failed', error))
-
   ipcMain.handle('skills:sync-builtin', async (_event, lang?: string) => {
-    try {
-      const changed = await syncBuiltinSkills(lang)
-      if (changed) invalidateSkillCache()
-      return { changed }
-    } catch (error) {
-      log.error('skills:sync-builtin failed', error)
-      return { changed: false }
-    }
+    void lang
+    return { changed: false }
   })
 
   ipcMain.handle('skills:discover', () => {

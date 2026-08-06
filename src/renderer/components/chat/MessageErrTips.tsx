@@ -2,9 +2,7 @@ import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Flex, Loader, Text, Tooltip } from '@mantine/core'
 import { Link } from '@mui/material'
 import { aiProviderNameHash } from '@shared/models'
-import { ChatboxAIAPIError } from '@shared/models/errors'
 import type { Message } from '@shared/types'
-import { ModelProviderEnum } from '@shared/types/provider'
 import { IconCheck, IconChevronDown, IconChevronUp, IconCopy, IconLanguage, IconReload } from '@tabler/icons-react'
 import type React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -14,19 +12,13 @@ import {
   trackAgentModeFreePointsCardClick,
   trackAgentModeFreePointsClaimSuccess,
 } from '@/analytics/agent-mode'
-import { trackJkClickEvent } from '@/analytics/jk'
-import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
-import { ChatboxAIErrorMessage } from '@/components/common/ChatboxAIErrorMessage'
 import { useCopied } from '@/hooks/useCopied'
 import { navigateToSettings } from '@/modals/Settings'
 import { AgentModeRewardResumeError, claimAgentModeRewardAndResume } from '@/packages/agent-mode-reward'
-import { buildChatboxUrl, claimFreeAgentModeReward } from '@/packages/remote'
 import { translateTexts } from '@/packages/translation'
-import platform from '@/platform'
 import * as settingActions from '@/stores/settingActions'
 import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import * as toastActions from '@/stores/toastActions'
-import LinkTargetBlank from '../common/Link'
 import { AgentModeRewardQuotaCard } from './AgentModeRewardQuotaCard'
 import { resolveMessageErrorPresentation } from './message-error-presentation'
 import { QuotaExhaustedCard } from './QuotaExhaustedCard'
@@ -258,7 +250,9 @@ export default function MessageErrTips(props: {
 
     try {
       await claimAgentModeRewardAndResume({
-        claim: () => claimFreeAgentModeReward(licenseKey),
+        claim: () => {
+          throw new Error('reward_unavailable')
+        },
         showSuccess: (reward) => {
           setAgentModeRewardClaimed(true)
           if (agentModeTrackingContext) {
@@ -285,11 +279,7 @@ export default function MessageErrTips(props: {
     }
   }, [agentModeRewardClaimed, agentModeTrackingContext, isHandlingAgentModeReward, licenseKey, onRetry, t])
 
-  const handleUpgradePlan = useCallback(() => {
-    platform.openLink(
-      buildChatboxUrl(`/redirect_app/view_more_plans/${language}?utm_source=app&utm_content=msg_quota_exhausted`)
-    )
-  }, [language])
+  const handleUpgradePlan = useCallback(() => navigateToSettings('/provider'), [])
 
   if (!msg.error) {
     return null
@@ -312,7 +302,7 @@ export default function MessageErrTips(props: {
   }
 
   const tips: React.ReactNode[] = []
-  let onlyShowTips = false // 是否只显示提示，不显示错误信息详情
+  const onlyShowTips = false // 是否只显示提示，不显示错误信息详情
 
   if (isContextLengthError(msg.error) || isContextLengthError(errorMessage)) {
     tips.push(
@@ -352,29 +342,10 @@ export default function MessageErrTips(props: {
           }}
         />
       )
-    } else if (msg.aiProvider === ModelProviderEnum.ChatboxAI) {
-      tips.push(
-        <Trans
-          i18nKey="Connection to {{aiProvider}} failed. This typically occurs due to a temporary service issue. Please try again later or <buttonOpenSettings>check your settings</buttonOpenSettings>."
-          values={{
-            aiProvider: aiProviderNameHash[ModelProviderEnum.ChatboxAI],
-          }}
-          components={{
-            buttonOpenSettings: (
-              <a
-                className="cursor-pointer underline font-bold hover:text-blue-600 transition-colors"
-                onClick={() => {
-                  navigateToSettings(`/provider/${ModelProviderEnum.ChatboxAI}`)
-                }}
-              />
-            ),
-          }}
-        />
-      )
     } else {
       tips.push(
         <Trans
-          i18nKey="Connection to {{aiProvider}} failed. This typically occurs due to incorrect configuration or {{aiProvider}} account issues. Please <buttonOpenSettings>check your settings</buttonOpenSettings> and verify your {{aiProvider}} account status, or purchase a <LinkToLicensePricing>Chatbox AI License</LinkToLicensePricing> to unlock all advanced models instantly without any configuration."
+          i18nKey="Connection to {{aiProvider}} failed. Please <buttonOpenSettings>check your settings</buttonOpenSettings> and verify the provider configuration."
           values={{
             aiProvider: msg.aiProvider
               ? aiProviderNameHash[msg.aiProvider as keyof typeof aiProviderNameHash]
@@ -389,15 +360,6 @@ export default function MessageErrTips(props: {
                 }}
               />
             ),
-            LinkToLicensePricing: (
-              <LinkTargetBlank
-                className="!font-bold !text-gray-700 hover:!text-blue-600 transition-colors"
-                href={buildChatboxUrl(
-                  `/redirect_app/advanced_url_processing/${settingActions.getLanguage()}?utm_source=app&utm_content=msg_bad_provider`
-                )}
-              />
-            ),
-            a: <a href={buildChatboxUrl(`/redirect_app/faqs/${settingActions.getLanguage()}`)} target="_blank" />,
           }}
         />
       )
@@ -435,24 +397,8 @@ export default function MessageErrTips(props: {
         ]}
       />
     )
-  } else if (msg.errorCode && ChatboxAIAPIError.getDetail(msg.errorCode)) {
-    onlyShowTips = true
-    tips.push(<ChatboxAIErrorMessage errorCode={msg.errorCode} model={msg.model} />)
   } else {
-    tips.push(
-      <Trans
-        i18nKey="unknown error tips"
-        components={[
-          <a
-            key="a"
-            href={buildChatboxUrl(
-              `/redirect_app/faqs/${settingActions.getLanguage()}?utm_source=app&utm_content=msg_error_unknown`
-            )}
-            target="_blank"
-          ></a>,
-        ]}
-      />
-    )
+    tips.push(<Trans i18nKey="unknown error tips" />)
   }
   return (
     <div
@@ -509,7 +455,7 @@ export default function MessageErrTips(props: {
                 onTranslate={(e) => {
                   e.stopPropagation()
                   if (!expanded) setExpanded(true)
-                  handleTranslate()
+                  void handleTranslate()
                 }}
                 onCopy={(e) => {
                   e.stopPropagation()
@@ -533,39 +479,6 @@ export default function MessageErrTips(props: {
             </div>
           )}
         </>
-      )}
-      {/* Free trial suggestion for users without license (skip for ChatboxAI errors) */}
-      {!licenseKey && msg.aiProvider !== ModelProviderEnum.ChatboxAI && (
-        <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800/30 text-right">
-          <Tooltip
-            label={t(
-              'If you have never had a license before, you can claim it after logging in on the official website.'
-            )}
-            withArrow
-            multiline
-            maw={240}
-            position="bottom-end"
-            styles={{
-              tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                backdropFilter: 'blur(4px)',
-              },
-            }}
-          >
-            <span
-              className="text-sm font-medium text-blue-600 cursor-pointer hover:text-blue-700 hover:underline transition-colors"
-              onClick={() => {
-                trackJkClickEvent(JK_EVENTS.FREE_LICENSE_CLAIM_CLICK, {
-                  pageName: JK_PAGE_NAMES.CHAT_PAGE,
-                  content: 'chat_error',
-                })
-                platform.openLink('https://chatboxai.app/login')
-              }}
-            >
-              {t('Chatbox AI free trial available')} →
-            </span>
-          </Tooltip>
-        </div>
       )}
     </div>
   )

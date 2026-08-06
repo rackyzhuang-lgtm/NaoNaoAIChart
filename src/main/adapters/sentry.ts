@@ -62,7 +62,7 @@ function initSentry(): boolean {
   return true
 }
 
-initSentry()
+// NaoNaoAI does not send diagnostics to the upstream Chatbox Sentry project.
 
 store.onDidAnyChange((settings, previousSettings) => {
   const reportingEnabled = settings?.settings?.allowReportingAndTracking === true

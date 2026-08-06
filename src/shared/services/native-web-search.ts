@@ -16,7 +16,6 @@ export interface NativeWebSearchResultItem {
 export type NativeWebSearchProvider = 'build-in' | 'bing' | 'tavily' | 'bocha' | 'querit'
 
 export const nativeWebSearchProviderOptions: Array<{ id: NativeWebSearchProvider; label: string }> = [
-  { id: 'build-in', label: 'Chatbox AI' },
   { id: 'bing', label: 'Bing Search' },
   { id: 'tavily', label: 'Tavily' },
   { id: 'bocha', label: 'BoCha' },
@@ -30,11 +29,8 @@ export interface NativeWebSearchSettings {
   apiHost: string
 }
 
-// Web parity (defaults.ts extension.webSearch.provider): the Chatbox search API
-// is the default. Bare Bing scraping is unreliable from native HTTP clients --
-// without a real browser UA/cookies Bing serves a JS shell with zero results.
 export const defaultNativeWebSearchSettings: NativeWebSearchSettings = {
-  provider: 'build-in',
+  provider: 'bing',
   apiKey: '',
   apiHost: '',
 }
@@ -75,7 +71,6 @@ export interface NativeWebSearchOptions {
 }
 
 const TAVILY_DEFAULT_HOST = 'https://api.tavily.com'
-const CHATBOX_DEFAULT_ORIGIN = 'https://api.chatboxai.app'
 const DEFAULT_MAX_RESULTS = 8
 
 interface TavilyResponseItem {
@@ -88,20 +83,18 @@ export function hasNativeWebSearchConfiguration(
   settings: Pick<NativeWebSearchSettings, 'provider' | 'apiKey'>,
   licenseKey?: string
 ): boolean {
+  void licenseKey
   if (settings.provider === 'tavily' || settings.provider === 'bocha' || settings.provider === 'querit') {
     return Boolean(settings.apiKey.trim())
   }
-  if (settings.provider === 'build-in') return Boolean(licenseKey?.trim())
+  if (settings.provider === 'build-in') return true
   return true // bing needs no credentials
 }
 
-export async function searchNativeWeb(
-  query: string,
-  options: NativeWebSearchOptions
-): Promise<NativeWebSearchResultItem[]> {
+export function searchNativeWeb(query: string, options: NativeWebSearchOptions): Promise<NativeWebSearchResultItem[]> {
   const provider = options.provider ?? 'tavily'
   if (provider === 'bing') return searchNativeBing(query, options)
-  if (provider === 'build-in') return searchNativeChatbox(query, options)
+  if (provider === 'build-in') return searchNativeBing(query, options)
   if (provider === 'bocha') return searchNativeBocha(query, options)
   if (provider === 'querit') return searchNativeQuerit(query, options)
   return searchNativeTavily(query, options)
@@ -281,45 +274,6 @@ async function searchNativeTavily(
  * Chatbox platform `headers`) and the native shell. `POST /api/tool/web-search`, license
  * key as Authorization. Replaces the old `webBrowsing` remote fork.
  */
-async function searchNativeChatbox(
-  query: string,
-  options: NativeWebSearchOptions
-): Promise<NativeWebSearchResultItem[]> {
-  const fetchFn = options.fetchFn ?? fetch
-  const origin = (options.chatboxApiOrigin?.trim() || CHATBOX_DEFAULT_ORIGIN).replace(/\/+$/, '')
-
-  const response = await fetchFn(`${origin}/api/tool/web-search`, {
-    method: 'POST',
-    headers: {
-      Authorization: options.licenseKey ?? '',
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    body: JSON.stringify({ query }),
-    signal: options.signal,
-  })
-  const payload = (await response.json().catch(() => null)) as {
-    error?: unknown
-    data?: { links?: Array<{ title?: string; url?: string; content?: string }> }
-  } | null
-  if (!response.ok) {
-    // afetch (renderer) throws its parsed Chatbox error before we get here; this path
-    // gives the native plain-fetch caller a meaningful message instead of a bare status.
-    const message =
-      payload && typeof payload.error === 'string' ? payload.error : `Web search failed with status ${response.status}`
-    throw new Error(message)
-  }
-  // No client-side cap or link filtering: matches the old `webBrowsing` remote call, which
-  // returned every link the Chatbox backend sent (already a bounded ~10 Serper organic
-  // results + PeopleAlsoAsk set), so trimming here would only drop the tail.
-  const links = payload?.data?.links ?? []
-  return links.map((link) => ({
-    title: link.title ?? '',
-    link: link.url ?? '',
-    snippet: link.content ?? '',
-  }))
-}
-
 /**
  * Bing SERP search — the renderer's BingSearch port. React Native has no
  * DOMParser, so the `li.b_algo` items are extracted with tolerant regexes.

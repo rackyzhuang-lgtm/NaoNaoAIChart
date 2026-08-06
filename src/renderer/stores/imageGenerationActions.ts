@@ -130,6 +130,10 @@ export async function startImageGeneration(
     throw new Error('Another image is being generated. Please wait.')
   }
 
+  if (params.model.provider === ModelProviderEnum.ChatboxAI) {
+    throw new Error('Chatbox AI image generation is unavailable')
+  }
+
   const record = await createRecord({
     prompt: params.prompt,
     referenceImages: params.referenceImages,
