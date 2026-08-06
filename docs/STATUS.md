@@ -124,3 +124,10 @@
 - 真实实例只读验证保留为登录、Key 列表和 `/v1/models`；未创建、修改或删除线上数据。完整 Key、测试账号密码未写入仓库或日志。
 
 下一步：补齐锁定 Playwright 基础设施后再做桌面 E2E；在获得明确授权后，才进行测试 Key 创建和真实模型调用；跨平台构建与安全持久化仍待对应环境验证。
+
+## 第五批：真实流式对话闭环契约
+
+- 新增 `src/shared/providers/definitions/models/sub2api-streaming.test.ts`，通过合成 SSE 响应验证现有 OpenAI Provider 对固定 sub2api 地址的 POST URL、Bearer 鉴权、模型 ID、`stream=true`、文本 delta、finish reason 和 usage 适配。
+- 新增 `test/integration/sub2api-streaming.test.ts`。真实请求仅在 `RUN_SUB2API_STREAM_TESTS=1` 且提供 `SUB2API_TEST_API_KEY`、`SUB2API_TEST_MODEL` 时运行；默认测试结果为 skipped，未触发网络或计费。
+- 本批验证：离线流式测试 1 项通过；默认真实测试 1 项 skipped；`corepack pnpm check` 通过；相关 Biome 0 error/0 warning；`corepack pnpm exec electron-vite build --mode production` 通过。
+- 构建保留既有依赖 `eval`、循环依赖和大 chunk 警告；未执行真实聊天请求，待明确费用授权后再做一次受控线上验证。
