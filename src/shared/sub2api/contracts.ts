@@ -198,6 +198,34 @@ export const sub2ApiUsageDashboardStatsSchema = z
 
 export type Sub2ApiUsageDashboardStats = z.infer<typeof sub2ApiUsageDashboardStatsSchema>
 
+export const sub2ApiPlatformQuotaItemSchema = z
+  .object({
+    platform: z.string().min(1),
+    daily_limit_usd: z.number().nonnegative().nullable(),
+    weekly_limit_usd: z.number().nonnegative().nullable(),
+    monthly_limit_usd: z.number().nonnegative().nullable(),
+    daily_usage_usd: z.number().nonnegative(),
+    weekly_usage_usd: z.number().nonnegative(),
+    monthly_usage_usd: z.number().nonnegative(),
+    daily_window_start: z.string().nullable().optional(),
+    weekly_window_start: z.string().nullable().optional(),
+    monthly_window_start: z.string().nullable().optional(),
+    daily_window_resets_at: z.string().nullable().optional(),
+    weekly_window_resets_at: z.string().nullable().optional(),
+    monthly_window_resets_at: z.string().nullable().optional(),
+  })
+  .strip()
+
+export type Sub2ApiPlatformQuotaItem = z.infer<typeof sub2ApiPlatformQuotaItemSchema>
+
+export const sub2ApiPlatformQuotasResponseSchema = z
+  .object({
+    platform_quotas: z.array(sub2ApiPlatformQuotaItemSchema),
+  })
+  .strip()
+
+export type Sub2ApiPlatformQuotasResponse = z.infer<typeof sub2ApiPlatformQuotasResponseSchema>
+
 export const sub2ApiSubscriptionSummaryItemSchema = z
   .object({
     id: z.number().int().positive(),
@@ -259,5 +287,6 @@ export const SUB2API_ROUTES = {
   apiKeys: 'keys',
   usageDashboardStats: 'usage/dashboard/stats',
   subscriptionsSummary: 'subscriptions/summary',
+  platformQuotas: 'user/platform-quotas',
   models: 'models',
 } as const

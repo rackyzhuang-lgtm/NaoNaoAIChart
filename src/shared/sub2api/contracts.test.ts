@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   sub2ApiAuthResponseSchema,
   sub2ApiLoginResponseSchema,
+  sub2ApiPlatformQuotasResponseSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiSubscriptionSummarySchema,
   sub2ApiUsageDashboardStatsSchema,
@@ -110,5 +111,25 @@ describe('sub2api contracts', () => {
         ],
       })
     ).toMatchObject({ active_count: 1, subscriptions: [{ group_name: 'Standard' }] })
+  })
+
+  it('accepts an empty or configured platform quota response', () => {
+    expect(sub2ApiPlatformQuotasResponseSchema.parse({ platform_quotas: [] })).toEqual({ platform_quotas: [] })
+    expect(
+      sub2ApiPlatformQuotasResponseSchema.parse({
+        platform_quotas: [
+          {
+            platform: 'openai',
+            daily_limit_usd: 10,
+            weekly_limit_usd: null,
+            monthly_limit_usd: null,
+            daily_usage_usd: 2,
+            weekly_usage_usd: 4,
+            monthly_usage_usd: 6,
+            daily_window_resets_at: '2026-08-07T00:00:00Z',
+          },
+        ],
+      })
+    ).toMatchObject({ platform_quotas: [{ platform: 'openai', daily_usage_usd: 2 }] })
   })
 })

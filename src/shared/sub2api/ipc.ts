@@ -5,6 +5,7 @@ import type {
   Sub2ApiApiKeyUpdateRequest,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
+  Sub2ApiPlatformQuotasResponse,
   Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
   Sub2ApiSessionState,
@@ -22,6 +23,7 @@ export const SUB2API_IPC_CHANNELS = {
   getCurrentUser: 'sub2api:get-current-user',
   getUsageDashboardStats: 'sub2api:get-usage-dashboard-stats',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
+  getPlatformQuotas: 'sub2api:get-platform-quotas',
   listApiKeys: 'sub2api:list-api-keys',
   createApiKey: 'sub2api:create-api-key',
   updateApiKey: 'sub2api:update-api-key',
@@ -38,6 +40,7 @@ export interface Sub2ApiRendererApi {
   getCurrentUser(): Promise<Sub2ApiUser>
   getUsageDashboardStats(): Promise<Sub2ApiUsageDashboardStats>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
+  getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
   createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
   updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>

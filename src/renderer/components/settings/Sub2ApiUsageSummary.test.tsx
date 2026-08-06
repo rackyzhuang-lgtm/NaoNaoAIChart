@@ -73,6 +73,20 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
         },
       ],
     }),
+    getPlatformQuotas: vi.fn().mockResolvedValue({
+      platform_quotas: [
+        {
+          platform: 'openai',
+          daily_limit_usd: 10,
+          weekly_limit_usd: null,
+          monthly_limit_usd: null,
+          daily_usage_usd: 2,
+          weekly_usage_usd: 3,
+          monthly_usage_usd: 4,
+          daily_window_resets_at: '2026-08-07T00:00:00Z',
+        },
+      ],
+    }),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),
@@ -98,6 +112,8 @@ describe('Sub2ApiUsageSummary', () => {
     expect(screen.getByText('All time')).toBeTruthy()
     expect(screen.getByText('$1.2345')).toBeTruthy()
     expect(screen.getByText('$1.00 / $5.00')).toBeTruthy()
+    expect(screen.getByText('OpenAI')).toBeTruthy()
+    expect(screen.getByText('$2.00 / $10.00')).toBeTruthy()
   })
 
   test('keeps usage visible when the subscription request fails', async () => {

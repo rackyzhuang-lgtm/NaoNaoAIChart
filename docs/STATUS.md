@@ -149,4 +149,14 @@
 - 使用测试账号对固定实例执行只读契约验证：两个接口均 HTTP 200、`code=0`，字段名与本批 schema 一致；未输出账号数据、令牌或完整 API Key，未修改线上数据。
 - 全量 Vitest 实际结果：227 个文件通过、3 个跳过；8 个套件因当前环境的 Electron 二进制下载失败无法加载，另有既有 Windows `src/main/sandbox/persist-artifact.test.ts` 的 2 项路径断言失败。不能据此宣称全量通过。
 
-下一步：补齐 Electron/Playwright 的锁定验证环境后再做桌面 E2E；继续实现用量明细、趋势/模型分析和平台配额前，保持只读范围，不进入支付或兑换码。
+下一步：补齐 Electron/Playwright 的锁定验证环境后再做桌面 E2E；继续实现用量明细、趋势/模型分析前，保持只读范围，不进入支付或兑换码。
+
+## 第八批：平台配额只读摘要
+
+- 已完成 `/api/v1/user/platform-quotas` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API。
+- 账户摘要页已展示平台日/周/月额度、已用金额、重置时间，并区分无上限与禁用；空列表显示暂无平台配额配置，接口失败不会清除其他摘要。
+- 定向测试 6 个文件、27 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 `noExplicitAny` warning。
+- 固定实例只读验证返回 HTTP 200、`code=0`、`platform_quotas` 为空；未修改线上配额、账户或模型数据。
+- 生产构建通过，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
+
+下一步：实现用量明细、趋势和模型维度查询前，继续保持面板 JWT 只读边界；Electron/Playwright 锁定验证环境仍待补齐。

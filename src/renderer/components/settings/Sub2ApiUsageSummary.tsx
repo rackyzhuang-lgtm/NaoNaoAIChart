@@ -1,7 +1,11 @@
 import { Alert, Badge, Group, Loader, Paper, Progress, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
-import type { Sub2ApiSubscriptionSummaryItem, Sub2ApiUsageDashboardStats } from '@shared/sub2api/contracts'
+import type {
+  Sub2ApiPlatformQuotaItem,
+  Sub2ApiSubscriptionSummaryItem,
+  Sub2ApiUsageDashboardStats,
+} from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { IconAlertCircle, IconChartBar, IconReceipt } from '@tabler/icons-react'
+import { IconAlertCircle, IconChartBar, IconGauge, IconReceipt } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -20,6 +24,14 @@ function formatCost(value: number): string {
 function formatDate(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+}
+
+const platformLabels: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  antigravity: 'Antigravity',
+  grok: 'Grok',
 }
 
 function UsagePeriod({
@@ -110,19 +122,80 @@ function SubscriptionItem({ subscription }: { subscription: Sub2ApiSubscriptionS
   )
 }
 
+function PlatformQuotaItemView({ quota }: { quota: Sub2ApiPlatformQuotaItem }) {
+  const { t } = useTranslation()
+  const windows = [
+    {
+      label: t('Daily'),
+      used: quota.daily_usage_usd,
+      limit: quota.daily_limit_usd,
+      resetsAt: quota.daily_window_resets_at,
+    },
+    {
+      label: t('Weekly'),
+      used: quota.weekly_usage_usd,
+      limit: quota.weekly_limit_usd,
+      resetsAt: quota.weekly_window_resets_at,
+    },
+    {
+      label: t('Monthly'),
+      used: quota.monthly_usage_usd,
+      limit: quota.monthly_limit_usd,
+      resetsAt: quota.monthly_window_resets_at,
+    },
+  ]
+  const name = platformLabels[quota.platform] ?? quota.platform
+
+  return (
+    <Paper withBorder radius="sm" p="md">
+      <Text fw={600}>{name}</Text>
+      <Stack gap="sm" mt="md">
+        {windows.map(({ label, used, limit, resetsAt }) => {
+          const disabled = limit === 0
+          const percentage = limit && limit > 0 ? Math.min(100, (used / limit) * 100) : 0
+          return (
+            <div key={label}>
+              <Group justify="space-between" gap="sm" mb={4}>
+                <Text size="xs" c="dimmed">
+                  {label}
+                </Text>
+                <Text size="xs" ff="monospace">
+                  {disabled
+                    ? t('Quota disabled')
+                    : limit === null
+                      ? `${formatCost(used)} / ${t('No limit')}`
+                      : `${formatCost(used)} / ${formatCost(limit)}`}
+                </Text>
+              </Group>
+              {!disabled && limit !== null && limit > 0 && <Progress value={percentage} size="sm" radius="sm" />}
+              {resetsAt && (
+                <Text size="xs" c="dimmed" mt={3}>
+                  {t('Resets')}: {formatDate(resetsAt)}
+                </Text>
+              )}
+            </div>
+          )
+        })}
+      </Stack>
+    </Paper>
+  )
+}
+
 export default function Sub2ApiUsageSummary({ api }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [usage, setUsage] = useState<Sub2ApiUsageDashboardStats | null>(null)
   const [subscriptions, setSubscriptions] = useState<Sub2ApiSubscriptionSummaryItem[] | null>(null)
+  const [platformQuotas, setPlatformQuotas] = useState<Sub2ApiPlatformQuotaItem[] | null>(null)
   const [usageFailed, setUsageFailed] = useState(false)
   const [subscriptionsFailed, setSubscriptionsFailed] = useState(false)
+  const [platformQuotasFailed, setPlatformQuotasFailed] = useState(false)
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    void Promise.allSettled([api.getUsageDashboardStats(), api.getSubscriptionSummary()]).then(
-      ([usageResult, subscriptionResult]) => {
+    void Promise.allSettled([api.getUsageDashboardStats(), api.getSubscriptionSummary(), api.getPlatformQuotas()]).then(
+      ([usageResult, subscriptionResult, platformQuotasResult]) => {
         if (!active) {
           return
         }
@@ -139,6 +212,13 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
         } else {
           setSubscriptions(null)
           setSubscriptionsFailed(true)
+        }
+        if (platformQuotasResult.status === 'fulfilled') {
+          setPlatformQuotas(platformQuotasResult.value.platform_quotas)
+          setPlatformQuotasFailed(false)
+        } else {
+          setPlatformQuotas(null)
+          setPlatformQuotasFailed(true)
         }
         setLoading(false)
       }
@@ -202,6 +282,30 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
             <SubscriptionItem key={subscription.id} subscription={subscription} />
           ))}
         </Stack>
+      )}
+
+      <Group gap="sm" mt="xs">
+        <ThemeIcon variant="light" radius="sm" color="blue">
+          <IconGauge size={18} />
+        </ThemeIcon>
+        <Text fw={600}>{t('Platform quotas')}</Text>
+      </Group>
+      {platformQuotasFailed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load platform quotas.')}
+        </Alert>
+      )}
+      {platformQuotas?.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {t('No platform quotas configured')}
+        </Text>
+      )}
+      {platformQuotas && platformQuotas.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {platformQuotas.map((quota) => (
+            <PlatformQuotaItemView key={quota.platform} quota={quota} />
+          ))}
+        </SimpleGrid>
       )}
     </Stack>
   )

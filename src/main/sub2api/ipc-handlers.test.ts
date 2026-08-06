@@ -32,6 +32,7 @@ describe('registerSub2ApiHandlers', () => {
       getCurrentUser: vi.fn(async () => user),
       getUsageDashboardStats: vi.fn(),
       getSubscriptionSummary: vi.fn(),
+      getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(async () => ({
         items: [
           {
@@ -92,6 +93,7 @@ describe('registerSub2ApiHandlers', () => {
       getCurrentUser: vi.fn(),
       getUsageDashboardStats: vi.fn(),
       getSubscriptionSummary: vi.fn(),
+      getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(),
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),

@@ -6,6 +6,7 @@ import {
   type Sub2ApiApiKeyUpdateRequest,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
+  type Sub2ApiPlatformQuotasResponse,
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
   type Sub2ApiSubscriptionSummary,
@@ -20,6 +21,7 @@ import {
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
   sub2ApiModelsResponseSchema,
+  sub2ApiPlatformQuotasResponseSchema,
   sub2ApiProviderBindingSchema,
   sub2ApiPublicSettingsSchema,
   sub2ApiRefreshResponseSchema,
@@ -146,6 +148,15 @@ export class Sub2ApiClient {
       SUB2API_ROUTES.subscriptionsSummary,
       { method: 'GET' },
       sub2ApiSubscriptionSummarySchema
+    )
+    return data
+  }
+
+  async getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.platformQuotas,
+      { method: 'GET' },
+      sub2ApiPlatformQuotasResponseSchema
     )
     return data
   }
