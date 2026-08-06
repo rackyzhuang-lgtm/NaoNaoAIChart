@@ -6,6 +6,7 @@ import {
   sub2ApiApiKeyUpdateRequestSchema,
   sub2ApiLoginRequestSchema,
   sub2ApiTotpCodeSchema,
+  sub2ApiUsagePageRequestSchema,
 } from '../../shared/sub2api/contracts'
 import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
 import { type Sub2ApiClient, sub2ApiClient } from './client'
@@ -71,6 +72,10 @@ export function registerSub2ApiHandlers(
   registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardModels, (event) => {
     requireTrustedSender(event)
     return client.getUsageDashboardModels()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.getUsageRecords, (event, page) => {
+    requireTrustedSender(event)
+    return client.getUsageRecords(sub2ApiUsagePageRequestSchema.parse(page))
   })
   registrar.handle(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
     requireTrustedSender(event)

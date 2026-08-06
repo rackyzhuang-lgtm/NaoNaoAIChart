@@ -13,6 +13,7 @@ import type {
   Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
+  Sub2ApiUsageRecordPage,
   Sub2ApiUser,
 } from './contracts'
 
@@ -26,6 +27,7 @@ export const SUB2API_IPC_CHANNELS = {
   getUsageDashboardStats: 'sub2api:get-usage-dashboard-stats',
   getUsageDashboardTrend: 'sub2api:get-usage-dashboard-trend',
   getUsageDashboardModels: 'sub2api:get-usage-dashboard-models',
+  getUsageRecords: 'sub2api:get-usage-records',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
   getPlatformQuotas: 'sub2api:get-platform-quotas',
   listApiKeys: 'sub2api:list-api-keys',
@@ -45,6 +47,7 @@ export interface Sub2ApiRendererApi {
   getUsageDashboardStats(): Promise<Sub2ApiUsageDashboardStats>
   getUsageDashboardTrend(): Promise<Sub2ApiUsageDashboardTrend>
   getUsageDashboardModels(): Promise<Sub2ApiUsageDashboardModels>
+  getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>

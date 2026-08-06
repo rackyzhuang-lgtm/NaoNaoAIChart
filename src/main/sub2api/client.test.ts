@@ -302,6 +302,26 @@ describe('Sub2ApiClient', () => {
     await expect(client.getUsageDashboardModels()).resolves.toEqual(models)
   })
 
+  it('uses panel JWT and a bounded page size for usage records', async () => {
+    const records = { items: [], total: 0, page: 2, page_size: 20, pages: 1 }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/usage?page=2&page_size=20')) {
+        return Promise.resolve(success(records))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getUsageRecords(2)).resolves.toEqual(records)
+    await expect(client.getUsageRecords(0)).rejects.toThrow()
+  })
+
   it('does not let an old refresh overwrite a newer login', async () => {
     const secondUser = { ...user, id: 2, username: 'second-user', email: 'second@example.test' }
     let resolveOldRefresh: ((response: Response) => void) | undefined

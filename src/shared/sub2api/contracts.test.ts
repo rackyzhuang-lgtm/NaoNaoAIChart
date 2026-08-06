@@ -8,6 +8,7 @@ import {
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
   sub2ApiUsageDashboardTrendSchema,
+  sub2ApiUsageRecordPageSchema,
 } from './contracts'
 
 const user = {
@@ -162,5 +163,34 @@ describe('sub2api contracts', () => {
         end_date: '2026-08-05',
       })
     ).toMatchObject({ models: [{ model: 'gpt-5', total_tokens: 16 }] })
+  })
+
+  it('accepts a redacted usage record page', () => {
+    expect(
+      sub2ApiUsageRecordPageSchema.parse({
+        items: [
+          {
+            id: 11,
+            api_key_id: 7,
+            model: 'gpt-5',
+            request_type: 'chat_completion',
+            stream: true,
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+            total_cost: 0.2,
+            actual_cost: 0.15,
+            duration_ms: null,
+            created_at: '2026-08-05T12:00:00Z',
+            api_key: { key: 'must be stripped' },
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+        pages: 1,
+      })
+    ).toMatchObject({ items: [{ model: 'gpt-5' }] })
   })
 })

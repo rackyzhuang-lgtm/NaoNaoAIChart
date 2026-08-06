@@ -93,6 +93,30 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       start_date: '2026-07-30',
       end_date: '2026-08-05',
     }),
+    getUsageRecords: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 11,
+          api_key_id: 7,
+          model: 'gpt-5',
+          request_type: 'chat_completion',
+          billing_mode: 'token',
+          stream: true,
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_creation_tokens: 0,
+          cache_read_tokens: 10,
+          total_cost: 0.2,
+          actual_cost: 0.125,
+          duration_ms: 420,
+          created_at: '2026-08-05T12:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    }),
     getSubscriptionSummary: vi.fn().mockResolvedValue({
       active_count: 1,
       total_used_usd: 2,
@@ -151,7 +175,9 @@ describe('Sub2ApiUsageSummary', () => {
     expect(screen.getByText('$2.00 / $10.00')).toBeTruthy()
     expect(screen.getByText('Recent usage trend')).toBeTruthy()
     expect(screen.getByText('Usage by model')).toBeTruthy()
-    expect(screen.getByText('gpt-5')).toBeTruthy()
+    expect(screen.getAllByText('gpt-5').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Usage details')).toBeTruthy()
+    expect(screen.getByText(/chat_completion/)).toBeTruthy()
   })
 
   test('keeps usage visible when the subscription request fails', async () => {
@@ -167,11 +193,13 @@ describe('Sub2ApiUsageSummary', () => {
       createApi({
         getUsageDashboardTrend: vi.fn().mockRejectedValue(new Error('unavailable')),
         getUsageDashboardModels: vi.fn().mockRejectedValue(new Error('unavailable')),
+        getUsageRecords: vi.fn().mockRejectedValue(new Error('unavailable')),
       })
     )
 
     expect(await screen.findByText('Unable to load usage trend.')).toBeTruthy()
     expect(screen.getByText('Unable to load model usage.')).toBeTruthy()
     expect(screen.getByText('All time')).toBeTruthy()
+    expect(screen.getByText('Unable to load usage details.')).toBeTruthy()
   })
 })

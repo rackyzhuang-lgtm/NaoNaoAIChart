@@ -13,6 +13,7 @@ import {
   type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
   type Sub2ApiUsageDashboardTrend,
+  type Sub2ApiUsageRecordPage,
   type Sub2ApiUser,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyDeleteResponseSchema,
@@ -31,6 +32,8 @@ import {
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
   sub2ApiUsageDashboardTrendSchema,
+  sub2ApiUsagePageRequestSchema,
+  sub2ApiUsageRecordPageSchema,
   sub2ApiUserSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
@@ -170,6 +173,16 @@ export class Sub2ApiClient {
       SUB2API_ROUTES.usageDashboardModels,
       { method: 'GET' },
       sub2ApiUsageDashboardModelsSchema
+    )
+    return data
+  }
+
+  async getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage> {
+    const parsedPage = sub2ApiUsagePageRequestSchema.parse(page)
+    const { data } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.usageRecords}?page=${parsedPage}&page_size=20`,
+      { method: 'GET' },
+      sub2ApiUsageRecordPageSchema
     )
     return data
   }

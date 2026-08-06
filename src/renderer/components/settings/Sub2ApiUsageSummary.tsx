@@ -1,4 +1,17 @@
-import { Alert, Badge, Group, Loader, Paper, Progress, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
+import {
+  Alert,
+  Badge,
+  Group,
+  Loader,
+  Pagination,
+  Paper,
+  Progress,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  ThemeIcon,
+} from '@mantine/core'
 import type {
   Sub2ApiPlatformQuotaItem,
   Sub2ApiSubscriptionSummaryItem,
@@ -6,6 +19,8 @@ import type {
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
   Sub2ApiUsageModelItem,
+  Sub2ApiUsageRecord,
+  Sub2ApiUsageRecordPage,
   Sub2ApiUsageTrendItem,
 } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
@@ -28,6 +43,10 @@ function formatCost(value: number): string {
 function formatDate(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+}
+
+function formatDuration(value: number | null): string {
+  return value === null ? '-' : `${Math.round(value)} ms`
 }
 
 const platformLabels: Record<string, string> = {
@@ -232,6 +251,44 @@ function UsageModelItemView({ item }: { item: Sub2ApiUsageModelItem }) {
   )
 }
 
+function UsageRecordRow({ record }: { record: Sub2ApiUsageRecord }) {
+  const { t } = useTranslation()
+  return (
+    <Table.Tr>
+      <Table.Td>
+        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          {formatDate(record.created_at)}
+        </Text>
+      </Table.Td>
+      <Table.Td maw={220}>
+        <Text size="sm" fw={500} truncate="end">
+          {record.model}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {record.request_type}
+          {record.stream ? ` · ${t('Streaming')}` : ''}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Text size="xs" ff="monospace">
+          {formatCompactNumber(record.input_tokens + record.output_tokens)}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {t('Tokens')}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Text size="xs" ff="monospace">
+          {formatCost(record.actual_cost)}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {formatDuration(record.duration_ms)}
+        </Text>
+      </Table.Td>
+    </Table.Tr>
+  )
+}
+
 export default function Sub2ApiUsageSummary({ api }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
@@ -240,9 +297,12 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
   const [platformQuotas, setPlatformQuotas] = useState<Sub2ApiPlatformQuotaItem[] | null>(null)
   const [usageTrend, setUsageTrend] = useState<Sub2ApiUsageDashboardTrend | null>(null)
   const [usageModels, setUsageModels] = useState<Sub2ApiUsageDashboardModels | null>(null)
+  const [usageRecords, setUsageRecords] = useState<Sub2ApiUsageRecordPage | null>(null)
+  const [usageRecordsPage, setUsageRecordsPage] = useState(1)
   const [usageFailed, setUsageFailed] = useState(false)
   const [usageTrendFailed, setUsageTrendFailed] = useState(false)
   const [usageModelsFailed, setUsageModelsFailed] = useState(false)
+  const [usageRecordsFailed, setUsageRecordsFailed] = useState(false)
   const [subscriptionsFailed, setSubscriptionsFailed] = useState(false)
   const [platformQuotasFailed, setPlatformQuotasFailed] = useState(false)
 
@@ -255,51 +315,68 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
       api.getPlatformQuotas(),
       api.getUsageDashboardTrend(),
       api.getUsageDashboardModels(),
-    ]).then(([usageResult, subscriptionResult, platformQuotasResult, usageTrendResult, usageModelsResult]) => {
-      if (!active) {
-        return
+      api.getUsageRecords(usageRecordsPage),
+    ]).then(
+      ([
+        usageResult,
+        subscriptionResult,
+        platformQuotasResult,
+        usageTrendResult,
+        usageModelsResult,
+        usageRecordsResult,
+      ]) => {
+        if (!active) {
+          return
+        }
+        if (usageResult.status === 'fulfilled') {
+          setUsage(usageResult.value)
+          setUsageFailed(false)
+        } else {
+          setUsage(null)
+          setUsageFailed(true)
+        }
+        if (subscriptionResult.status === 'fulfilled') {
+          setSubscriptions(subscriptionResult.value.subscriptions)
+          setSubscriptionsFailed(false)
+        } else {
+          setSubscriptions(null)
+          setSubscriptionsFailed(true)
+        }
+        if (platformQuotasResult.status === 'fulfilled') {
+          setPlatformQuotas(platformQuotasResult.value.platform_quotas)
+          setPlatformQuotasFailed(false)
+        } else {
+          setPlatformQuotas(null)
+          setPlatformQuotasFailed(true)
+        }
+        if (usageTrendResult.status === 'fulfilled') {
+          setUsageTrend(usageTrendResult.value)
+          setUsageTrendFailed(false)
+        } else {
+          setUsageTrend(null)
+          setUsageTrendFailed(true)
+        }
+        if (usageModelsResult.status === 'fulfilled') {
+          setUsageModels(usageModelsResult.value)
+          setUsageModelsFailed(false)
+        } else {
+          setUsageModels(null)
+          setUsageModelsFailed(true)
+        }
+        if (usageRecordsResult.status === 'fulfilled') {
+          setUsageRecords(usageRecordsResult.value)
+          setUsageRecordsFailed(false)
+        } else {
+          setUsageRecords(null)
+          setUsageRecordsFailed(true)
+        }
+        setLoading(false)
       }
-      if (usageResult.status === 'fulfilled') {
-        setUsage(usageResult.value)
-        setUsageFailed(false)
-      } else {
-        setUsage(null)
-        setUsageFailed(true)
-      }
-      if (subscriptionResult.status === 'fulfilled') {
-        setSubscriptions(subscriptionResult.value.subscriptions)
-        setSubscriptionsFailed(false)
-      } else {
-        setSubscriptions(null)
-        setSubscriptionsFailed(true)
-      }
-      if (platformQuotasResult.status === 'fulfilled') {
-        setPlatformQuotas(platformQuotasResult.value.platform_quotas)
-        setPlatformQuotasFailed(false)
-      } else {
-        setPlatformQuotas(null)
-        setPlatformQuotasFailed(true)
-      }
-      if (usageTrendResult.status === 'fulfilled') {
-        setUsageTrend(usageTrendResult.value)
-        setUsageTrendFailed(false)
-      } else {
-        setUsageTrend(null)
-        setUsageTrendFailed(true)
-      }
-      if (usageModelsResult.status === 'fulfilled') {
-        setUsageModels(usageModelsResult.value)
-        setUsageModelsFailed(false)
-      } else {
-        setUsageModels(null)
-        setUsageModelsFailed(true)
-      }
-      setLoading(false)
-    })
+    )
     return () => {
       active = false
     }
-  }, [api])
+  }, [api, usageRecordsPage])
 
   return (
     <Stack gap="md">
@@ -383,6 +460,55 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
             <UsageModelItemView key={item.model} item={item} />
           ))}
         </SimpleGrid>
+      )}
+
+      <Group gap="sm" mt="xs">
+        <ThemeIcon variant="light" radius="sm" color="indigo">
+          <IconChartBar size={18} />
+        </ThemeIcon>
+        <Text fw={600}>{t('Usage details')}</Text>
+      </Group>
+      {usageRecordsFailed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load usage details.')}
+        </Alert>
+      )}
+      {usageRecords?.items.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {t('No usage details')}
+        </Text>
+      )}
+      {usageRecords && usageRecords.items.length > 0 && (
+        <Stack gap="sm">
+          <div style={{ overflowX: 'auto' }}>
+            <Table striped highlightOnHover withTableBorder miw={620}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>{t('Date')}</Table.Th>
+                  <Table.Th>{t('Model')}</Table.Th>
+                  <Table.Th>{t('Tokens')}</Table.Th>
+                  <Table.Th>{t('Actual cost')}</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {usageRecords.items.map((record) => (
+                  <UsageRecordRow key={record.id} record={record} />
+                ))}
+              </Table.Tbody>
+            </Table>
+          </div>
+          {usageRecords.pages > 1 && (
+            <Group justify="flex-end">
+              <Pagination
+                value={usageRecords.page}
+                total={usageRecords.pages}
+                disabled={loading}
+                onChange={setUsageRecordsPage}
+                size="sm"
+              />
+            </Group>
+          )}
+        </Stack>
       )}
 
       <Group gap="sm" mt="xs">

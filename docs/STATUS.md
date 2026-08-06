@@ -170,3 +170,13 @@
 - 生产构建完成，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
 
 下一步：实现分页用量明细和错误请求详情前，继续保持面板 JWT 只读边界；Electron/Playwright 锁定验证环境仍待补齐。
+
+## 第十批：分页用量明细只读摘要
+
+- 已接入 `/api/v1/usage?page=1&page_size=20` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API；IPC 将页码限制为正整数且最多 1000，单页固定 20 条。
+- 账户摘要页已展示日期、模型、请求类型、Token、实际扣费和耗时，支持分页、空列表和局部失败；不显示 API Key 原文或管理员字段。
+- 固定实例只读验证返回 HTTP 200、`code=0`、空明细；未修改线上数据。
+- 定向测试 6 个文件、32 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 warning。
+- 生产构建完成，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
+
+下一步：实现错误请求详情；随后处理兑换码、可用渠道/模型广场/公告和异常恢复体验。Electron/Playwright 锁定验证环境仍待补齐。

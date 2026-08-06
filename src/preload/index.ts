@@ -64,6 +64,7 @@ const electronHandler: ElectronIPC = {
     getUsageDashboardStats: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getUsageDashboardStats),
     getUsageDashboardTrend: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getUsageDashboardTrend),
     getUsageDashboardModels: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getUsageDashboardModels),
+    getUsageRecords: (page) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getUsageRecords, page),
     getSubscriptionSummary: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getSubscriptionSummary),
     getPlatformQuotas: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getPlatformQuotas),
     listApiKeys: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.listApiKeys),

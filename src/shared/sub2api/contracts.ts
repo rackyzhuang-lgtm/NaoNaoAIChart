@@ -251,6 +251,41 @@ export const sub2ApiUsageDashboardModelsSchema = z
 
 export type Sub2ApiUsageDashboardModels = z.infer<typeof sub2ApiUsageDashboardModelsSchema>
 
+export const sub2ApiUsageRecordSchema = z
+  .object({
+    id: z.number().int().positive(),
+    api_key_id: z.number().int().nonnegative(),
+    model: z.string().min(1),
+    request_type: z.string().min(1),
+    billing_mode: z.string().min(1).nullable().optional(),
+    stream: z.boolean(),
+    input_tokens: z.number().int().nonnegative(),
+    output_tokens: z.number().int().nonnegative(),
+    cache_creation_tokens: z.number().int().nonnegative(),
+    cache_read_tokens: z.number().int().nonnegative(),
+    total_cost: z.number().nonnegative(),
+    actual_cost: z.number().nonnegative(),
+    duration_ms: z.number().int().nonnegative().nullable(),
+    created_at: z.string().min(1),
+  })
+  .strip()
+
+export type Sub2ApiUsageRecord = z.infer<typeof sub2ApiUsageRecordSchema>
+
+export const sub2ApiUsageRecordPageSchema = z
+  .object({
+    items: z.array(sub2ApiUsageRecordSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    page_size: z.number().int().positive(),
+    pages: z.number().int().positive(),
+  })
+  .strip()
+
+export type Sub2ApiUsageRecordPage = z.infer<typeof sub2ApiUsageRecordPageSchema>
+
+export const sub2ApiUsagePageRequestSchema = z.number().int().positive().max(1000)
+
 export const sub2ApiPlatformQuotaItemSchema = z
   .object({
     platform: z.string().min(1),
@@ -341,6 +376,7 @@ export const SUB2API_ROUTES = {
   usageDashboardStats: 'usage/dashboard/stats',
   usageDashboardTrend: 'usage/dashboard/trend?period=week',
   usageDashboardModels: 'usage/dashboard/models?period=week',
+  usageRecords: 'usage',
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
   models: 'models',
