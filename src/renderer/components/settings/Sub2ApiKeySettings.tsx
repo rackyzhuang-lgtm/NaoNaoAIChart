@@ -303,7 +303,7 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
                   disabled={busyId !== null || key.status !== 'active'}
                   onClick={() => void bindProvider(key)}
                 >
-                  {t('Bind to Chatbox')}
+                  {t('Use for chat')}
                 </Button>
               </Group>
             </Group>

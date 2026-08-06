@@ -157,6 +157,75 @@ export const sub2ApiProviderBindingSchema = z.object({
 
 export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema>
 
+export const sub2ApiPlatformUsageStatsSchema = z
+  .object({
+    platform: z.string().min(1),
+    total_requests: z.number().int().nonnegative(),
+    total_tokens: z.number().int().nonnegative(),
+    total_actual_cost: z.number().nonnegative(),
+    today_requests: z.number().int().nonnegative(),
+    today_tokens: z.number().int().nonnegative(),
+    today_actual_cost: z.number().nonnegative(),
+  })
+  .strip()
+
+export const sub2ApiUsageDashboardStatsSchema = z
+  .object({
+    total_api_keys: z.number().int().nonnegative(),
+    active_api_keys: z.number().int().nonnegative(),
+    total_requests: z.number().int().nonnegative(),
+    total_input_tokens: z.number().int().nonnegative(),
+    total_output_tokens: z.number().int().nonnegative(),
+    total_cache_creation_tokens: z.number().int().nonnegative(),
+    total_cache_read_tokens: z.number().int().nonnegative(),
+    total_tokens: z.number().int().nonnegative(),
+    total_cost: z.number().nonnegative(),
+    total_actual_cost: z.number().nonnegative(),
+    today_requests: z.number().int().nonnegative(),
+    today_input_tokens: z.number().int().nonnegative(),
+    today_output_tokens: z.number().int().nonnegative(),
+    today_cache_creation_tokens: z.number().int().nonnegative(),
+    today_cache_read_tokens: z.number().int().nonnegative(),
+    today_tokens: z.number().int().nonnegative(),
+    today_cost: z.number().nonnegative(),
+    today_actual_cost: z.number().nonnegative(),
+    average_duration_ms: z.number().nonnegative(),
+    rpm: z.number().nonnegative(),
+    tpm: z.number().nonnegative(),
+    by_platform: z.array(sub2ApiPlatformUsageStatsSchema).optional(),
+  })
+  .strip()
+
+export type Sub2ApiUsageDashboardStats = z.infer<typeof sub2ApiUsageDashboardStatsSchema>
+
+export const sub2ApiSubscriptionSummaryItemSchema = z
+  .object({
+    id: z.number().int().positive(),
+    group_id: z.number().int().positive(),
+    group_name: z.string(),
+    status: z.string().min(1),
+    daily_used_usd: z.number().nonnegative().optional(),
+    daily_limit_usd: z.number().nonnegative().optional(),
+    weekly_used_usd: z.number().nonnegative().optional(),
+    weekly_limit_usd: z.number().nonnegative().optional(),
+    monthly_used_usd: z.number().nonnegative().optional(),
+    monthly_limit_usd: z.number().nonnegative().optional(),
+    expires_at: z.string().nullable().optional(),
+  })
+  .strip()
+
+export type Sub2ApiSubscriptionSummaryItem = z.infer<typeof sub2ApiSubscriptionSummaryItemSchema>
+
+export const sub2ApiSubscriptionSummarySchema = z
+  .object({
+    active_count: z.number().int().nonnegative(),
+    total_used_usd: z.number().nonnegative(),
+    subscriptions: z.array(sub2ApiSubscriptionSummaryItemSchema),
+  })
+  .strip()
+
+export type Sub2ApiSubscriptionSummary = z.infer<typeof sub2ApiSubscriptionSummarySchema>
+
 export const sub2ApiLoginRequestSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
@@ -188,5 +257,7 @@ export const SUB2API_ROUTES = {
   logout: 'auth/logout',
   currentUser: 'auth/me',
   apiKeys: 'keys',
+  usageDashboardStats: 'usage/dashboard/stats',
+  subscriptionsSummary: 'subscriptions/summary',
   models: 'models',
 } as const

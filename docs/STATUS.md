@@ -139,3 +139,14 @@
 - 新增 `test/integration/sub2api-streaming.test.ts`。真实请求仅在 `RUN_SUB2API_STREAM_TESTS=1` 且提供 `SUB2API_TEST_API_KEY`、`SUB2API_TEST_MODEL` 时运行；默认测试结果为 skipped，未触发网络或计费。
 - 本批验证：离线流式测试 1 项通过；默认真实测试 1 项 skipped；`corepack pnpm check` 通过；相关 Biome 0 error/0 warning；`corepack pnpm exec electron-vite build --mode production` 通过。
 - 构建保留既有依赖 `eval`、循环依赖和大 chunk 警告；未执行真实聊天请求，待明确费用授权后再做一次受控线上验证。
+
+## 第七批：账户用量与订阅摘要
+
+- 已完成 `/api/v1/usage/dashboard/stats` 与 `/api/v1/subscriptions/summary` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API。
+- 账户页已展示累计/今日请求、Token、实际扣费、有效订阅、到期时间和服务端提供的日/周/月窗口进度；两个摘要请求独立失败时不会清除登录状态。
+- 已移除可达 API Key 操作中的 `Bind to Chatbox` 文案，替换为 `Use for chat`，并补充测试防回归。
+- 定向测试 6 个文件、25 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 `noExplicitAny` warning；生产构建通过，产物在 `release/app/dist`。
+- 使用测试账号对固定实例执行只读契约验证：两个接口均 HTTP 200、`code=0`，字段名与本批 schema 一致；未输出账号数据、令牌或完整 API Key，未修改线上数据。
+- 全量 Vitest 实际结果：227 个文件通过、3 个跳过；8 个套件因当前环境的 Electron 二进制下载失败无法加载，另有既有 Windows `src/main/sandbox/persist-artifact.test.ts` 的 2 项路径断言失败。不能据此宣称全量通过。
+
+下一步：补齐 Electron/Playwright 的锁定验证环境后再做桌面 E2E；继续实现用量明细、趋势/模型分析和平台配额前，保持只读范围，不进入支付或兑换码。

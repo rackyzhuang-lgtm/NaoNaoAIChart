@@ -8,6 +8,8 @@ import {
   type Sub2ApiLoginResult,
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
+  type Sub2ApiSubscriptionSummary,
+  type Sub2ApiUsageDashboardStats,
   type Sub2ApiUser,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyDeleteResponseSchema,
@@ -21,6 +23,8 @@ import {
   sub2ApiProviderBindingSchema,
   sub2ApiPublicSettingsSchema,
   sub2ApiRefreshResponseSchema,
+  sub2ApiSubscriptionSummarySchema,
+  sub2ApiUsageDashboardStatsSchema,
   sub2ApiUserSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
@@ -124,6 +128,24 @@ export class Sub2ApiClient {
       `${SUB2API_ROUTES.apiKeys}?page=1&page_size=100`,
       { method: 'GET' },
       sub2ApiApiKeyPageSchema
+    )
+    return data
+  }
+
+  async getUsageDashboardStats(): Promise<Sub2ApiUsageDashboardStats> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.usageDashboardStats,
+      { method: 'GET' },
+      sub2ApiUsageDashboardStatsSchema
+    )
+    return data
+  }
+
+  async getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.subscriptionsSummary,
+      { method: 'GET' },
+      sub2ApiSubscriptionSummarySchema
     )
     return data
   }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { sub2ApiAuthResponseSchema, sub2ApiLoginResponseSchema, sub2ApiRefreshResponseSchema } from './contracts'
+import {
+  sub2ApiAuthResponseSchema,
+  sub2ApiLoginResponseSchema,
+  sub2ApiRefreshResponseSchema,
+  sub2ApiSubscriptionSummarySchema,
+  sub2ApiUsageDashboardStatsSchema,
+} from './contracts'
 
 const user = {
   id: 1,
@@ -58,5 +64,51 @@ describe('sub2api contracts', () => {
     expect(response.user).toEqual(user)
     expect(response.user).not.toHaveProperty('access_token')
     expect(response.user).not.toHaveProperty('refresh_token')
+  })
+
+  it('accepts read-only usage and subscription summaries', () => {
+    const usage = sub2ApiUsageDashboardStatsSchema.parse({
+      total_api_keys: 2,
+      active_api_keys: 1,
+      total_requests: 25,
+      total_input_tokens: 100,
+      total_output_tokens: 50,
+      total_cache_creation_tokens: 0,
+      total_cache_read_tokens: 10,
+      total_tokens: 160,
+      total_cost: 1.5,
+      total_actual_cost: 1.25,
+      today_requests: 4,
+      today_input_tokens: 20,
+      today_output_tokens: 10,
+      today_cache_creation_tokens: 0,
+      today_cache_read_tokens: 2,
+      today_tokens: 32,
+      today_cost: 0.3,
+      today_actual_cost: 0.25,
+      average_duration_ms: 520,
+      rpm: 0.4,
+      tpm: 12,
+      internal_note: 'must be stripped',
+    })
+    expect(usage).not.toHaveProperty('internal_note')
+
+    expect(
+      sub2ApiSubscriptionSummarySchema.parse({
+        active_count: 1,
+        total_used_usd: 0.25,
+        subscriptions: [
+          {
+            id: 9,
+            group_id: 3,
+            group_name: 'Standard',
+            status: 'active',
+            daily_used_usd: 0.25,
+            daily_limit_usd: 10,
+            expires_at: '2026-09-01T00:00:00Z',
+          },
+        ],
+      })
+    ).toMatchObject({ active_count: 1, subscriptions: [{ group_name: 'Standard' }] })
   })
 })

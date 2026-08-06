@@ -60,6 +60,14 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.getCurrentUser()
   })
+  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardStats, (event) => {
+    requireTrustedSender(event)
+    return client.getUsageDashboardStats()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
+    requireTrustedSender(event)
+    return client.getSubscriptionSummary()
+  })
   registrar.handle(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
     requireTrustedSender(event)
     const page = await client.listApiKeys()

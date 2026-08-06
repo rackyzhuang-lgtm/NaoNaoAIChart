@@ -53,6 +53,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     logout: vi.fn(),
     getSessionState: vi.fn(),
     getCurrentUser: vi.fn(),
+    getUsageDashboardStats: vi.fn(),
+    getSubscriptionSummary: vi.fn(),
     listApiKeys: vi.fn().mockResolvedValue({ items: [keySummary], total: 1, page: 1, page_size: 100, pages: 1 }),
     createApiKey: vi.fn().mockResolvedValue({ ...keySummary, id: 8, name: 'new-key' }),
     updateApiKey: vi.fn().mockResolvedValue({ ...keySummary, name: 'renamed-key' }),
@@ -94,7 +96,8 @@ describe('Sub2ApiKeySettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(api.createApiKey).toHaveBeenCalledWith({ name: 'new-key' }))
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Bind to Chatbox' })[0])
+    expect(screen.queryByText(/Chatbox/i)).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Use for chat' })[0])
     await waitFor(() =>
       expect(onBindProvider).toHaveBeenCalledWith({
         apiKey: 'full-key-must-not-be-in-list',

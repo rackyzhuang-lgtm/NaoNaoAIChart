@@ -31,6 +31,7 @@ import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
+import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
 
 type AccountPhase = 'loading' | 'signed_out' | 'two_factor' | 'signed_in' | 'error'
 
@@ -360,6 +361,8 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             </div>
           </SimpleGrid>
 
+          <Divider />
+          <Sub2ApiUsageSummary api={api} />
           <Divider />
           <Sub2ApiKeySettings api={api} />
           <Divider />

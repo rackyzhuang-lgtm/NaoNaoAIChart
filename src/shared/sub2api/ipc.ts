@@ -8,6 +8,8 @@ import type {
   Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
   Sub2ApiSessionState,
+  Sub2ApiSubscriptionSummary,
+  Sub2ApiUsageDashboardStats,
   Sub2ApiUser,
 } from './contracts'
 
@@ -18,6 +20,8 @@ export const SUB2API_IPC_CHANNELS = {
   logout: 'sub2api:logout',
   getSessionState: 'sub2api:get-session-state',
   getCurrentUser: 'sub2api:get-current-user',
+  getUsageDashboardStats: 'sub2api:get-usage-dashboard-stats',
+  getSubscriptionSummary: 'sub2api:get-subscription-summary',
   listApiKeys: 'sub2api:list-api-keys',
   createApiKey: 'sub2api:create-api-key',
   updateApiKey: 'sub2api:update-api-key',
@@ -32,6 +36,8 @@ export interface Sub2ApiRendererApi {
   logout(): Promise<void>
   getSessionState(): Promise<Sub2ApiSessionState>
   getCurrentUser(): Promise<Sub2ApiUser>
+  getUsageDashboardStats(): Promise<Sub2ApiUsageDashboardStats>
+  getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
   createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
   updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>

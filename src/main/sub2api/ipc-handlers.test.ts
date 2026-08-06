@@ -30,6 +30,8 @@ describe('registerSub2ApiHandlers', () => {
       logout: vi.fn(async () => undefined),
       getSessionState: vi.fn(() => ({ authenticated: true, user, twoFactorRequired: false })),
       getCurrentUser: vi.fn(async () => user),
+      getUsageDashboardStats: vi.fn(),
+      getSubscriptionSummary: vi.fn(),
       listApiKeys: vi.fn(async () => ({
         items: [
           {
@@ -88,6 +90,8 @@ describe('registerSub2ApiHandlers', () => {
       logout: vi.fn(),
       getSessionState: vi.fn(),
       getCurrentUser: vi.fn(),
+      getUsageDashboardStats: vi.fn(),
+      getSubscriptionSummary: vi.fn(),
       listApiKeys: vi.fn(),
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),

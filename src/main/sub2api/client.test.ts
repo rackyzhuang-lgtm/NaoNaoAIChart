@@ -209,6 +209,56 @@ describe('Sub2ApiClient', () => {
     )
   })
 
+  it('uses panel JWT for read-only usage and subscription summaries', async () => {
+    const dashboardStats = {
+      total_api_keys: 1,
+      active_api_keys: 1,
+      total_requests: 12,
+      total_input_tokens: 100,
+      total_output_tokens: 40,
+      total_cache_creation_tokens: 0,
+      total_cache_read_tokens: 10,
+      total_tokens: 150,
+      total_cost: 0.6,
+      total_actual_cost: 0.5,
+      today_requests: 3,
+      today_input_tokens: 20,
+      today_output_tokens: 10,
+      today_cache_creation_tokens: 0,
+      today_cache_read_tokens: 2,
+      today_tokens: 32,
+      today_cost: 0.15,
+      today_actual_cost: 0.12,
+      average_duration_ms: 600,
+      rpm: 0.2,
+      tpm: 4,
+    }
+    const subscriptionSummary = {
+      active_count: 0,
+      total_used_usd: 0,
+      subscriptions: [],
+    }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/usage/dashboard/stats')) {
+        return Promise.resolve(success(dashboardStats))
+      }
+      if (url.endsWith('/api/v1/subscriptions/summary')) {
+        return Promise.resolve(success(subscriptionSummary))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getUsageDashboardStats()).resolves.toEqual(dashboardStats)
+    await expect(client.getSubscriptionSummary()).resolves.toEqual(subscriptionSummary)
+  })
+
   it('does not let an old refresh overwrite a newer login', async () => {
     const secondUser = { ...user, id: 2, username: 'second-user', email: 'second@example.test' }
     let resolveOldRefresh: ((response: Response) => void) | undefined
