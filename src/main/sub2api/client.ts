@@ -10,7 +10,9 @@ import {
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
   type Sub2ApiSubscriptionSummary,
+  type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
+  type Sub2ApiUsageDashboardTrend,
   type Sub2ApiUser,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyDeleteResponseSchema,
@@ -26,7 +28,9 @@ import {
   sub2ApiPublicSettingsSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiSubscriptionSummarySchema,
+  sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
+  sub2ApiUsageDashboardTrendSchema,
   sub2ApiUserSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
@@ -148,6 +152,24 @@ export class Sub2ApiClient {
       SUB2API_ROUTES.subscriptionsSummary,
       { method: 'GET' },
       sub2ApiSubscriptionSummarySchema
+    )
+    return data
+  }
+
+  async getUsageDashboardTrend(): Promise<Sub2ApiUsageDashboardTrend> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.usageDashboardTrend,
+      { method: 'GET' },
+      sub2ApiUsageDashboardTrendSchema
+    )
+    return data
+  }
+
+  async getUsageDashboardModels(): Promise<Sub2ApiUsageDashboardModels> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.usageDashboardModels,
+      { method: 'GET' },
+      sub2ApiUsageDashboardModelsSchema
     )
     return data
   }

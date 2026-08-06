@@ -73,6 +73,12 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       rpm: 0,
       tpm: 0,
     }),
+    getUsageDashboardTrend: vi
+      .fn()
+      .mockResolvedValue({ trend: [], start_date: '2026-07-30', end_date: '2026-08-05', granularity: 'day' }),
+    getUsageDashboardModels: vi
+      .fn()
+      .mockResolvedValue({ models: [], start_date: '2026-07-30', end_date: '2026-08-05' }),
     getSubscriptionSummary: vi.fn().mockResolvedValue({ active_count: 0, total_used_usd: 0, subscriptions: [] }),
     getPlatformQuotas: vi.fn().mockResolvedValue({ platform_quotas: [] }),
     listApiKeys: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 1 }),

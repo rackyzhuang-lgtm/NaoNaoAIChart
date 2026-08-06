@@ -2,7 +2,11 @@ import { Alert, Badge, Group, Loader, Paper, Progress, SimpleGrid, Stack, Text, 
 import type {
   Sub2ApiPlatformQuotaItem,
   Sub2ApiSubscriptionSummaryItem,
+  Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
+  Sub2ApiUsageDashboardTrend,
+  Sub2ApiUsageModelItem,
+  Sub2ApiUsageTrendItem,
 } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
 import { IconAlertCircle, IconChartBar, IconGauge, IconReceipt } from '@tabler/icons-react'
@@ -181,48 +185,117 @@ function PlatformQuotaItemView({ quota }: { quota: Sub2ApiPlatformQuotaItem }) {
   )
 }
 
+function UsageTrendItemView({ item, maxRequests }: { item: Sub2ApiUsageTrendItem; maxRequests: number }) {
+  const { t } = useTranslation()
+  return (
+    <Paper withBorder radius="sm" p="md">
+      <Group justify="space-between" gap="sm">
+        <Text fw={600}>{formatDate(item.date)}</Text>
+        <Text size="xs" c="dimmed">
+          {formatCompactNumber(item.requests)} {t('Requests')}
+        </Text>
+      </Group>
+      <Progress value={maxRequests > 0 ? (item.requests / maxRequests) * 100 : 0} size="sm" mt="sm" radius="sm" />
+      <Group justify="space-between" gap="sm" mt="sm">
+        <Text size="xs" c="dimmed">
+          {t('Tokens')}: {formatCompactNumber(item.total_tokens)}
+        </Text>
+        <Text size="xs" ff="monospace">
+          {formatCost(item.actual_cost)}
+        </Text>
+      </Group>
+    </Paper>
+  )
+}
+
+function UsageModelItemView({ item }: { item: Sub2ApiUsageModelItem }) {
+  const { t } = useTranslation()
+  return (
+    <Paper withBorder radius="sm" p="md">
+      <Group justify="space-between" gap="sm" wrap="nowrap">
+        <Text fw={600} truncate="end">
+          {item.model}
+        </Text>
+        <Badge variant="light" color="blue">
+          {formatCompactNumber(item.requests)} {t('Requests')}
+        </Badge>
+      </Group>
+      <Group justify="space-between" gap="sm" mt="sm">
+        <Text size="xs" c="dimmed">
+          {t('Tokens')}: {formatCompactNumber(item.total_tokens)}
+        </Text>
+        <Text size="xs" ff="monospace">
+          {formatCost(item.actual_cost)}
+        </Text>
+      </Group>
+    </Paper>
+  )
+}
+
 export default function Sub2ApiUsageSummary({ api }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [usage, setUsage] = useState<Sub2ApiUsageDashboardStats | null>(null)
   const [subscriptions, setSubscriptions] = useState<Sub2ApiSubscriptionSummaryItem[] | null>(null)
   const [platformQuotas, setPlatformQuotas] = useState<Sub2ApiPlatformQuotaItem[] | null>(null)
+  const [usageTrend, setUsageTrend] = useState<Sub2ApiUsageDashboardTrend | null>(null)
+  const [usageModels, setUsageModels] = useState<Sub2ApiUsageDashboardModels | null>(null)
   const [usageFailed, setUsageFailed] = useState(false)
+  const [usageTrendFailed, setUsageTrendFailed] = useState(false)
+  const [usageModelsFailed, setUsageModelsFailed] = useState(false)
   const [subscriptionsFailed, setSubscriptionsFailed] = useState(false)
   const [platformQuotasFailed, setPlatformQuotasFailed] = useState(false)
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    void Promise.allSettled([api.getUsageDashboardStats(), api.getSubscriptionSummary(), api.getPlatformQuotas()]).then(
-      ([usageResult, subscriptionResult, platformQuotasResult]) => {
-        if (!active) {
-          return
-        }
-        if (usageResult.status === 'fulfilled') {
-          setUsage(usageResult.value)
-          setUsageFailed(false)
-        } else {
-          setUsage(null)
-          setUsageFailed(true)
-        }
-        if (subscriptionResult.status === 'fulfilled') {
-          setSubscriptions(subscriptionResult.value.subscriptions)
-          setSubscriptionsFailed(false)
-        } else {
-          setSubscriptions(null)
-          setSubscriptionsFailed(true)
-        }
-        if (platformQuotasResult.status === 'fulfilled') {
-          setPlatformQuotas(platformQuotasResult.value.platform_quotas)
-          setPlatformQuotasFailed(false)
-        } else {
-          setPlatformQuotas(null)
-          setPlatformQuotasFailed(true)
-        }
-        setLoading(false)
+    void Promise.allSettled([
+      api.getUsageDashboardStats(),
+      api.getSubscriptionSummary(),
+      api.getPlatformQuotas(),
+      api.getUsageDashboardTrend(),
+      api.getUsageDashboardModels(),
+    ]).then(([usageResult, subscriptionResult, platformQuotasResult, usageTrendResult, usageModelsResult]) => {
+      if (!active) {
+        return
       }
-    )
+      if (usageResult.status === 'fulfilled') {
+        setUsage(usageResult.value)
+        setUsageFailed(false)
+      } else {
+        setUsage(null)
+        setUsageFailed(true)
+      }
+      if (subscriptionResult.status === 'fulfilled') {
+        setSubscriptions(subscriptionResult.value.subscriptions)
+        setSubscriptionsFailed(false)
+      } else {
+        setSubscriptions(null)
+        setSubscriptionsFailed(true)
+      }
+      if (platformQuotasResult.status === 'fulfilled') {
+        setPlatformQuotas(platformQuotasResult.value.platform_quotas)
+        setPlatformQuotasFailed(false)
+      } else {
+        setPlatformQuotas(null)
+        setPlatformQuotasFailed(true)
+      }
+      if (usageTrendResult.status === 'fulfilled') {
+        setUsageTrend(usageTrendResult.value)
+        setUsageTrendFailed(false)
+      } else {
+        setUsageTrend(null)
+        setUsageTrendFailed(true)
+      }
+      if (usageModelsResult.status === 'fulfilled') {
+        setUsageModels(usageModelsResult.value)
+        setUsageModelsFailed(false)
+      } else {
+        setUsageModels(null)
+        setUsageModelsFailed(true)
+      }
+      setLoading(false)
+    })
     return () => {
       active = false
     }
@@ -257,6 +330,58 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
             tokens={usage.today_tokens}
             actualCost={usage.today_actual_cost}
           />
+        </SimpleGrid>
+      )}
+
+      <Group gap="sm" mt="xs">
+        <ThemeIcon variant="light" radius="sm" color="violet">
+          <IconChartBar size={18} />
+        </ThemeIcon>
+        <Text fw={600}>{t('Recent usage trend')}</Text>
+      </Group>
+      {usageTrendFailed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load usage trend.')}
+        </Alert>
+      )}
+      {usageTrend?.trend.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {t('No usage trend data')}
+        </Text>
+      )}
+      {usageTrend && usageTrend.trend.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {usageTrend.trend.map((item) => (
+            <UsageTrendItemView
+              key={`${usageTrend.granularity}-${item.date}`}
+              item={item}
+              maxRequests={Math.max(...usageTrend.trend.map((trendItem) => trendItem.requests))}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+
+      <Group gap="sm" mt="xs">
+        <ThemeIcon variant="light" radius="sm" color="orange">
+          <IconChartBar size={18} />
+        </ThemeIcon>
+        <Text fw={600}>{t('Usage by model')}</Text>
+      </Group>
+      {usageModelsFailed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load model usage.')}
+        </Alert>
+      )}
+      {usageModels?.models.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {t('No model usage data')}
+        </Text>
+      )}
+      {usageModels && usageModels.models.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {usageModels.models.map((item) => (
+            <UsageModelItemView key={item.model} item={item} />
+          ))}
         </SimpleGrid>
       )}
 

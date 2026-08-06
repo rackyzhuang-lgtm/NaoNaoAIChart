@@ -31,6 +31,8 @@ describe('registerSub2ApiHandlers', () => {
       getSessionState: vi.fn(() => ({ authenticated: true, user, twoFactorRequired: false })),
       getCurrentUser: vi.fn(async () => user),
       getUsageDashboardStats: vi.fn(),
+      getUsageDashboardTrend: vi.fn(),
+      getUsageDashboardModels: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(async () => ({
@@ -92,6 +94,8 @@ describe('registerSub2ApiHandlers', () => {
       getSessionState: vi.fn(),
       getCurrentUser: vi.fn(),
       getUsageDashboardStats: vi.fn(),
+      getUsageDashboardTrend: vi.fn(),
+      getUsageDashboardModels: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(),

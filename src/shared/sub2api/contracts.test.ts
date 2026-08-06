@@ -5,7 +5,9 @@ import {
   sub2ApiPlatformQuotasResponseSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiSubscriptionSummarySchema,
+  sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
+  sub2ApiUsageDashboardTrendSchema,
 } from './contracts'
 
 const user = {
@@ -131,5 +133,34 @@ describe('sub2api contracts', () => {
         ],
       })
     ).toMatchObject({ platform_quotas: [{ platform: 'openai', daily_usage_usd: 2 }] })
+  })
+
+  it('accepts trend and model dashboard responses', () => {
+    const trendItem = {
+      date: '2026-08-05',
+      requests: 2,
+      input_tokens: 10,
+      output_tokens: 5,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 1,
+      total_tokens: 16,
+      cost: 0.2,
+      actual_cost: 0.15,
+    }
+    expect(
+      sub2ApiUsageDashboardTrendSchema.parse({
+        trend: [trendItem],
+        start_date: '2026-07-30',
+        end_date: '2026-08-05',
+        granularity: 'day',
+      })
+    ).toMatchObject({ trend: [{ date: '2026-08-05' }] })
+    expect(
+      sub2ApiUsageDashboardModelsSchema.parse({
+        models: [{ model: 'gpt-5', ...trendItem }],
+        start_date: '2026-07-30',
+        end_date: '2026-08-05',
+      })
+    ).toMatchObject({ models: [{ model: 'gpt-5', total_tokens: 16 }] })
   })
 })

@@ -278,6 +278,30 @@ describe('Sub2ApiClient', () => {
     await expect(client.getPlatformQuotas()).resolves.toEqual(platformQuotas)
   })
 
+  it('uses panel JWT for read-only trend and model summaries', async () => {
+    const trend = { trend: [], start_date: '2026-07-30', end_date: '2026-08-05', granularity: 'day' }
+    const models = { models: [], start_date: '2026-07-30', end_date: '2026-08-05' }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/usage/dashboard/trend?period=week')) {
+        return Promise.resolve(success(trend))
+      }
+      if (url.endsWith('/api/v1/usage/dashboard/models?period=week')) {
+        return Promise.resolve(success(models))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getUsageDashboardTrend()).resolves.toEqual(trend)
+    await expect(client.getUsageDashboardModels()).resolves.toEqual(models)
+  })
+
   it('does not let an old refresh overwrite a newer login', async () => {
     const secondUser = { ...user, id: 2, username: 'second-user', email: 'second@example.test' }
     let resolveOldRefresh: ((response: Response) => void) | undefined

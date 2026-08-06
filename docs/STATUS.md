@@ -160,3 +160,13 @@
 - 生产构建通过，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
 
 下一步：实现用量明细、趋势和模型维度查询前，继续保持面板 JWT 只读边界；Electron/Playwright 锁定验证环境仍待补齐。
+
+## 第九批：用量趋势与模型维度只读摘要
+
+- 已接入 `/api/v1/usage/dashboard/trend?period=week` 和 `/api/v1/usage/dashboard/models?period=week` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API。
+- 账户摘要页已展示最近 7 天趋势和模型用量，空列表和两个接口独立失败均不会清除其他摘要。
+- 固定实例只读验证两个接口均 HTTP 200、`code=0`，测试账号当前返回空数组；未修改线上数据。
+- 定向测试 6 个文件、30 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 warning。
+- 生产构建完成，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
+
+下一步：实现分页用量明细和错误请求详情前，继续保持面板 JWT 只读边界；Electron/Playwright 锁定验证环境仍待补齐。

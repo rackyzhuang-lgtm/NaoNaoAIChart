@@ -64,6 +64,14 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.getUsageDashboardStats()
   })
+  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardTrend, (event) => {
+    requireTrustedSender(event)
+    return client.getUsageDashboardTrend()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardModels, (event) => {
+    requireTrustedSender(event)
+    return client.getUsageDashboardModels()
+  })
   registrar.handle(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
     requireTrustedSender(event)
     return client.getSubscriptionSummary()

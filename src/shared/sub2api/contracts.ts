@@ -198,6 +198,59 @@ export const sub2ApiUsageDashboardStatsSchema = z
 
 export type Sub2ApiUsageDashboardStats = z.infer<typeof sub2ApiUsageDashboardStatsSchema>
 
+export const sub2ApiUsageTrendItemSchema = z
+  .object({
+    date: z.string().min(1),
+    requests: z.number().int().nonnegative(),
+    input_tokens: z.number().int().nonnegative(),
+    output_tokens: z.number().int().nonnegative(),
+    cache_creation_tokens: z.number().int().nonnegative(),
+    cache_read_tokens: z.number().int().nonnegative(),
+    total_tokens: z.number().int().nonnegative(),
+    cost: z.number().nonnegative(),
+    actual_cost: z.number().nonnegative(),
+  })
+  .strip()
+
+export type Sub2ApiUsageTrendItem = z.infer<typeof sub2ApiUsageTrendItemSchema>
+
+export const sub2ApiUsageDashboardTrendSchema = z
+  .object({
+    trend: z.array(sub2ApiUsageTrendItemSchema),
+    start_date: z.string().min(1),
+    end_date: z.string().min(1),
+    granularity: z.string().min(1),
+  })
+  .strip()
+
+export type Sub2ApiUsageDashboardTrend = z.infer<typeof sub2ApiUsageDashboardTrendSchema>
+
+export const sub2ApiUsageModelItemSchema = z
+  .object({
+    model: z.string().min(1),
+    requests: z.number().int().nonnegative(),
+    input_tokens: z.number().int().nonnegative(),
+    output_tokens: z.number().int().nonnegative(),
+    cache_creation_tokens: z.number().int().nonnegative(),
+    cache_read_tokens: z.number().int().nonnegative(),
+    total_tokens: z.number().int().nonnegative(),
+    cost: z.number().nonnegative(),
+    actual_cost: z.number().nonnegative(),
+  })
+  .strip()
+
+export type Sub2ApiUsageModelItem = z.infer<typeof sub2ApiUsageModelItemSchema>
+
+export const sub2ApiUsageDashboardModelsSchema = z
+  .object({
+    models: z.array(sub2ApiUsageModelItemSchema),
+    start_date: z.string().min(1),
+    end_date: z.string().min(1),
+  })
+  .strip()
+
+export type Sub2ApiUsageDashboardModels = z.infer<typeof sub2ApiUsageDashboardModelsSchema>
+
 export const sub2ApiPlatformQuotaItemSchema = z
   .object({
     platform: z.string().min(1),
@@ -286,6 +339,8 @@ export const SUB2API_ROUTES = {
   currentUser: 'auth/me',
   apiKeys: 'keys',
   usageDashboardStats: 'usage/dashboard/stats',
+  usageDashboardTrend: 'usage/dashboard/trend?period=week',
+  usageDashboardModels: 'usage/dashboard/models?period=week',
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
   models: 'models',
