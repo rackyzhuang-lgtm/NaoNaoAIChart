@@ -92,20 +92,70 @@ export const sub2ApiApiKeyPageSchema = z.object({
 
 export type Sub2ApiApiKeyPage = z.infer<typeof sub2ApiApiKeyPageSchema>
 
+export const sub2ApiApiKeySummarySchema = sub2ApiApiKeySchema
+  .omit({ key: true })
+  .strip()
+  .extend({
+    key_hint: z.string().min(1),
+  })
+
+export type Sub2ApiApiKeySummary = z.infer<typeof sub2ApiApiKeySummarySchema>
+
+export const sub2ApiApiKeyIdSchema = z.number().int().positive()
+
+export const sub2ApiApiKeyPageSummarySchema = sub2ApiApiKeyPageSchema.extend({
+  items: z.array(sub2ApiApiKeySummarySchema),
+})
+
+export type Sub2ApiApiKeyPageSummary = z.infer<typeof sub2ApiApiKeyPageSummarySchema>
+
+export const sub2ApiApiKeyCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  quota: z.number().nonnegative().optional(),
+  expires_in_days: z.number().int().positive().optional(),
+})
+
+export type Sub2ApiApiKeyCreateRequest = z.infer<typeof sub2ApiApiKeyCreateRequestSchema>
+
+export const sub2ApiApiKeyUpdateRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    status: z.enum(['active', 'inactive']).optional(),
+  })
+  .refine((value) => value.name !== undefined || value.status !== undefined, {
+    message: 'At least one API key field must be updated',
+  })
+
+export type Sub2ApiApiKeyUpdateRequest = z.infer<typeof sub2ApiApiKeyUpdateRequestSchema>
+
+export const sub2ApiApiKeyDeleteResponseSchema = z.object({
+  message: z.string(),
+})
+
+export const sub2ApiModelSchema = z
+  .object({
+    id: z.string().min(1),
+    object: z.string().optional(),
+    owned_by: z.string().optional(),
+  })
+  .passthrough()
+
+export type Sub2ApiModel = z.infer<typeof sub2ApiModelSchema>
+
 export const sub2ApiModelsResponseSchema = z.object({
   object: z.literal('list'),
-  data: z.array(
-    z
-      .object({
-        id: z.string().min(1),
-        object: z.string().optional(),
-        owned_by: z.string().optional(),
-      })
-      .passthrough()
-  ),
+  data: z.array(sub2ApiModelSchema),
 })
 
 export type Sub2ApiModelsResponse = z.infer<typeof sub2ApiModelsResponseSchema>
+
+export const sub2ApiProviderBindingSchema = z.object({
+  apiKey: z.string().min(1),
+  apiHost: z.string().url(),
+  models: z.array(sub2ApiModelSchema),
+})
+
+export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema>
 
 export const sub2ApiLoginRequestSchema = z.object({
   email: z.string().trim().email(),

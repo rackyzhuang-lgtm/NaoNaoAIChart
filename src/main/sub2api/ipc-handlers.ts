@@ -1,5 +1,12 @@
 import { ipcMain } from 'electron'
-import { sub2ApiLoginRequestSchema, sub2ApiTotpCodeSchema } from '../../shared/sub2api/contracts'
+import {
+  sub2ApiApiKeyCreateRequestSchema,
+  sub2ApiApiKeyIdSchema,
+  sub2ApiApiKeySummarySchema,
+  sub2ApiApiKeyUpdateRequestSchema,
+  sub2ApiLoginRequestSchema,
+  sub2ApiTotpCodeSchema,
+} from '../../shared/sub2api/contracts'
 import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
 import { type Sub2ApiClient, sub2ApiClient } from './client'
 
@@ -8,6 +15,14 @@ type IpcSenderGuard = (event: Electron.IpcMainInvokeEvent) => boolean
 
 interface IpcMainRegistrar {
   handle(channel: string, listener: IpcMainHandler): void
+}
+
+function toApiKeySummary(apiKey: Awaited<ReturnType<Sub2ApiClient['listApiKeys']>>['items'][number]) {
+  const { key, ...summary } = apiKey
+  return sub2ApiApiKeySummarySchema.parse({
+    ...summary,
+    key_hint: key.length > 10 ? `${key.slice(0, 6)}...${key.slice(-4)}` : '****',
+  })
 }
 
 export function registerSub2ApiHandlers(
@@ -44,5 +59,34 @@ export function registerSub2ApiHandlers(
   registrar.handle(SUB2API_IPC_CHANNELS.getCurrentUser, (event) => {
     requireTrustedSender(event)
     return client.getCurrentUser()
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
+    requireTrustedSender(event)
+    const page = await client.listApiKeys()
+    return {
+      ...page,
+      items: page.items.map(toApiKeySummary),
+    }
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.createApiKey, async (event, request) => {
+    requireTrustedSender(event)
+    const apiKey = await client.createApiKey(sub2ApiApiKeyCreateRequestSchema.parse(request))
+    return toApiKeySummary(apiKey)
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.updateApiKey, async (event, id, request) => {
+    requireTrustedSender(event)
+    const apiKey = await client.updateApiKey(
+      sub2ApiApiKeyIdSchema.parse(id),
+      sub2ApiApiKeyUpdateRequestSchema.parse(request)
+    )
+    return toApiKeySummary(apiKey)
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.deleteApiKey, async (event, id) => {
+    requireTrustedSender(event)
+    await client.deleteApiKey(sub2ApiApiKeyIdSchema.parse(id))
+  })
+  registrar.handle(SUB2API_IPC_CHANNELS.prepareProviderBinding, (event, id) => {
+    requireTrustedSender(event)
+    return client.prepareProviderBinding(sub2ApiApiKeyIdSchema.parse(id))
   })
 }

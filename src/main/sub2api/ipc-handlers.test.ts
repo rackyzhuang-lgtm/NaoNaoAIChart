@@ -30,6 +30,31 @@ describe('registerSub2ApiHandlers', () => {
       logout: vi.fn(async () => undefined),
       getSessionState: vi.fn(() => ({ authenticated: true, user, twoFactorRequired: false })),
       getCurrentUser: vi.fn(async () => user),
+      listApiKeys: vi.fn(async () => ({
+        items: [
+          {
+            id: 7,
+            user_id: 1,
+            key: 'synthetic-user-api-key',
+            name: 'desktop-key',
+            group_id: null,
+            status: 'active' as const,
+            quota: 0,
+            quota_used: 0,
+            expires_at: null,
+            created_at: '2026-08-06T00:00:00Z',
+            updated_at: '2026-08-06T00:00:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 100,
+        pages: 1,
+      })),
+      createApiKey: vi.fn(),
+      updateApiKey: vi.fn(),
+      deleteApiKey: vi.fn(),
+      prepareProviderBinding: vi.fn(),
     } as unknown as Sub2ApiClient
 
     registerSub2ApiHandlers(client, registrar, () => true)
@@ -43,6 +68,10 @@ describe('registerSub2ApiHandlers', () => {
       }
     )
     expect(JSON.stringify(loginResult)).not.toMatch(/accessToken|refreshToken|access_token|refresh_token/)
+
+    const keyPage = await handlers.get(SUB2API_IPC_CHANNELS.listApiKeys)?.({})
+    expect(keyPage).toMatchObject({ items: [{ key_hint: 'synthe...-key' }] })
+    expect(JSON.stringify(keyPage)).not.toContain('synthetic-user-api-key')
   })
 
   it('rejects a remote sender before invoking the client', () => {
@@ -59,6 +88,11 @@ describe('registerSub2ApiHandlers', () => {
       logout: vi.fn(),
       getSessionState: vi.fn(),
       getCurrentUser: vi.fn(),
+      listApiKeys: vi.fn(),
+      createApiKey: vi.fn(),
+      updateApiKey: vi.fn(),
+      deleteApiKey: vi.fn(),
+      prepareProviderBinding: vi.fn(),
     } as unknown as Sub2ApiClient
 
     registerSub2ApiHandlers(client, registrar, (event) => event.senderFrame?.url.startsWith('file:') === true)

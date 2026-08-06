@@ -1,19 +1,30 @@
 import type { z } from 'zod'
 import {
   SUB2API_ROUTES,
+  type Sub2ApiApiKeyCreateRequest,
+  type Sub2ApiApiKeyPage,
+  type Sub2ApiApiKeyUpdateRequest,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
+  type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
   type Sub2ApiUser,
+  sub2ApiApiKeyCreateRequestSchema,
+  sub2ApiApiKeyDeleteResponseSchema,
+  sub2ApiApiKeyPageSchema,
+  sub2ApiApiKeySchema,
+  sub2ApiApiKeyUpdateRequestSchema,
   sub2ApiAuthResponseSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
+  sub2ApiModelsResponseSchema,
+  sub2ApiProviderBindingSchema,
   sub2ApiPublicSettingsSchema,
   sub2ApiRefreshResponseSchema,
   sub2ApiUserSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
-import { buildSub2ApiPanelUrl } from '../../shared/sub2api/url'
+import { buildSub2ApiGatewayUrl, buildSub2ApiPanelUrl, SUB2API_GATEWAY_BASE_URL } from '../../shared/sub2api/url'
 import { Sub2ApiSession } from './session'
 
 type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -106,6 +117,57 @@ export class Sub2ApiClient {
     }
     this.session.setUser(user)
     return user
+  }
+
+  async listApiKeys(): Promise<Sub2ApiApiKeyPage> {
+    const { data } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}?page=1&page_size=100`,
+      { method: 'GET' },
+      sub2ApiApiKeyPageSchema
+    )
+    return data
+  }
+
+  async createApiKey(request: Sub2ApiApiKeyCreateRequest) {
+    const parsedRequest = sub2ApiApiKeyCreateRequestSchema.parse(request)
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.apiKeys,
+      { method: 'POST', body: JSON.stringify(parsedRequest) },
+      sub2ApiApiKeySchema
+    )
+    return data
+  }
+
+  async updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest) {
+    const parsedRequest = sub2ApiApiKeyUpdateRequestSchema.parse(request)
+    const { data } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}/${id}`,
+      { method: 'PUT', body: JSON.stringify(parsedRequest) },
+      sub2ApiApiKeySchema
+    )
+    return data
+  }
+
+  async deleteApiKey(id: number): Promise<void> {
+    await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}/${id}`,
+      { method: 'DELETE' },
+      sub2ApiApiKeyDeleteResponseSchema
+    )
+  }
+
+  async prepareProviderBinding(id: number): Promise<Sub2ApiProviderBinding> {
+    const { data: apiKey } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}/${id}`,
+      { method: 'GET' },
+      sub2ApiApiKeySchema
+    )
+    const modelsResponse = await this.requestGatewayModels(apiKey.key)
+    return sub2ApiProviderBindingSchema.parse({
+      apiKey: apiKey.key,
+      apiHost: SUB2API_GATEWAY_BASE_URL.replace(/\/$/, ''),
+      models: modelsResponse.data,
+    })
   }
 
   async logout(): Promise<void> {
@@ -235,6 +297,33 @@ export class Sub2ApiClient {
         throw error
       }
       throw new Sub2ApiError('Unable to reach sub2api', 'NETWORK_ERROR')
+    }
+  }
+
+  private async requestGatewayModels(apiKey: string) {
+    try {
+      const response = await this.fetchImplementation(buildSub2ApiGatewayUrl(SUB2API_ROUTES.models), {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
+      if (!response.ok) {
+        throw new Sub2ApiError('Unable to load models from sub2api', 'GATEWAY_ERROR', response.status)
+      }
+      const payload = await readJson(response)
+      const parsed = sub2ApiModelsResponseSchema.safeParse(payload)
+      if (!parsed.success) {
+        throw new Sub2ApiContractError()
+      }
+      return parsed.data
+    } catch (error) {
+      if (error instanceof Sub2ApiError || error instanceof Sub2ApiContractError) {
+        throw error
+      }
+      throw new Sub2ApiError('Unable to reach sub2api model gateway', 'NETWORK_ERROR')
     }
   }
 

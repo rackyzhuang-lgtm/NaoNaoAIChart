@@ -43,6 +43,7 @@ import { registerOAuthHandlers } from './oauth'
 import * as proxy from './proxy'
 import { runRipgrepSearch } from './ripgrep-search'
 import { registerSandboxHandlers } from './sandbox'
+import { isAllowedExternalUrl } from './security/external-links'
 import { registerSkillsHandlers } from './skills'
 import {
   delStoreBlob,
@@ -415,8 +416,12 @@ async function createWindow() {
     icon: getAssetPath('icon.png'),
     webPreferences: {
       spellcheck: true,
-      webSecurity: false, // 其中一个作用是解决跨域问题
+      webSecurity: true,
       allowRunningInsecureContent: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
       preload: app.isPackaged
         ? path.join(__dirname, '../preload/index.js')
         : path.join(__dirname, '../../out/preload/index.js'),
@@ -497,7 +502,11 @@ async function createWindow() {
 
   // Open urls in the user's browser
   mainWindow.webContents.setWindowOpenHandler((edata) => {
-    shell.openExternal(edata.url)
+    if (isAllowedExternalUrl(edata.url)) {
+      void shell.openExternal(edata.url)
+    } else {
+      log.warn('[Security] Blocked unsafe external URL')
+    }
     return { action: 'deny' }
   })
 
@@ -783,6 +792,9 @@ ipcMain.handle('getLocale', () => {
   }
 })
 ipcMain.handle('openLink', (event, link) => {
+  if (typeof link !== 'string' || !isAllowedExternalUrl(link)) {
+    throw new Error('External URL is not allowed')
+  }
   return shell.openExternal(link)
 })
 ipcMain.handle('window:is-focused', () => {

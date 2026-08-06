@@ -1,6 +1,7 @@
 // Disable no-unused-vars, broken for spread args
 /* eslint no-unused-vars: off */
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { assertRendererInvokeChannel } from 'src/shared/electron-ipc-channels'
 import type { ElectronIPC } from 'src/shared/electron-types'
 import { SUB2API_IPC_CHANNELS } from 'src/shared/sub2api/ipc'
 
@@ -15,7 +16,10 @@ function createListener<T extends unknown[]>(channel: string) {
 }
 
 const electronHandler: ElectronIPC = {
-  invoke: ipcRenderer.invoke,
+  invoke: (channel, ...args) => {
+    assertRendererInvokeChannel(channel)
+    return ipcRenderer.invoke(channel, ...args)
+  },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onSystemThemeChange: (callback: () => void) => {
     ipcRenderer.on('system-theme-updated', callback)
@@ -57,6 +61,11 @@ const electronHandler: ElectronIPC = {
     logout: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.logout),
     getSessionState: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getSessionState),
     getCurrentUser: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getCurrentUser),
+    listApiKeys: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.listApiKeys),
+    createApiKey: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.createApiKey, request),
+    updateApiKey: (id, request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.updateApiKey, id, request),
+    deleteApiKey: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.deleteApiKey, id),
+    prepareProviderBinding: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareProviderBinding, id),
   },
 
   // Auto-updater events

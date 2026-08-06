@@ -13,6 +13,7 @@ import {
   IconKeyboard,
   IconMessages,
   IconSparkles,
+  IconUserCircle,
   IconWand,
   IconWorldWww,
 } from '@tabler/icons-react'
@@ -29,6 +30,15 @@ import platform from '@/platform'
 import { featureFlags } from '@/utils/feature-flags'
 
 const ITEMS = [
+  ...(platform.type === 'desktop'
+    ? [
+        {
+          key: 'account',
+          label: 'NaoNaoAI Account',
+          icon: <IconUserCircle className="w-full h-full" />,
+        },
+      ]
+    : []),
   {
     key: 'chatbox-ai',
     label: 'Chatbox AI',

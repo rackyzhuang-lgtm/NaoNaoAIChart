@@ -1,6 +1,11 @@
 import type {
+  Sub2ApiApiKeyCreateRequest,
+  Sub2ApiApiKeyPageSummary,
+  Sub2ApiApiKeySummary,
+  Sub2ApiApiKeyUpdateRequest,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
+  Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
   Sub2ApiSessionState,
   Sub2ApiUser,
@@ -13,6 +18,11 @@ export const SUB2API_IPC_CHANNELS = {
   logout: 'sub2api:logout',
   getSessionState: 'sub2api:get-session-state',
   getCurrentUser: 'sub2api:get-current-user',
+  listApiKeys: 'sub2api:list-api-keys',
+  createApiKey: 'sub2api:create-api-key',
+  updateApiKey: 'sub2api:update-api-key',
+  deleteApiKey: 'sub2api:delete-api-key',
+  prepareProviderBinding: 'sub2api:prepare-provider-binding',
 } as const
 
 export interface Sub2ApiRendererApi {
@@ -22,4 +32,9 @@ export interface Sub2ApiRendererApi {
   logout(): Promise<void>
   getSessionState(): Promise<Sub2ApiSessionState>
   getCurrentUser(): Promise<Sub2ApiUser>
+  listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
+  createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
+  updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>
+  deleteApiKey(id: number): Promise<void>
+  prepareProviderBinding(id: number): Promise<Sub2ApiProviderBinding>
 }

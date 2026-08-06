@@ -13,6 +13,20 @@ const user = {
   status: 'active',
 }
 
+const apiKeyRecord = {
+  id: 7,
+  user_id: 1,
+  key: 'synthetic-user-api-key',
+  name: 'desktop-key',
+  group_id: null,
+  status: 'active',
+  quota: 0,
+  quota_used: 0,
+  expires_at: null,
+  created_at: '2026-08-06T00:00:00Z',
+  updated_at: '2026-08-06T00:00:00Z',
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -134,6 +148,65 @@ describe('Sub2ApiClient', () => {
 
     await expect(client.logout()).resolves.toBeUndefined()
     expect(client.getSessionState().authenticated).toBe(false)
+  })
+
+  it('uses panel JWT for API key CRUD and the selected user key for model discovery', async () => {
+    const requests: { url: string; method: string; authorization: string | null; body?: unknown }[] = []
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      const method = init?.method || 'GET'
+      const authorization = new Headers(init?.headers).get('Authorization')
+      requests.push({
+        url,
+        method,
+        authorization,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      })
+
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      if (url.includes('/api/v1/keys?page=')) {
+        return Promise.resolve(success({ items: [apiKeyRecord], total: 1, page: 1, page_size: 100, pages: 1 }))
+      }
+      if (url.endsWith('/api/v1/keys') && method === 'POST') {
+        return Promise.resolve(success(apiKeyRecord))
+      }
+      if (url.endsWith('/api/v1/keys/7') && method === 'PUT') {
+        return Promise.resolve(success({ ...apiKeyRecord, name: 'renamed-key' }))
+      }
+      if (url.endsWith('/api/v1/keys/7') && method === 'GET') {
+        return Promise.resolve(success(apiKeyRecord))
+      }
+      if (url.endsWith('/v1/models')) {
+        return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'gpt-test' }, { id: 'codex-test' }] }))
+      }
+      if (url.endsWith('/api/v1/keys/7') && method === 'DELETE') {
+        return Promise.resolve(success({ message: 'deleted' }))
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.listApiKeys()).resolves.toMatchObject({ total: 1, items: [apiKeyRecord] })
+    await expect(client.createApiKey({ name: 'desktop-key' })).resolves.toMatchObject(apiKeyRecord)
+    await expect(client.updateApiKey(7, { name: 'renamed-key' })).resolves.toMatchObject({ name: 'renamed-key' })
+    await expect(client.prepareProviderBinding(7)).resolves.toEqual({
+      apiKey: 'synthetic-user-api-key',
+      apiHost: 'https://naonaoai.shop/v1',
+      models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
+    })
+    await expect(client.deleteApiKey(7)).resolves.toBeUndefined()
+
+    const panelRequests = requests.filter((request) => request.url.includes('/api/v1/keys'))
+    expect(panelRequests.every((request) => request.authorization === 'Bearer panel-access')).toBe(true)
+    expect(requests.find((request) => request.url.endsWith('/v1/models'))?.authorization).toBe(
+      'Bearer synthetic-user-api-key'
+    )
+    expect(requests.find((request) => request.method === 'POST' && request.url.endsWith('/api/v1/keys'))?.body).toEqual(
+      { name: 'desktop-key' }
+    )
   })
 
   it('does not let an old refresh overwrite a newer login', async () => {
