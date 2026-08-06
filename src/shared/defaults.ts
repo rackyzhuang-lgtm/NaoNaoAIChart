@@ -144,7 +144,7 @@ export function settings(): Settings {
         },
       },
       // documentParser is NOT set here - it uses platform-specific defaults
-      // Desktop: 'local', Mobile/Web: 'none'
+      // All platforms use 'local'; see settingsStore.ts for migration behavior.
       // See settingsStore.ts for the platform-aware initialization logic
       documentParser: undefined,
     },

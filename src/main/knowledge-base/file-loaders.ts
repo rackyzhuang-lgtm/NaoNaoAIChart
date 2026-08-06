@@ -323,10 +323,10 @@ async function processPendingFiles() {
       }
 
       // Get effective parser config
-      // When useRemoteParsing is true (user clicked "Retry with server parsing"), force use Chatbox AI parser
-      // This overrides the KB's configured parser to ensure server parsing is used
+      // Legacy remote-parsing flags are handled locally so old records cannot
+      // reactivate the removed upstream service.
       const effectiveParserConfig: DocumentParserConfig = useRemoteParsing
-        ? { type: 'chatbox-ai' }
+        ? { type: 'local' }
         : getEffectiveParserConfig(kbParserConfig)
 
       try {

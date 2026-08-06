@@ -18,11 +18,11 @@ const log = getLogger('settings-store')
 
 /**
  * Returns platform-specific default document parser configuration.
- * - Desktop: 'local' (has full Node.js environment for local parsing)
- * - Mobile/Web: 'chatbox-ai' (local-first parsing with Chatbox AI cloud fallback)
+ * All platforms use local parsing by default. Legacy cloud-parser settings are
+ * still accepted during migration but are never selected for new installs.
  */
 export function getPlatformDefaultDocumentParser(): DocumentParserConfig {
-  return platform.type === 'desktop' ? { type: 'local' } : { type: 'chatbox-ai' }
+  return { type: 'local' }
 }
 
 type Action = {
@@ -113,7 +113,7 @@ export const settingsStore = createStore<Settings & Action>()(
             case 3:
             case 4:
               if (platform.type !== 'desktop' && settings.extension?.documentParser?.type === 'none') {
-                settings.extension.documentParser.type = 'chatbox-ai'
+                settings.extension.documentParser.type = 'local'
               }
             default:
               break

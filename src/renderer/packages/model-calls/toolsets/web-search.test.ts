@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getExtensionSettingsMock = vi.fn()
 const parseUserLinkProMock = vi.fn()
-const parseUserLinkFreeMock = vi.fn()
 const getParseLinkProviderMock = vi.fn()
 const webSearchExecutorMock = vi.fn()
 
@@ -13,7 +12,6 @@ vi.mock('@/stores/settingActions', () => ({
 
 vi.mock('@/packages/remote', () => ({
   parseUserLinkPro: (...args: unknown[]) => parseUserLinkProMock(...args),
-  parseUserLinkFree: (...args: unknown[]) => parseUserLinkFreeMock(...args),
 }))
 
 vi.mock('@/packages/web-search', () => ({
@@ -66,7 +64,6 @@ describe('parseLinkTool', () => {
   beforeEach(() => {
     getExtensionSettingsMock.mockReset()
     parseUserLinkProMock.mockReset()
-    parseUserLinkFreeMock.mockReset()
     getParseLinkProviderMock.mockReset()
   })
 
@@ -96,7 +93,6 @@ describe('parseLinkTool', () => {
       detail: { name: 'parse_link_not_supported' },
     })
     expect(parseUserLinkProMock).not.toHaveBeenCalled()
-    expect(parseUserLinkFreeMock).not.toHaveBeenCalled()
   })
 
   describe('third-party provider', () => {

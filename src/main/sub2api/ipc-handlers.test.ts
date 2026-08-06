@@ -1,5 +1,6 @@
 import type { ipcMain } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
+import { Sub2ApiError } from '../../shared/sub2api/errors'
 import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
 import type { Sub2ApiClient } from './client'
 import { registerSub2ApiHandlers } from './ipc-handlers'
@@ -101,7 +102,7 @@ describe('registerSub2ApiHandlers', () => {
     expect(JSON.stringify(history)).not.toContain('secret-code')
   })
 
-  it('rejects a remote sender before invoking the client', () => {
+  it('rejects a remote sender before invoking the client', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const registrar = {
       handle: vi.fn((channel: string, listener: Parameters<typeof ipcMain.handle>[1]) =>
@@ -138,12 +139,34 @@ describe('registerSub2ApiHandlers', () => {
 
     registerSub2ApiHandlers(client, registrar, (event) => event.senderFrame?.url.startsWith('file:') === true)
 
-    expect(() =>
+    await expect(
       handlers.get(SUB2API_IPC_CHANNELS.login)?.(
         { senderFrame: { url: 'https://untrusted.example' } },
         { email: 'user@example.test', password: 'synthetic-password' }
       )
-    ).toThrow('untrusted renderer')
+    ).rejects.toThrow('untrusted renderer')
     expect(client.login).not.toHaveBeenCalled()
+  })
+
+  it('serializes only the safe error descriptor for renderer callers', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const registrar = {
+      handle: vi.fn((channel: string, listener: Parameters<typeof ipcMain.handle>[1]) =>
+        handlers.set(channel, listener as (...args: unknown[]) => unknown)
+      ),
+    }
+    const client = {
+      getPublicSettings: vi.fn(() => {
+        throw new Sub2ApiError('secret upstream response', 'RATE_LIMIT', 429, 'internal', 5)
+      }),
+    } as unknown as Sub2ApiClient
+    registerSub2ApiHandlers(client, registrar, () => true)
+
+    await expect(handlers.get(SUB2API_IPC_CHANNELS.getPublicSettings)?.({})).rejects.toThrow(
+      '__NAONAO_SUB2API_ERROR__{"kind":"rate_limited","status":429,"retryAfterSeconds":5}'
+    )
+    await expect(handlers.get(SUB2API_IPC_CHANNELS.getPublicSettings)?.({})).rejects.not.toThrow(
+      'secret upstream response'
+    )
   })
 })

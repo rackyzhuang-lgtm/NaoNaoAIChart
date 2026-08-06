@@ -18,6 +18,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import type { Sub2ApiPublicSettings, Sub2ApiUser } from '@shared/sub2api/contracts'
+import { parseSub2ApiIpcError, type Sub2ApiErrorDescriptor } from '@shared/sub2api/errors'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
 import {
   IconAlertCircle,
@@ -27,6 +28,7 @@ import {
   IconShieldLock,
   IconUserCircle,
 } from '@tabler/icons-react'
+import type { TFunction } from 'i18next'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -43,15 +45,29 @@ interface Props {
   api?: Sub2ApiRendererApi
 }
 
-function getSafeErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof Error)) {
-    return fallback
+function getRecoveryErrorMessage(descriptor: Sub2ApiErrorDescriptor | null, t: TFunction, fallback: string): string {
+  switch (descriptor?.kind) {
+    case 'session_expired':
+      return String(t('Your session expired. Please sign in again.'))
+    case 'network':
+      return String(t('Unable to connect to the account service. Check your network and try again.'))
+    case 'timeout':
+      return String(t('The account service timed out. Try again.'))
+    case 'rate_limited':
+      return String(t('Too many requests. Wait a moment and try again.'))
+    case 'feature_unavailable':
+      return String(t('This account feature is not available on the service.'))
+    case 'invalid_response':
+      return String(t('The account service returned an invalid response. Try again.'))
+    case 'service_error':
+      return String(t('The account service is temporarily unavailable. Try again.'))
+    default:
+      return fallback
   }
-  const message = error.message
-    .replace(/^Error invoking remote method '[^']+': Error: /, '')
-    .replace(/^Error: /, '')
-    .trim()
-  return message ? message.slice(0, 240) : fallback
+}
+
+function getSafeErrorMessage(error: unknown, t: TFunction, fallback: string): string {
+  return getRecoveryErrorMessage(parseSub2ApiIpcError(error), t, fallback)
 }
 
 export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2api }: Props) {
@@ -66,22 +82,59 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const handleApiFailure = useCallback(
+    (caught: unknown) => {
+      const descriptor = parseSub2ApiIpcError(caught)
+      if (!descriptor) {
+        return
+      }
+      if (descriptor.kind === 'session_expired') {
+        setUser(null)
+        setError(null)
+        setNotice(t('Your session expired. Please sign in again.'))
+        setPhase('signed_out')
+        return
+      }
+      setError(getRecoveryErrorMessage(descriptor, t, t('Unable to load account status.')))
+    },
+    [t]
+  )
+
+  const accountApi = useMemo(() => {
+    if (!api) {
+      return undefined
+    }
+    return new Proxy(api, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver)
+        if (typeof value !== 'function') {
+          return value
+        }
+        return (...args: unknown[]) =>
+          Promise.resolve(value.apply(target, args)).catch((caught: unknown) => {
+            handleApiFailure(caught)
+            throw caught
+          })
+      },
+    })
+  }, [api, handleApiFailure])
+
   const verificationUnsupported = useMemo(
     () => Boolean(publicSettings?.turnstile_enabled || publicSettings?.tencent_captcha_enabled),
     [publicSettings]
   )
 
   const loadAccount = useCallback(async () => {
-    if (!api) {
+    if (!accountApi) {
       setError(t('Account service is available in the desktop app only.'))
       setPhase('error')
       return
     }
 
     setError(null)
-    setPhase('loading')
+    setPhase((current) => (current === 'signed_in' ? current : 'loading'))
     try {
-      const [settings, session] = await Promise.all([api.getPublicSettings(), api.getSessionState()])
+      const [settings, session] = await Promise.all([accountApi.getPublicSettings(), accountApi.getSessionState()])
       setPublicSettings(settings)
 
       if (session.twoFactorRequired) {
@@ -95,11 +148,14 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       }
 
       try {
-        const currentUser = await api.getCurrentUser()
+        const currentUser = await accountApi.getCurrentUser()
         setUser(currentUser)
         setPhase('signed_in')
       } catch (currentUserError) {
-        const latestSession = await api.getSessionState()
+        if (parseSub2ApiIpcError(currentUserError)?.kind === 'session_expired') {
+          return
+        }
+        const latestSession = await accountApi.getSessionState()
         if (!latestSession.authenticated) {
           setUser(null)
           setNotice(t('Your session expired. Please sign in again.'))
@@ -109,10 +165,13 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
         throw currentUserError
       }
     } catch (loadError) {
-      setError(getSafeErrorMessage(loadError, t('Unable to load account status.')))
-      setPhase('error')
+      if (parseSub2ApiIpcError(loadError)?.kind === 'session_expired') {
+        return
+      }
+      setError(getSafeErrorMessage(loadError, t, t('Unable to load account status.')))
+      setPhase((current) => (current === 'signed_in' ? current : 'error'))
     }
-  }, [api, t])
+  }, [accountApi, t])
 
   useEffect(() => {
     void loadAccount()
@@ -120,14 +179,14 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault()
-    if (!api || verificationUnsupported || busy) {
+    if (!accountApi || verificationUnsupported || busy) {
       return
     }
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
-      const result = await api.login({ email: email.trim(), password })
+      const result = await accountApi.login({ email: email.trim(), password })
       setPassword('')
       if (result.status === 'two_factor_required') {
         setPhase('two_factor')
@@ -136,7 +195,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
         setPhase('signed_in')
       }
     } catch (loginError) {
-      setError(getSafeErrorMessage(loginError, t('Unable to sign in. Check your email and password.')))
+      setError(getSafeErrorMessage(loginError, t, t('Unable to sign in. Check your email and password.')))
     } finally {
       setBusy(false)
     }
@@ -144,32 +203,32 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
 
   const handleTwoFactor = async (event: FormEvent) => {
     event.preventDefault()
-    if (!api || !/^\d{6}$/.test(totpCode) || busy) {
+    if (!accountApi || !/^\d{6}$/.test(totpCode) || busy) {
       return
     }
     setBusy(true)
     setError(null)
     try {
-      const result = await api.completeTwoFactor(totpCode)
+      const result = await accountApi.completeTwoFactor(totpCode)
       if (result.status === 'authenticated') {
         setTotpCode('')
         setUser(result.user)
         setPhase('signed_in')
       }
     } catch (twoFactorError) {
-      setError(getSafeErrorMessage(twoFactorError, t('Unable to verify the code right now. Please try again.')))
+      setError(getSafeErrorMessage(twoFactorError, t, t('Unable to verify the code right now. Please try again.')))
     } finally {
       setBusy(false)
     }
   }
 
   const returnToLogin = async () => {
-    if (!api || busy) {
+    if (!accountApi || busy) {
       return
     }
     setBusy(true)
     try {
-      await api.logout()
+      await accountApi.logout()
       setTotpCode('')
       setError(null)
       setPhase('signed_out')
@@ -179,17 +238,17 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   }
 
   const handleLogout = async () => {
-    if (!api || busy) {
+    if (!accountApi || busy) {
       return
     }
     setBusy(true)
     setError(null)
     try {
-      await api.logout()
+      await accountApi.logout()
       setUser(null)
       setPhase('signed_out')
     } catch (logoutError) {
-      setError(getSafeErrorMessage(logoutError, t('Unable to sign out. Please try again.')))
+      setError(getSafeErrorMessage(logoutError, t, t('Unable to sign out. Please try again.')))
     } finally {
       setBusy(false)
     }
@@ -318,7 +377,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
         </Stack>
       )}
 
-      {phase === 'signed_in' && user && api && (
+      {phase === 'signed_in' && user && accountApi && (
         <Stack gap="lg">
           {error && (
             <Alert icon={<IconAlertCircle size={18} />} color="red">
@@ -366,21 +425,21 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
           </SimpleGrid>
 
           <Divider />
-          <Sub2ApiUsageSummary api={api} />
+          <Sub2ApiUsageSummary api={accountApi} />
           <Divider />
           <Sub2ApiChannelMonitors
-            api={api}
+            api={accountApi}
             availableChannelsEnabled={publicSettings?.available_channels_enabled}
             channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
           />
           <Divider />
-          <Sub2ApiModelPlaza api={api} enabled={publicSettings?.model_plaza_enabled} />
+          <Sub2ApiModelPlaza api={accountApi} enabled={publicSettings?.model_plaza_enabled} />
           <Divider />
-          <Sub2ApiAnnouncements api={api} />
+          <Sub2ApiAnnouncements api={accountApi} />
           <Divider />
-          <Sub2ApiRedeem api={api} user={user} onUserChange={setUser} />
+          <Sub2ApiRedeem api={accountApi} user={user} onUserChange={setUser} />
           <Divider />
-          <Sub2ApiKeySettings api={api} />
+          <Sub2ApiKeySettings api={accountApi} />
           <Divider />
           <Button
             variant="light"

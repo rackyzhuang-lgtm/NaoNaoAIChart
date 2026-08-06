@@ -517,24 +517,6 @@ export async function parseUserLinkPro(params: { licenseKey: string; url: string
   }
 }
 
-export async function parseUserLinkFree(params: { url: string }) {
-  type Response = {
-    title: string
-    text: string
-  }
-  const afetch = await getAfetch()
-  const res = await afetch(`https://cors-proxy.chatboxai.app/api/fetch-webpage`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await getChatboxHeaders()),
-    },
-    body: JSON.stringify(params),
-  })
-  const json: Response = await res.json()
-  return json
-}
-
 /**
  * Request seam for the Chatbox `build-in` web search provider. Mirrors
  * `getLicenseRequestOptions`: injects an afetch `fetchFn` (Chatbox error parsing + retry),

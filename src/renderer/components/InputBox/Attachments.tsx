@@ -20,7 +20,7 @@ import { ImageInStorage } from '../Image'
 function getTranslatedErrorMessage(errorCode: string | undefined, t: (key: string) => string): string | undefined {
   if (!errorCode) return undefined
   if (isSessionAttachmentRagAuthError(errorCode)) {
-    return t('This large file needs Chatbox AI to finish indexing. Sign in to Chatbox AI, then retry this file.')
+    return t('This large file needs server-side indexing. Retry the file or use Knowledge Base instead.')
   }
   if (isSessionAttachmentRagIndexingError(errorCode)) {
     return t(
@@ -249,7 +249,7 @@ export function getParserDisplayName(
     case 'local':
       return t('Parser: Local')
     case 'chatbox-ai':
-      return t('Parser: {{parser}}', { parser: 'Chatbox AI' })
+      return t('Parser: Local')
     case 'mineru':
       return t('Parser: {{parser}}', { parser: 'MinerU' })
     default:

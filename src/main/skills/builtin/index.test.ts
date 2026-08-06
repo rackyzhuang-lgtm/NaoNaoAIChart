@@ -3,26 +3,7 @@ import { builtinSkills } from './index'
 
 describe('builtinSkills', () => {
   it('only includes practical built-in skills', () => {
-    expect(builtinSkills.map((item) => item.metadata.name)).toEqual([
-      'data-analysis',
-      'chatbox-product-info',
-      'vibedrop',
-      'frontend-design',
-    ])
-  })
-
-  it('includes Chatbox product information skill', () => {
-    const skill = builtinSkills.find((item) => item.metadata.name === 'chatbox-product-info')
-
-    expect(skill).toBeDefined()
-    expect(skill?.metadata.description).toContain('pricing')
-    expect(skill?.body).toContain('https://chatboxai.app/llms.txt')
-    expect(skill?.body).toContain('https://chatboxai.app/pricing.md')
-    expect(skill?.body).toContain('["settings", "get", "<key>"]')
-    expect(skill?.body).not.toContain('["settings", "set"')
-    expect(skill?.body).toContain('guide the user to change it manually')
-    expect(skill?.body).toContain('["chats", "read", "<session-id>"]')
-    expect(skill?.body).toContain('automated user-role notification')
+    expect(builtinSkills.map((item) => item.metadata.name)).toEqual(['data-analysis', 'vibedrop', 'frontend-design'])
   })
 
   it('keeps data analysis aligned with the sandbox harness', () => {

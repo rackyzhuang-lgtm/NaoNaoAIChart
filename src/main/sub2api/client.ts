@@ -70,6 +70,31 @@ interface PanelEnvelope {
 
 const REQUEST_TIMEOUT_MS = 30_000
 
+function isTimeoutError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  )
+}
+
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After')
+  if (!value) {
+    return undefined
+  }
+  const seconds = Number(value)
+  if (Number.isInteger(seconds) && seconds >= 0) {
+    return Math.min(seconds, 86_400)
+  }
+  const retryAt = Date.parse(value)
+  if (Number.isNaN(retryAt)) {
+    return undefined
+  }
+  return Math.min(Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)), 86_400)
+}
+
 function isPanelEnvelope(value: unknown): value is PanelEnvelope {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -383,17 +408,16 @@ export class Sub2ApiClient {
       }
       if (!refreshAllowed) {
         this.session.clearIfCredentialGeneration(generation)
-        await this.parsePanelResponse(response, schema)
-        throw new Sub2ApiContractError()
+        throw new Sub2ApiError('Session expired', 'SESSION_EXPIRED', 401)
       }
 
       try {
         await this.refreshSession()
         refreshAllowed = false
-      } catch (error) {
+      } catch {
         const currentAccessToken = this.session.getAccessToken()
         if (!currentAccessToken || this.session.isCredentialGeneration(generation)) {
-          throw error
+          throw new Sub2ApiError('Session expired', 'SESSION_EXPIRED', 401)
         }
         refreshAllowed = true
       }
@@ -458,6 +482,9 @@ export class Sub2ApiClient {
       if (error instanceof Sub2ApiError) {
         throw error
       }
+      if (isTimeoutError(error)) {
+        throw new Sub2ApiError('sub2api request timed out', 'TIMEOUT_ERROR')
+      }
       throw new Sub2ApiError('Unable to reach sub2api', 'NETWORK_ERROR')
     }
   }
@@ -485,6 +512,9 @@ export class Sub2ApiClient {
       if (error instanceof Sub2ApiError || error instanceof Sub2ApiContractError) {
         throw error
       }
+      if (isTimeoutError(error)) {
+        throw new Sub2ApiError('sub2api model gateway request timed out', 'TIMEOUT_ERROR')
+      }
       throw new Sub2ApiError('Unable to reach sub2api model gateway', 'NETWORK_ERROR')
     }
   }
@@ -500,7 +530,8 @@ export class Sub2ApiClient {
         typeof payload.message === 'string' && payload.message ? payload.message : 'sub2api request failed',
         payload.code ?? response.status,
         response.status,
-        typeof payload.reason === 'string' ? payload.reason : undefined
+        typeof payload.reason === 'string' ? payload.reason : undefined,
+        response.status === 429 ? readRetryAfterSeconds(response) : undefined
       )
     }
 

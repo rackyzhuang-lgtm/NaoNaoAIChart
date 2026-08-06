@@ -12,6 +12,7 @@ import {
   sub2ApiUsageErrorIdSchema,
   sub2ApiUsagePageRequestSchema,
 } from '../../shared/sub2api/contracts'
+import { Sub2ApiError, serializeSub2ApiError } from '../../shared/sub2api/errors'
 import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
 import { type Sub2ApiClient, sub2ApiClient } from './client'
 
@@ -57,88 +58,101 @@ export function registerSub2ApiHandlers(
     }
   }
 
-  registrar.handle(SUB2API_IPC_CHANNELS.getPublicSettings, (event) => {
+  const registerHandler = (channel: string, listener: IpcMainHandler): void => {
+    registrar.handle(channel, async (event, ...args) => {
+      try {
+        return await listener(event, ...args)
+      } catch (error) {
+        if (error instanceof Sub2ApiError) {
+          throw new Error(serializeSub2ApiError(error))
+        }
+        throw error
+      }
+    })
+  }
+
+  registerHandler(SUB2API_IPC_CHANNELS.getPublicSettings, (event) => {
     requireTrustedSender(event)
     return client.getPublicSettings()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.login, (event, request) => {
+  registerHandler(SUB2API_IPC_CHANNELS.login, (event, request) => {
     requireTrustedSender(event)
     return client.login(sub2ApiLoginRequestSchema.parse(request))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.completeTwoFactor, (event, code) => {
+  registerHandler(SUB2API_IPC_CHANNELS.completeTwoFactor, (event, code) => {
     requireTrustedSender(event)
     return client.completeTwoFactor(sub2ApiTotpCodeSchema.parse(code))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.logout, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.logout, (event) => {
     requireTrustedSender(event)
     return client.logout()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getSessionState, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getSessionState, (event) => {
     requireTrustedSender(event)
     return client.getSessionState()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getCurrentUser, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getCurrentUser, (event) => {
     requireTrustedSender(event)
     return client.getCurrentUser()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardStats, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageDashboardStats, (event) => {
     requireTrustedSender(event)
     return client.getUsageDashboardStats()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardTrend, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageDashboardTrend, (event) => {
     requireTrustedSender(event)
     return client.getUsageDashboardTrend()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageDashboardModels, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageDashboardModels, (event) => {
     requireTrustedSender(event)
     return client.getUsageDashboardModels()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageRecords, (event, page) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageRecords, (event, page) => {
     requireTrustedSender(event)
     return client.getUsageRecords(sub2ApiUsagePageRequestSchema.parse(page))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageErrors, (event, page) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageErrors, (event, page) => {
     requireTrustedSender(event)
     return client.getUsageErrors(sub2ApiUsagePageRequestSchema.parse(page))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getUsageErrorDetail, (event, id) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getUsageErrorDetail, (event, id) => {
     requireTrustedSender(event)
     return client.getUsageErrorDetail(sub2ApiUsageErrorIdSchema.parse(id))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.redeemCode, (event, request) => {
+  registerHandler(SUB2API_IPC_CHANNELS.redeemCode, (event, request) => {
     requireTrustedSender(event)
     return client.redeemCode(sub2ApiRedeemCodeRequestSchema.parse(request))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getRedeemHistory, async (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getRedeemHistory, async (event) => {
     requireTrustedSender(event)
     const history = await client.getRedeemHistory()
     return history.map(toRedeemHistorySummary)
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getSubscriptionSummary, (event) => {
     requireTrustedSender(event)
     return client.getSubscriptionSummary()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getPlatformQuotas, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getPlatformQuotas, (event) => {
     requireTrustedSender(event)
     return client.getPlatformQuotas()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getChannelMonitors, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getChannelMonitors, (event) => {
     requireTrustedSender(event)
     return client.getChannelMonitors()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getModelPlaza, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getModelPlaza, (event) => {
     requireTrustedSender(event)
     return client.getModelPlaza()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.getAnnouncements, (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.getAnnouncements, (event) => {
     requireTrustedSender(event)
     return client.getAnnouncements()
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.markAnnouncementRead, (event, id) => {
+  registerHandler(SUB2API_IPC_CHANNELS.markAnnouncementRead, (event, id) => {
     requireTrustedSender(event)
     return client.markAnnouncementRead(sub2ApiAnnouncementIdSchema.parse(id))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
+  registerHandler(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
     requireTrustedSender(event)
     const page = await client.listApiKeys()
     return {
@@ -146,12 +160,12 @@ export function registerSub2ApiHandlers(
       items: page.items.map(toApiKeySummary),
     }
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.createApiKey, async (event, request) => {
+  registerHandler(SUB2API_IPC_CHANNELS.createApiKey, async (event, request) => {
     requireTrustedSender(event)
     const apiKey = await client.createApiKey(sub2ApiApiKeyCreateRequestSchema.parse(request))
     return toApiKeySummary(apiKey)
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.updateApiKey, async (event, id, request) => {
+  registerHandler(SUB2API_IPC_CHANNELS.updateApiKey, async (event, id, request) => {
     requireTrustedSender(event)
     const apiKey = await client.updateApiKey(
       sub2ApiApiKeyIdSchema.parse(id),
@@ -159,11 +173,11 @@ export function registerSub2ApiHandlers(
     )
     return toApiKeySummary(apiKey)
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.deleteApiKey, async (event, id) => {
+  registerHandler(SUB2API_IPC_CHANNELS.deleteApiKey, async (event, id) => {
     requireTrustedSender(event)
     await client.deleteApiKey(sub2ApiApiKeyIdSchema.parse(id))
   })
-  registrar.handle(SUB2API_IPC_CHANNELS.prepareProviderBinding, (event, id) => {
+  registerHandler(SUB2API_IPC_CHANNELS.prepareProviderBinding, (event, id) => {
     requireTrustedSender(event)
     return client.prepareProviderBinding(sub2ApiApiKeyIdSchema.parse(id))
   })

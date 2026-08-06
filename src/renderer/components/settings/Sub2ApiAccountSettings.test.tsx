@@ -153,4 +153,19 @@ describe('Sub2ApiAccountSettings', () => {
     await waitFor(() => expect(getSessionState).toHaveBeenCalledTimes(2))
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
   })
+
+  test('keeps the signed-in user visible when an account request is rate limited', async () => {
+    const rateLimitError = new Error(
+      '__NAONAO_SUB2API_ERROR__{"kind":"rate_limited","status":429,"retryAfterSeconds":4}'
+    )
+    const api = createApi({
+      getSessionState: vi.fn().mockResolvedValue({ authenticated: true, user, twoFactorRequired: false }),
+      getUsageDashboardStats: vi.fn().mockRejectedValue(rateLimitError),
+    })
+    renderAccount(api)
+
+    expect(await screen.findByText('desktop-user')).toBeTruthy()
+    expect(await screen.findByText('Too many requests. Wait a moment and try again.')).toBeTruthy()
+    expect(screen.getAllByText('user@example.com').length).toBeGreaterThan(0)
+  })
 })

@@ -49,6 +49,37 @@ function authSuccess(accessToken = 'access-token', refreshToken = 'refresh-token
 }
 
 describe('Sub2ApiClient', () => {
+  it('classifies timeout, rate-limit, and unavailable-feature responses', async () => {
+    const timeoutClient = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(() => {
+        throw new DOMException('timed out', 'TimeoutError')
+      })
+    )
+    await expect(timeoutClient.getPublicSettings()).rejects.toMatchObject({ code: 'TIMEOUT_ERROR' })
+
+    const rateLimitedClient = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 'RATE_LIMIT', message: 'too many requests' }), {
+            status: 429,
+            headers: { 'Retry-After': '7' },
+          })
+      )
+    )
+    await expect(rateLimitedClient.getPublicSettings()).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 7,
+    })
+
+    const unavailableClient = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(async () => new Response(JSON.stringify({ code: 'DISABLED' }), { status: 403 }))
+    )
+    await expect(unavailableClient.getPublicSettings()).rejects.toMatchObject({ status: 403 })
+  })
+
   it('stores login tokens in main-process session state without returning them', async () => {
     const fetchImplementation = vi.fn(async () => authSuccess())
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
