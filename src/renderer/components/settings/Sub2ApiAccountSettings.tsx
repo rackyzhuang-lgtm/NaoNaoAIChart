@@ -30,6 +30,7 @@ import {
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import Sub2ApiChannelMonitors from './Sub2ApiChannelMonitors'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
 import Sub2ApiRedeem from './Sub2ApiRedeem'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
@@ -364,6 +365,12 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
 
           <Divider />
           <Sub2ApiUsageSummary api={api} />
+          <Divider />
+          <Sub2ApiChannelMonitors
+            api={api}
+            availableChannelsEnabled={publicSettings?.available_channels_enabled}
+            channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
+          />
           <Divider />
           <Sub2ApiRedeem api={api} user={user} onUserChange={setUser} />
           <Divider />

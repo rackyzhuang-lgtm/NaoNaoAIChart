@@ -278,6 +278,40 @@ describe('Sub2ApiClient', () => {
     await expect(client.getPlatformQuotas()).resolves.toEqual(platformQuotas)
   })
 
+  it('uses panel JWT for read-only channel monitors', async () => {
+    const channelMonitors = {
+      items: [
+        {
+          id: 2,
+          name: 'GPT stable',
+          provider: 'openai',
+          group_name: '',
+          primary_model: 'gpt-5.6-terra',
+          primary_status: 'operational',
+          primary_latency_ms: 1200,
+          primary_ping_latency_ms: 15,
+          availability_7d: 99.2,
+          timeline: [],
+        },
+      ],
+    }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/channel-monitors')) {
+        return Promise.resolve(success(channelMonitors))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getChannelMonitors()).resolves.toEqual(channelMonitors)
+  })
+
   it('uses panel JWT for read-only trend and model summaries', async () => {
     const trend = { trend: [], start_date: '2026-07-30', end_date: '2026-08-05', granularity: 'day' }
     const models = { models: [], start_date: '2026-07-30', end_date: '2026-08-05' }

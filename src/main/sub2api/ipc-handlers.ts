@@ -121,6 +121,10 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.getPlatformQuotas()
   })
+  registrar.handle(SUB2API_IPC_CHANNELS.getChannelMonitors, (event) => {
+    requireTrustedSender(event)
+    return client.getChannelMonitors()
+  })
   registrar.handle(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
     requireTrustedSender(event)
     const page = await client.listApiKeys()

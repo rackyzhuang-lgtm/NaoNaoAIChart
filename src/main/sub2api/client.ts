@@ -4,6 +4,7 @@ import {
   type Sub2ApiApiKeyCreateRequest,
   type Sub2ApiApiKeyPage,
   type Sub2ApiApiKeyUpdateRequest,
+  type Sub2ApiChannelMonitorResponse,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
   type Sub2ApiPlatformQuotasResponse,
@@ -26,6 +27,7 @@ import {
   sub2ApiApiKeySchema,
   sub2ApiApiKeyUpdateRequestSchema,
   sub2ApiAuthResponseSchema,
+  sub2ApiChannelMonitorResponseSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
   sub2ApiModelsResponseSchema,
@@ -242,6 +244,15 @@ export class Sub2ApiClient {
       SUB2API_ROUTES.platformQuotas,
       { method: 'GET' },
       sub2ApiPlatformQuotasResponseSchema
+    )
+    return data
+  }
+
+  async getChannelMonitors(): Promise<Sub2ApiChannelMonitorResponse> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.channelMonitors,
+      { method: 'GET' },
+      sub2ApiChannelMonitorResponseSchema
     )
     return data
   }

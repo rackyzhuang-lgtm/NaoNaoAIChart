@@ -6,7 +6,7 @@ import { getToolName } from './index'
 
 describe('getToolName', () => {
   it.each([
-    [{ argv: ['version'] }, 'Chatbox Version'],
+    [{ argv: ['version'] }, 'App Version'],
     [{ argv: ['account', 'status'] }, 'Account Status'],
     [{ argv: ['account', 'license'] }, 'License Details'],
     [{ argv: ['account', 'quota'] }, 'Quota Details'],

@@ -3,6 +3,7 @@ import type {
   Sub2ApiApiKeyPageSummary,
   Sub2ApiApiKeySummary,
   Sub2ApiApiKeyUpdateRequest,
+  Sub2ApiChannelMonitorResponse,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
   Sub2ApiPlatformQuotasResponse,
@@ -39,6 +40,7 @@ export const SUB2API_IPC_CHANNELS = {
   getRedeemHistory: 'sub2api:get-redeem-history',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
   getPlatformQuotas: 'sub2api:get-platform-quotas',
+  getChannelMonitors: 'sub2api:get-channel-monitors',
   listApiKeys: 'sub2api:list-api-keys',
   createApiKey: 'sub2api:create-api-key',
   updateApiKey: 'sub2api:update-api-key',
@@ -63,6 +65,7 @@ export interface Sub2ApiRendererApi {
   getRedeemHistory(): Promise<Sub2ApiRedeemHistorySummary[]>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
+  getChannelMonitors(): Promise<Sub2ApiChannelMonitorResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
   createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
   updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>

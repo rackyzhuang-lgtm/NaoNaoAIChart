@@ -184,6 +184,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
         },
       ],
     }),
+    getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),

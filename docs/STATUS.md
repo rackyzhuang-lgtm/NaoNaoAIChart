@@ -218,3 +218,20 @@
 4. 会话过期、断网、限流和服务关闭的恢复体验。
 
 下一步：实现可用渠道或公告等普通用户只读能力；继续清理可达路径中的 Chatbox 网络入口和界面字眼。Electron/Playwright 锁定验证环境、跨平台构建和安全持久化仍待补齐。
+
+## 第十三批：普通用户可用渠道
+
+- 已接入 `GET /api/v1/channel-monitors` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API；只使用面板 JWT。
+- 账户页已展示用户可见渠道的名称、平台、主模型、当前状态、主模型延迟和 7 日可用率，并支持刷新、空态和局部失败态。
+- renderer DTO 使用白名单 schema，未包含令牌、管理员配置、上游账号或原始请求上下文；未实现任何渠道写操作。
+- 同批删除主进程中遗留的 Chatbox 托管技能同步网络实现；内置技能同步固定使用随包种子且测试断言不调用 `fetch`，工具界面的 `Chatbox Version` 已改为 `App Version`。
+- 固定实例只读验证：公开设置返回 `available_channels_enabled=false`、`channel_monitor_enabled=true`；渠道监控接口返回 HTTP 200、`code=0` 和 3 条记录。客户端明确提示渠道选择未开放，同时仍展示只读监控状态；未修改线上数据。
+- 定向 Vitest 9 个文件、56 项通过；TypeScript、变更文件 Biome 和使用 8 GB Node 堆的生产构建通过。Biome 保留 preload 既有 `noExplicitAny` warning；默认堆重建曾在 renderer 分块阶段出现一次 V8 原生崩溃，8 GB 堆未复现；构建仍保留既有依赖 `eval`、循环分块、Browserslist 和大 chunk warning。
+
+当前阶段剩余 MVP 任务（3 项）：
+
+1. 模型广场。
+2. 公告。
+3. 会话过期、断网、限流和服务关闭的恢复体验。
+
+下一步：实现模型广场或公告等普通用户只读能力；继续清理可达路径中的 Chatbox 网络入口和界面字眼。Electron/Playwright 锁定验证环境、跨平台构建和安全持久化仍待补齐。

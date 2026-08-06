@@ -58,6 +58,8 @@ export const sub2ApiPublicSettingsSchema = z
     tencent_captcha_enabled: z.boolean().optional(),
     totp_enabled: z.boolean().optional(),
     backend_mode_enabled: z.boolean().optional(),
+    available_channels_enabled: z.boolean().optional(),
+    channel_monitor_enabled: z.boolean().optional(),
     version: z.string().optional(),
   })
   .passthrough()
@@ -421,6 +423,43 @@ export const sub2ApiPlatformQuotasResponseSchema = z
 
 export type Sub2ApiPlatformQuotasResponse = z.infer<typeof sub2ApiPlatformQuotasResponseSchema>
 
+export const sub2ApiChannelMonitorTimelineItemSchema = z
+  .object({
+    status: z.enum(['operational', 'degraded', 'error', 'unknown']),
+    latency_ms: z.number().nonnegative().nullable().optional(),
+    ping_latency_ms: z.number().nonnegative().nullable().optional(),
+    checked_at: z.string().min(1),
+  })
+  .strip()
+
+export type Sub2ApiChannelMonitorTimelineItem = z.infer<typeof sub2ApiChannelMonitorTimelineItemSchema>
+
+export const sub2ApiChannelMonitorSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string().min(1),
+    provider: z.string().min(1),
+    group_name: z.string(),
+    primary_model: z.string().min(1),
+    primary_status: z.enum(['operational', 'degraded', 'error', 'unknown']),
+    primary_latency_ms: z.number().nonnegative().nullable().optional(),
+    primary_ping_latency_ms: z.number().nonnegative().nullable().optional(),
+    availability_7d: z.number().min(0).max(100).nullable().optional(),
+    extra_models: z.array(z.unknown()).optional(),
+    timeline: z.array(sub2ApiChannelMonitorTimelineItemSchema).optional(),
+  })
+  .strip()
+
+export type Sub2ApiChannelMonitor = z.infer<typeof sub2ApiChannelMonitorSchema>
+
+export const sub2ApiChannelMonitorResponseSchema = z
+  .object({
+    items: z.array(sub2ApiChannelMonitorSchema),
+  })
+  .strip()
+
+export type Sub2ApiChannelMonitorResponse = z.infer<typeof sub2ApiChannelMonitorResponseSchema>
+
 export const sub2ApiSubscriptionSummaryItemSchema = z
   .object({
     id: z.number().int().positive(),
@@ -489,5 +528,6 @@ export const SUB2API_ROUTES = {
   redeemHistory: 'redeem/history',
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
+  channelMonitors: 'channel-monitors',
   models: 'models',
 } as const

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   sub2ApiAuthResponseSchema,
+  sub2ApiChannelMonitorResponseSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiPlatformQuotasResponseSchema,
   sub2ApiRedeemCodeRequestSchema,
@@ -245,5 +246,38 @@ describe('sub2api contracts', () => {
       })
     ).not.toHaveProperty('notes')
     expect(() => sub2ApiRedeemCodeRequestSchema.parse({ code: ' ' })).toThrow()
+  })
+
+  it('validates channel monitor summaries and strips unknown fields', () => {
+    expect(
+      sub2ApiChannelMonitorResponseSchema.parse({
+        items: [
+          {
+            id: 2,
+            name: 'GPT stable',
+            provider: 'openai',
+            group_name: '',
+            primary_model: 'gpt-5.6-terra',
+            primary_status: 'operational',
+            primary_latency_ms: 1200,
+            availability_7d: 99.2,
+            admin_note: 'hidden',
+          },
+        ],
+      })
+    ).toEqual({
+      items: [
+        {
+          id: 2,
+          name: 'GPT stable',
+          provider: 'openai',
+          group_name: '',
+          primary_model: 'gpt-5.6-terra',
+          primary_status: 'operational',
+          primary_latency_ms: 1200,
+          availability_7d: 99.2,
+        },
+      ],
+    })
   })
 })

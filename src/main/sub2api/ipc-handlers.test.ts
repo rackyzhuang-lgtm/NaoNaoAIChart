@@ -50,6 +50,7 @@ describe('registerSub2ApiHandlers', () => {
       ]),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
+      getChannelMonitors: vi.fn(),
       listApiKeys: vi.fn(async () => ({
         items: [
           {
@@ -121,6 +122,7 @@ describe('registerSub2ApiHandlers', () => {
       getRedeemHistory: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
+      getChannelMonitors: vi.fn(),
       listApiKeys: vi.fn(),
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),
