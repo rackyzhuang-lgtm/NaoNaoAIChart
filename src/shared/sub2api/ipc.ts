@@ -6,6 +6,7 @@ import type {
   Sub2ApiChannelMonitorResponse,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
+  Sub2ApiModelPlazaResponse,
   Sub2ApiPlatformQuotasResponse,
   Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
@@ -41,6 +42,7 @@ export const SUB2API_IPC_CHANNELS = {
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
   getPlatformQuotas: 'sub2api:get-platform-quotas',
   getChannelMonitors: 'sub2api:get-channel-monitors',
+  getModelPlaza: 'sub2api:get-model-plaza',
   listApiKeys: 'sub2api:list-api-keys',
   createApiKey: 'sub2api:create-api-key',
   updateApiKey: 'sub2api:update-api-key',
@@ -66,6 +68,7 @@ export interface Sub2ApiRendererApi {
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   getChannelMonitors(): Promise<Sub2ApiChannelMonitorResponse>
+  getModelPlaza(): Promise<Sub2ApiModelPlazaResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
   createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
   updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>

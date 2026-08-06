@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Sub2ApiChannelMonitors from './Sub2ApiChannelMonitors'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
+import Sub2ApiModelPlaza from './Sub2ApiModelPlaza'
 import Sub2ApiRedeem from './Sub2ApiRedeem'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
 
@@ -371,6 +372,8 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             availableChannelsEnabled={publicSettings?.available_channels_enabled}
             channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
           />
+          <Divider />
+          <Sub2ApiModelPlaza api={api} enabled={publicSettings?.model_plaza_enabled} />
           <Divider />
           <Sub2ApiRedeem api={api} user={user} onUserChange={setUser} />
           <Divider />

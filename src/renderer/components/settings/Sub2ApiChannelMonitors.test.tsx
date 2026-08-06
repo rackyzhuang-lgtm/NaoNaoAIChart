@@ -57,6 +57,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
         },
       ],
     }),
+    getModelPlaza: vi.fn(),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),

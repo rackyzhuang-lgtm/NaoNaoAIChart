@@ -3,6 +3,7 @@ import {
   sub2ApiAuthResponseSchema,
   sub2ApiChannelMonitorResponseSchema,
   sub2ApiLoginResponseSchema,
+  sub2ApiModelPlazaResponseSchema,
   sub2ApiPlatformQuotasResponseSchema,
   sub2ApiRedeemCodeRequestSchema,
   sub2ApiRedeemHistoryItemSchema,
@@ -276,6 +277,41 @@ describe('sub2api contracts', () => {
           primary_status: 'operational',
           primary_latency_ms: 1200,
           availability_7d: 99.2,
+        },
+      ],
+    })
+  })
+
+  it('validates model plaza groups and strips admin fields', () => {
+    expect(
+      sub2ApiModelPlazaResponseSchema.parse({
+        description: 'Available models',
+        groups: [
+          {
+            id: 2,
+            name: 'GPT group',
+            platform: 'openai',
+            rate_multiplier: 0.8,
+            models: [
+              {
+                name: 'gpt-5.6-terra',
+                pricing: { billing_mode: 'token', input_price: 1.25, internal_cost: 9 },
+                channel_ids: [1, 2],
+              },
+            ],
+            admin_note: 'hidden',
+          },
+        ],
+      })
+    ).toEqual({
+      description: 'Available models',
+      groups: [
+        {
+          id: 2,
+          name: 'GPT group',
+          platform: 'openai',
+          rate_multiplier: 0.8,
+          models: [{ name: 'gpt-5.6-terra', pricing: { billing_mode: 'token', input_price: 1.25 } }],
         },
       ],
     })

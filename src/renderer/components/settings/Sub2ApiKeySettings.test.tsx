@@ -64,6 +64,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     getSubscriptionSummary: vi.fn(),
     getPlatformQuotas: vi.fn(),
     getChannelMonitors: vi.fn(),
+    getModelPlaza: vi.fn(),
     listApiKeys: vi.fn().mockResolvedValue({ items: [keySummary], total: 1, page: 1, page_size: 100, pages: 1 }),
     createApiKey: vi.fn().mockResolvedValue({ ...keySummary, id: 8, name: 'new-key' }),
     updateApiKey: vi.fn().mockResolvedValue({ ...keySummary, name: 'renamed-key' }),

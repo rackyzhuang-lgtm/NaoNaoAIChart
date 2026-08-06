@@ -312,6 +312,32 @@ describe('Sub2ApiClient', () => {
     await expect(client.getChannelMonitors()).resolves.toEqual(channelMonitors)
   })
 
+  it('uses panel JWT for the read-only model plaza', async () => {
+    const modelPlaza = {
+      description: 'Available models',
+      groups: [
+        {
+          id: 2,
+          name: 'GPT group',
+          platform: 'openai',
+          rate_multiplier: 0.8,
+          models: [{ name: 'gpt-5.6-terra', pricing: { input_price: 1.25 } }],
+        },
+      ],
+    }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/model-plaza')) return Promise.resolve(success(modelPlaza))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getModelPlaza()).resolves.toEqual(modelPlaza)
+  })
+
   it('uses panel JWT for read-only trend and model summaries', async () => {
     const trend = { trend: [], start_date: '2026-07-30', end_date: '2026-08-05', granularity: 'day' }
     const models = { models: [], start_date: '2026-07-30', end_date: '2026-08-05' }

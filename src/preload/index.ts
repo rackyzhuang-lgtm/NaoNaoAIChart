@@ -72,6 +72,7 @@ const electronHandler: ElectronIPC = {
     getSubscriptionSummary: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getSubscriptionSummary),
     getPlatformQuotas: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getPlatformQuotas),
     getChannelMonitors: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getChannelMonitors),
+    getModelPlaza: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getModelPlaza),
     listApiKeys: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.listApiKeys),
     createApiKey: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.createApiKey, request),
     updateApiKey: (id, request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.updateApiKey, id, request),

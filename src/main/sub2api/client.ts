@@ -7,6 +7,7 @@ import {
   type Sub2ApiChannelMonitorResponse,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
+  type Sub2ApiModelPlazaResponse,
   type Sub2ApiPlatformQuotasResponse,
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
@@ -30,6 +31,7 @@ import {
   sub2ApiChannelMonitorResponseSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
+  sub2ApiModelPlazaResponseSchema,
   sub2ApiModelsResponseSchema,
   sub2ApiPlatformQuotasResponseSchema,
   sub2ApiProviderBindingSchema,
@@ -253,6 +255,15 @@ export class Sub2ApiClient {
       SUB2API_ROUTES.channelMonitors,
       { method: 'GET' },
       sub2ApiChannelMonitorResponseSchema
+    )
+    return data
+  }
+
+  async getModelPlaza(): Promise<Sub2ApiModelPlazaResponse> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.modelPlaza,
+      { method: 'GET' },
+      sub2ApiModelPlazaResponseSchema
     )
     return data
   }

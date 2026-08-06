@@ -60,6 +60,8 @@ export const sub2ApiPublicSettingsSchema = z
     backend_mode_enabled: z.boolean().optional(),
     available_channels_enabled: z.boolean().optional(),
     channel_monitor_enabled: z.boolean().optional(),
+    model_plaza_enabled: z.boolean().optional(),
+    model_plaza_require_auth: z.boolean().optional(),
     version: z.string().optional(),
   })
   .passthrough()
@@ -460,6 +462,52 @@ export const sub2ApiChannelMonitorResponseSchema = z
 
 export type Sub2ApiChannelMonitorResponse = z.infer<typeof sub2ApiChannelMonitorResponseSchema>
 
+export const sub2ApiModelPlazaPricingSchema = z
+  .object({
+    billing_mode: z.string().optional(),
+    input_price: z.number().nonnegative().nullable().optional(),
+    output_price: z.number().nonnegative().nullable().optional(),
+    cache_write_price: z.number().nonnegative().nullable().optional(),
+    cache_read_price: z.number().nonnegative().nullable().optional(),
+    per_request_price: z.number().nonnegative().nullable().optional(),
+  })
+  .strip()
+
+export const sub2ApiModelPlazaModelSchema = z
+  .object({
+    name: z.string().min(1),
+    pricing: sub2ApiModelPlazaPricingSchema.nullable().optional(),
+    official_pricing: sub2ApiModelPlazaPricingSchema.nullable().optional(),
+  })
+  .strip()
+
+export type Sub2ApiModelPlazaModel = z.infer<typeof sub2ApiModelPlazaModelSchema>
+
+export const sub2ApiModelPlazaGroupSchema = z
+  .object({
+    id: z.union([z.number().int().positive(), z.string().min(1)]),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    platform: z.string().min(1),
+    rate_multiplier: z.number().nonnegative(),
+    user_rate_multiplier: z.number().nonnegative().nullable().optional(),
+    subscription_type: z.string().optional(),
+    is_exclusive: z.boolean().optional(),
+    models: z.array(sub2ApiModelPlazaModelSchema),
+  })
+  .strip()
+
+export type Sub2ApiModelPlazaGroup = z.infer<typeof sub2ApiModelPlazaGroupSchema>
+
+export const sub2ApiModelPlazaResponseSchema = z
+  .object({
+    description: z.string().optional(),
+    groups: z.array(sub2ApiModelPlazaGroupSchema),
+  })
+  .strip()
+
+export type Sub2ApiModelPlazaResponse = z.infer<typeof sub2ApiModelPlazaResponseSchema>
+
 export const sub2ApiSubscriptionSummaryItemSchema = z
   .object({
     id: z.number().int().positive(),
@@ -529,5 +577,6 @@ export const SUB2API_ROUTES = {
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
   channelMonitors: 'channel-monitors',
+  modelPlaza: 'model-plaza',
   models: 'models',
 } as const
