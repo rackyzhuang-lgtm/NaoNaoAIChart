@@ -13,6 +13,8 @@ import {
   type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
   type Sub2ApiUsageDashboardTrend,
+  type Sub2ApiUsageErrorRequestDetail,
+  type Sub2ApiUsageErrorRequestPage,
   type Sub2ApiUsageRecordPage,
   type Sub2ApiUser,
   sub2ApiApiKeyCreateRequestSchema,
@@ -32,6 +34,9 @@ import {
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
   sub2ApiUsageDashboardTrendSchema,
+  sub2ApiUsageErrorIdSchema,
+  sub2ApiUsageErrorRequestDetailSchema,
+  sub2ApiUsageErrorRequestPageSchema,
   sub2ApiUsagePageRequestSchema,
   sub2ApiUsageRecordPageSchema,
   sub2ApiUserSchema,
@@ -183,6 +188,26 @@ export class Sub2ApiClient {
       `${SUB2API_ROUTES.usageRecords}?page=${parsedPage}&page_size=20`,
       { method: 'GET' },
       sub2ApiUsageRecordPageSchema
+    )
+    return data
+  }
+
+  async getUsageErrors(page: number): Promise<Sub2ApiUsageErrorRequestPage> {
+    const parsedPage = sub2ApiUsagePageRequestSchema.parse(page)
+    const { data } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.usageErrors}?page=${parsedPage}&page_size=20`,
+      { method: 'GET' },
+      sub2ApiUsageErrorRequestPageSchema
+    )
+    return data
+  }
+
+  async getUsageErrorDetail(id: number): Promise<Sub2ApiUsageErrorRequestDetail> {
+    const parsedId = sub2ApiUsageErrorIdSchema.parse(id)
+    const { data } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.usageErrors}/${parsedId}`,
+      { method: 'GET' },
+      sub2ApiUsageErrorRequestDetailSchema
     )
     return data
   }

@@ -180,3 +180,22 @@
 - 生产构建完成，产物在 `release/app/dist`；保留既有 eval、循环依赖、旧 Browserslist 和大 chunk 警告。
 
 下一步：实现错误请求详情；随后处理兑换码、可用渠道/模型广场/公告和异常恢复体验。Electron/Playwright 锁定验证环境仍待补齐。
+
+## 第十一批：错误请求列表与详情只读摘要
+
+- 已接入 `/api/v1/usage/errors?page=1&page_size=20` 与 `/api/v1/usage/errors/:id` 的 zod 契约、主进程 client、受信 IPC 和 preload typed API。
+- 账户摘要页已展示脱敏错误请求分页列表，包含时间、模型、分类、平台、状态码和消息；支持查看单条错误正文与上游状态码，覆盖空列表、详情失败和接口不可用状态。
+- DTO 使用白名单 schema，未向 renderer 暴露 API Key 原文、管理员字段、上游账号或内部错误上下文；详情 ID 和页码均在 IPC/主进程校验。
+- 固定实例只读验证列表接口返回 HTTP 403，说明服务端用户错误查看功能关闭；客户端稳定显示不可用提示，未修改服务端配置或线上数据。
+- 定向 Vitest：6 个文件、34 项通过；TypeScript 通过；变更文件 Biome 0 error，仅保留 preload 既有 `noExplicitAny` warning。
+- 生产构建 `corepack pnpm exec electron-vite build --mode production` 通过，产物在 `release/app/dist`；保留既有 eval、循环依赖、Browserslist 和大 chunk 警告。
+
+当前阶段剩余 MVP 任务（5 项）：
+
+1. 兑换码。
+2. 可用渠道。
+3. 模型广场。
+4. 公告。
+5. 会话过期、断网、限流和服务关闭的恢复体验。
+
+下一步：继续实现兑换码或可用渠道等只读/普通用户能力；保持 sub2api 只通过面板 JWT 接入，并继续删除 Chatbox 相关网络调用和界面字眼。Electron/Playwright 锁定验证环境、跨平台构建和安全持久化仍待补齐。

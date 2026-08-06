@@ -8,6 +8,8 @@ import {
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
   sub2ApiUsageDashboardTrendSchema,
+  sub2ApiUsageErrorRequestDetailSchema,
+  sub2ApiUsageErrorRequestPageSchema,
   sub2ApiUsageRecordPageSchema,
 } from './contracts'
 
@@ -192,5 +194,31 @@ describe('sub2api contracts', () => {
         pages: 1,
       })
     ).toMatchObject({ items: [{ model: 'gpt-5' }] })
+  })
+
+  it('accepts redacted error request pages and details', () => {
+    const base = {
+      id: 41,
+      created_at: '2026-08-05T13:00:00Z',
+      model: 'gpt-5',
+      inbound_endpoint: '/v1/chat/completions',
+      status_code: 429,
+      category: 'rate_limit',
+      platform: 'openai',
+      message: 'Rate limit exceeded',
+      key_name: 'desktop-key',
+      key_deleted: false,
+      stream: true,
+    }
+    expect(
+      sub2ApiUsageErrorRequestPageSchema.parse({ items: [base], total: 1, page: 1, page_size: 20, pages: 1 })
+    ).toMatchObject({ items: [{ category: 'rate_limit' }] })
+    expect(
+      sub2ApiUsageErrorRequestDetailSchema.parse({
+        ...base,
+        error_body: '{"error":"rate limited"}',
+        upstream_status_code: 429,
+      })
+    ).toMatchObject({ error_body: '{"error":"rate limited"}' })
   })
 })

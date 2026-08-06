@@ -322,6 +322,45 @@ describe('Sub2ApiClient', () => {
     await expect(client.getUsageRecords(0)).rejects.toThrow()
   })
 
+  it('uses panel JWT for error requests and redacted error details', async () => {
+    const errors = { items: [], total: 0, page: 1, page_size: 20, pages: 1 }
+    const detail = {
+      id: 41,
+      created_at: '2026-08-05T13:00:00Z',
+      model: 'gpt-5',
+      inbound_endpoint: '/v1/chat/completions',
+      status_code: 429,
+      category: 'rate_limit',
+      platform: 'openai',
+      message: 'Rate limit exceeded',
+      key_name: 'desktop-key',
+      key_deleted: false,
+      stream: true,
+      error_body: '{"error":"rate limited"}',
+      upstream_status_code: 429,
+    }
+    const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) {
+        return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer panel-access')
+      if (url.endsWith('/api/v1/usage/errors?page=1&page_size=20')) {
+        return Promise.resolve(success(errors))
+      }
+      if (url.endsWith('/api/v1/usage/errors/41')) {
+        return Promise.resolve(success(detail))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.getUsageErrors(1)).resolves.toEqual(errors)
+    await expect(client.getUsageErrorDetail(41)).resolves.toEqual(detail)
+    await expect(client.getUsageErrorDetail(0)).rejects.toThrow()
+  })
+
   it('does not let an old refresh overwrite a newer login', async () => {
     const secondUser = { ...user, id: 2, username: 'second-user', email: 'second@example.test' }
     let resolveOldRefresh: ((response: Response) => void) | undefined

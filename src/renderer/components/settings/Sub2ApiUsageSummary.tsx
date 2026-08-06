@@ -1,8 +1,11 @@
 import {
+  ActionIcon,
   Alert,
   Badge,
+  Code,
   Group,
   Loader,
+  Modal,
   Pagination,
   Paper,
   Progress,
@@ -11,6 +14,7 @@ import {
   Table,
   Text,
   ThemeIcon,
+  Tooltip,
 } from '@mantine/core'
 import type {
   Sub2ApiPlatformQuotaItem,
@@ -18,13 +22,16 @@ import type {
   Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
+  Sub2ApiUsageErrorRequest,
+  Sub2ApiUsageErrorRequestDetail,
+  Sub2ApiUsageErrorRequestPage,
   Sub2ApiUsageModelItem,
   Sub2ApiUsageRecord,
   Sub2ApiUsageRecordPage,
   Sub2ApiUsageTrendItem,
 } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { IconAlertCircle, IconChartBar, IconGauge, IconReceipt } from '@tabler/icons-react'
+import { IconAlertCircle, IconChartBar, IconEye, IconGauge, IconReceipt } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -289,6 +296,88 @@ function UsageRecordRow({ record }: { record: Sub2ApiUsageRecord }) {
   )
 }
 
+function UsageErrorRow({ error, onOpen }: { error: Sub2ApiUsageErrorRequest; onOpen: (id: number) => void }) {
+  const { t } = useTranslation()
+  return (
+    <Table.Tr>
+      <Table.Td>
+        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          {formatDate(error.created_at)}
+        </Text>
+      </Table.Td>
+      <Table.Td maw={180}>
+        <Text size="sm" fw={500} truncate="end">
+          {error.model}
+        </Text>
+        <Text size="xs" c="dimmed" truncate="end">
+          {error.category} · {error.platform}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Badge color={error.status_code >= 500 ? 'red' : 'yellow'} variant="light">
+          {error.status_code}
+        </Badge>
+      </Table.Td>
+      <Table.Td maw={260}>
+        <Text size="sm" truncate="end">
+          {error.message || t('Unknown error')}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Tooltip label={t('View error details')}>
+          <ActionIcon variant="subtle" aria-label={t('View error details')} onClick={() => onOpen(error.id)}>
+            <IconEye size={17} />
+          </ActionIcon>
+        </Tooltip>
+      </Table.Td>
+    </Table.Tr>
+  )
+}
+
+function UsageErrorDetailModal({
+  detail,
+  loading,
+  failed,
+  onClose,
+}: {
+  detail: Sub2ApiUsageErrorRequestDetail | null
+  loading: boolean
+  failed: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Modal opened={detail !== null || loading || failed} onClose={onClose} title={t('Error request details')} centered>
+      {loading && <Loader size="sm" aria-label={String(t('Loading'))} />}
+      {failed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load error details.')}
+        </Alert>
+      )}
+      {detail && (
+        <Stack gap="sm">
+          <Group justify="space-between" gap="sm">
+            <Text fw={600}>{detail.model}</Text>
+            <Badge color={detail.status_code >= 500 ? 'red' : 'yellow'} variant="light">
+              {detail.status_code}
+            </Badge>
+          </Group>
+          <Text size="sm">{detail.message || t('Unknown error')}</Text>
+          <Text size="xs" c="dimmed">
+            {detail.inbound_endpoint} · {detail.platform} · {formatDate(detail.created_at)}
+          </Text>
+          {detail.upstream_status_code !== undefined && detail.upstream_status_code !== null && (
+            <Text size="sm">
+              {t('Upstream status')}: {detail.upstream_status_code}
+            </Text>
+          )}
+          <Code block>{detail.error_body || t('No error body')}</Code>
+        </Stack>
+      )}
+    </Modal>
+  )
+}
+
 export default function Sub2ApiUsageSummary({ api }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
@@ -299,10 +388,16 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
   const [usageModels, setUsageModels] = useState<Sub2ApiUsageDashboardModels | null>(null)
   const [usageRecords, setUsageRecords] = useState<Sub2ApiUsageRecordPage | null>(null)
   const [usageRecordsPage, setUsageRecordsPage] = useState(1)
+  const [usageErrors, setUsageErrors] = useState<Sub2ApiUsageErrorRequestPage | null>(null)
+  const [usageErrorsPage, setUsageErrorsPage] = useState(1)
+  const [usageErrorDetail, setUsageErrorDetail] = useState<Sub2ApiUsageErrorRequestDetail | null>(null)
+  const [usageErrorDetailLoading, setUsageErrorDetailLoading] = useState(false)
+  const [usageErrorDetailFailed, setUsageErrorDetailFailed] = useState(false)
   const [usageFailed, setUsageFailed] = useState(false)
   const [usageTrendFailed, setUsageTrendFailed] = useState(false)
   const [usageModelsFailed, setUsageModelsFailed] = useState(false)
   const [usageRecordsFailed, setUsageRecordsFailed] = useState(false)
+  const [usageErrorsFailed, setUsageErrorsFailed] = useState(false)
   const [subscriptionsFailed, setSubscriptionsFailed] = useState(false)
   const [platformQuotasFailed, setPlatformQuotasFailed] = useState(false)
 
@@ -316,6 +411,7 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
       api.getUsageDashboardTrend(),
       api.getUsageDashboardModels(),
       api.getUsageRecords(usageRecordsPage),
+      api.getUsageErrors(usageErrorsPage),
     ]).then(
       ([
         usageResult,
@@ -324,6 +420,7 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
         usageTrendResult,
         usageModelsResult,
         usageRecordsResult,
+        usageErrorsResult,
       ]) => {
         if (!active) {
           return
@@ -370,13 +467,33 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
           setUsageRecords(null)
           setUsageRecordsFailed(true)
         }
+        if (usageErrorsResult.status === 'fulfilled') {
+          setUsageErrors(usageErrorsResult.value)
+          setUsageErrorsFailed(false)
+        } else {
+          setUsageErrors(null)
+          setUsageErrorsFailed(true)
+        }
         setLoading(false)
       }
     )
     return () => {
       active = false
     }
-  }, [api, usageRecordsPage])
+  }, [api, usageRecordsPage, usageErrorsPage])
+
+  const openUsageErrorDetail = async (id: number) => {
+    setUsageErrorDetail(null)
+    setUsageErrorDetailFailed(false)
+    setUsageErrorDetailLoading(true)
+    try {
+      setUsageErrorDetail(await api.getUsageErrorDetail(id))
+    } catch {
+      setUsageErrorDetailFailed(true)
+    } finally {
+      setUsageErrorDetailLoading(false)
+    }
+  }
 
   return (
     <Stack gap="md">
@@ -512,6 +629,56 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
       )}
 
       <Group gap="sm" mt="xs">
+        <ThemeIcon variant="light" radius="sm" color="red">
+          <IconAlertCircle size={18} />
+        </ThemeIcon>
+        <Text fw={600}>{t('Error requests')}</Text>
+      </Group>
+      {usageErrorsFailed && (
+        <Alert icon={<IconAlertCircle size={18} />} color="yellow">
+          {t('Unable to load error requests.')}
+        </Alert>
+      )}
+      {usageErrors?.items.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {t('No error requests')}
+        </Text>
+      )}
+      {usageErrors && usageErrors.items.length > 0 && (
+        <Stack gap="sm">
+          <div style={{ overflowX: 'auto' }}>
+            <Table striped highlightOnHover withTableBorder miw={820}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>{t('Date')}</Table.Th>
+                  <Table.Th>{t('Model')}</Table.Th>
+                  <Table.Th>{t('Status')}</Table.Th>
+                  <Table.Th>{t('Message')}</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {usageErrors.items.map((error) => (
+                  <UsageErrorRow key={error.id} error={error} onOpen={(id) => void openUsageErrorDetail(id)} />
+                ))}
+              </Table.Tbody>
+            </Table>
+          </div>
+          {usageErrors.pages > 1 && (
+            <Group justify="flex-end">
+              <Pagination
+                value={usageErrors.page}
+                total={usageErrors.pages}
+                disabled={loading}
+                onChange={setUsageErrorsPage}
+                size="sm"
+              />
+            </Group>
+          )}
+        </Stack>
+      )}
+
+      <Group gap="sm" mt="xs">
         <ThemeIcon variant="light" radius="sm" color="teal">
           <IconReceipt size={18} />
         </ThemeIcon>
@@ -558,6 +725,15 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
           ))}
         </SimpleGrid>
       )}
+      <UsageErrorDetailModal
+        detail={usageErrorDetail}
+        loading={usageErrorDetailLoading}
+        failed={usageErrorDetailFailed}
+        onClose={() => {
+          setUsageErrorDetail(null)
+          setUsageErrorDetailFailed(false)
+        }}
+      />
     </Stack>
   )
 }

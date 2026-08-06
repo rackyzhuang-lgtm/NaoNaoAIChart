@@ -286,6 +286,51 @@ export type Sub2ApiUsageRecordPage = z.infer<typeof sub2ApiUsageRecordPageSchema
 
 export const sub2ApiUsagePageRequestSchema = z.number().int().positive().max(1000)
 
+export const sub2ApiUsageErrorRequestSchema = z
+  .object({
+    id: z.number().int().positive(),
+    created_at: z.string().min(1),
+    model: z.string().min(1),
+    inbound_endpoint: z.string().min(1),
+    status_code: z.number().int().nonnegative(),
+    category: z.string().min(1),
+    platform: z.string().min(1),
+    message: z.string(),
+    key_name: z.string(),
+    key_deleted: z.boolean(),
+    client_ip: z.string().optional(),
+    group_name: z.string().optional(),
+    request_type: z.number().int().nullable().optional(),
+    stream: z.boolean(),
+    user_agent: z.string().optional(),
+  })
+  .strip()
+
+export type Sub2ApiUsageErrorRequest = z.infer<typeof sub2ApiUsageErrorRequestSchema>
+
+export const sub2ApiUsageErrorRequestPageSchema = z
+  .object({
+    items: z.array(sub2ApiUsageErrorRequestSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    page_size: z.number().int().positive(),
+    pages: z.number().int().positive(),
+  })
+  .strip()
+
+export type Sub2ApiUsageErrorRequestPage = z.infer<typeof sub2ApiUsageErrorRequestPageSchema>
+
+export const sub2ApiUsageErrorRequestDetailSchema = sub2ApiUsageErrorRequestSchema
+  .extend({
+    error_body: z.string(),
+    upstream_status_code: z.number().int().nonnegative().nullable().optional(),
+  })
+  .strip()
+
+export type Sub2ApiUsageErrorRequestDetail = z.infer<typeof sub2ApiUsageErrorRequestDetailSchema>
+
+export const sub2ApiUsageErrorIdSchema = z.number().int().positive()
+
 export const sub2ApiPlatformQuotaItemSchema = z
   .object({
     platform: z.string().min(1),
@@ -377,6 +422,7 @@ export const SUB2API_ROUTES = {
   usageDashboardTrend: 'usage/dashboard/trend?period=week',
   usageDashboardModels: 'usage/dashboard/models?period=week',
   usageRecords: 'usage',
+  usageErrors: 'usage/errors',
   subscriptionsSummary: 'subscriptions/summary',
   platformQuotas: 'user/platform-quotas',
   models: 'models',

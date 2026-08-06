@@ -13,6 +13,8 @@ import type {
   Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
+  Sub2ApiUsageErrorRequestDetail,
+  Sub2ApiUsageErrorRequestPage,
   Sub2ApiUsageRecordPage,
   Sub2ApiUser,
 } from './contracts'
@@ -28,6 +30,8 @@ export const SUB2API_IPC_CHANNELS = {
   getUsageDashboardTrend: 'sub2api:get-usage-dashboard-trend',
   getUsageDashboardModels: 'sub2api:get-usage-dashboard-models',
   getUsageRecords: 'sub2api:get-usage-records',
+  getUsageErrors: 'sub2api:get-usage-errors',
+  getUsageErrorDetail: 'sub2api:get-usage-error-detail',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
   getPlatformQuotas: 'sub2api:get-platform-quotas',
   listApiKeys: 'sub2api:list-api-keys',
@@ -48,6 +52,8 @@ export interface Sub2ApiRendererApi {
   getUsageDashboardTrend(): Promise<Sub2ApiUsageDashboardTrend>
   getUsageDashboardModels(): Promise<Sub2ApiUsageDashboardModels>
   getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage>
+  getUsageErrors(page: number): Promise<Sub2ApiUsageErrorRequestPage>
+  getUsageErrorDetail(id: number): Promise<Sub2ApiUsageErrorRequestDetail>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
   getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>

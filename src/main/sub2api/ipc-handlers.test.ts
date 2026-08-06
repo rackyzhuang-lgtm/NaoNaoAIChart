@@ -34,6 +34,8 @@ describe('registerSub2ApiHandlers', () => {
       getUsageDashboardTrend: vi.fn(),
       getUsageDashboardModels: vi.fn(),
       getUsageRecords: vi.fn(),
+      getUsageErrors: vi.fn(),
+      getUsageErrorDetail: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(async () => ({
@@ -98,6 +100,8 @@ describe('registerSub2ApiHandlers', () => {
       getUsageDashboardTrend: vi.fn(),
       getUsageDashboardModels: vi.fn(),
       getUsageRecords: vi.fn(),
+      getUsageErrors: vi.fn(),
+      getUsageErrorDetail: vi.fn(),
       getSubscriptionSummary: vi.fn(),
       getPlatformQuotas: vi.fn(),
       listApiKeys: vi.fn(),
