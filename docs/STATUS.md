@@ -303,6 +303,15 @@
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待修复后的 GitHub/Gitee 远端执行确认）、安全持久化验证。
 
+## 第二十二批：修复 CI 路由树生成顺序
+
+- GitHub Actions 在干净 checkout 中先执行 `pnpm check`，但 `src/renderer/routeTree.gen.ts` 是被 `.gitignore` 忽略的 TanStack Router 生成文件，因此 TypeScript 报模块不存在，并连锁将所有路由路径推断为 `undefined`。
+- 新增 `scripts/generate-route-tree.mjs`，复用锁定的 `@tanstack/router-generator` 配置生成路由树；`pnpm check` 现在会先执行 `pnpm run generate:routes`。
+- 生成文件继续保持忽略，不提交机器生成产物。
+- Dependabot 注释属于 GitHub 更新服务的独立错误；当前注释没有提供 updater 失败原因，详细日志需要仓库写权限才能查看，不能据此编造具体原因。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待本修复后的 GitHub/Gitee 远端执行确认）、安全持久化验证。
+
 ## 第十八批：Gitee Go Linux 安装包流水线
 
 - 新增 `.workflow/LinuxPackage.yml`，使用 Gitee Go 官方 YAML 1.0、`build@gcc` 暂存产物和 `publish@general_artifacts` 制品上传步骤。
