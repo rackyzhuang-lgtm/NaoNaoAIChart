@@ -185,11 +185,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          mapfile -d '' assets < <(
-            find release-assets -type f \(
-              -name '*.exe' -o -name '*.dmg' -o -name '*.zip'
-            \) -print0
-          )
+          mapfile -d '' assets < <(find release-assets -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \) -print0)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo 'No release installers were downloaded' >&2
             exit 1
