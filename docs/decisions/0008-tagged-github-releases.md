@@ -14,7 +14,7 @@ GitHub Windows/macOS 流水线最初只上传有 14 天保留期的 Actions arti
 2. 推送与 `release/app/package.json` 打包版本一致的 `v*` 标签时，在 Windows 和 macOS job 全部成功后创建 GitHub Release。
 3. Release 仅附加 `.exe`、`.dmg` 和 `.zip` 安装包；electron-builder 继续使用 `--publish never`，避免重新引入上游 publish provider 或自动更新发布行为。
 4. Release job 单独获得 `contents: write`，其他 job 保持 `contents: read`；使用 GitHub 自动提供的短期令牌，不提交 PAT。
-5. macOS 的 electron-builder 辅助二进制文件显式使用官方 GitHub Release 基地址，覆盖 runner 可能注入的 npm 镜像配置；Electron 本体和 npm 包仍可使用现有 npmmirror。Windows 保持已经验证成功的镜像配置。
+5. macOS 的 electron-builder 辅助二进制文件显式使用 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL` 直达官方 GitHub Release 目录，绕过 runner 可能注入的 npm 镜像配置；Electron 本体和 npm 包仍可使用现有 npmmirror。Windows 保持已经验证成功的镜像配置。
 6. 当前发布包仍未正式签名或公证；GitHub Release 不代表生产签名、notarization 或自动更新已经完成。
 
 ## 备选方案

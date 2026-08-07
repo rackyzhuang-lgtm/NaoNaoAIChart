@@ -23,13 +23,13 @@
 ## 验收
 
 - workflow YAML 可解析，且 Release job 仅在 `v*` 标签运行。
-- macOS job 显式设置优先级更高的 `NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR` 为官方 GitHub Release 基地址，覆盖 runner 可能注入的 npm 镜像配置。
+- macOS job 显式设置 electron-builder 最高优先级的 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL`，直接指向 `dmg-builder@1.2.0` 官方 GitHub Release 目录，绕过 runner 可能注入的所有 npm 镜像配置。
 - Release job 使用 job 级 `contents: write` 和 GitHub 自动令牌，不扩大构建 job 权限。
 - 推送 `v1.22.1` 后，远端 Windows/macOS 构建与 Release 资产列表按实际结果记录。
 
 ## 当前结果
 
 - Windows job 已由项目所有者确认成功。
-- macOS 失败已定位为 runner 注入的 `NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR` 将请求改写到 npmmirror，且该镜像缺少 `dmgbuild-bundle-arm64-75c8a6c.tar.gz`；不是应用构建、ad-hoc 签名或 notarization 错误。
+- macOS 两次失败均定位为 runner/包管理器注入的镜像配置将请求改写到 npmmirror，且该镜像缺少 `dmgbuild-bundle-arm64-75c8a6c.tar.gz`；不是应用构建、ad-hoc 签名或 notarization 错误。
 - electron-builder 官方 `dmg-builder@1.2.0` Release 已确认包含该 arm64 bundle 以及对应 x86_64 bundle。
 - workflow 修改后的远端结果待标签运行确认。
