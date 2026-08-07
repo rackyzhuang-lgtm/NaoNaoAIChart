@@ -104,14 +104,14 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
     if (!api) {
       return undefined
     }
-    return new Proxy(api, {
-      get(target, property, receiver) {
-        const value = Reflect.get(target, property, receiver)
+    return new Proxy({} as Sub2ApiRendererApi, {
+      get(_target, property) {
+        const value = Reflect.get(api, property)
         if (typeof value !== 'function') {
           return value
         }
         return (...args: unknown[]) =>
-          Promise.resolve(value.apply(target, args)).catch((caught: unknown) => {
+          Promise.resolve(value.apply(api, args)).catch((caught: unknown) => {
             handleApiFailure(caught)
             throw caught
           })

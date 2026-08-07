@@ -108,6 +108,16 @@ function renderAccount(api: Sub2ApiRendererApi) {
 }
 
 describe('Sub2ApiAccountSettings', () => {
+  test('loads through a frozen context bridge API', async () => {
+    const api = Object.freeze(createApi())
+    renderAccount(api)
+
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.queryByText('Account unavailable')).toBeNull()
+    expect(api.getPublicSettings).toHaveBeenCalledOnce()
+    expect(api.getSessionState).toHaveBeenCalledOnce()
+  })
+
   test('signs in without exposing credentials in the rendered account state', async () => {
     const api = createApi()
     renderAccount(api)
