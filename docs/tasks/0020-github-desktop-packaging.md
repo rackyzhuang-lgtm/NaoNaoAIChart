@@ -1,6 +1,6 @@
 # 任务 0020：GitHub Windows/macOS 安装包流水线
 
-状态：In Progress
+状态：Done
 
 ## 目标
 
@@ -29,4 +29,7 @@
 
 ## 结果
 
-任务完成后补充 GitHub 远端地址、提交 SHA、workflow 运行链接和两个 artifact 的实际文件列表。
+- GitHub 远端：`git@github.com:rackyzhuang/NaoNaoAIChart.git`。
+- 提交 `7273a111` 已推送到 GitHub `main`，并同步推送到 Gitee `main`。
+- workflow YAML、TypeScript、lint 和 `git diff --check` 已通过；GitHub Actions 首次运行及两个 artifact 的实际文件列表待仓库权限可见后确认。
+- GitHub API 在当前环境对该仓库返回 HTTP 404，无法读取私有仓库的 Actions 日志；未将远端构建写成通过。

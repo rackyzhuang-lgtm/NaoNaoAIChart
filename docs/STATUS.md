@@ -290,7 +290,8 @@
 - 新增 `.github/workflows/desktop-packages.yml`，在 GitHub-hosted Windows/macOS runner 上执行质量门禁和 Electron 打包。
 - Windows 产物上传为 `naonaoai-windows-installers`，macOS 产物上传为 `naonaoai-macos-installers`，Artifacts 保留 14 天；两者均固定 `--publish never`，不创建 GitHub Release。
 - workflow 固定 Node.js `22.16.0`、pnpm `10.33.0`，并使用 npmmirror 的 npm、Electron 和 electron-builder binaries 镜像。
-- 当前仅完成 workflow 配置，GitHub 首次运行和实际产物列表待推送后确认；未配置签名、公证或任何秘密。
+- 提交 `7273a111` 已推送到 GitHub `main`，并同步推送到 Gitee `main`。GitHub 首次运行和实际产物列表待仓库权限可见后确认；当前未配置签名、公证或任何秘密。
+- GitHub API 在当前环境对该仓库返回 HTTP 404，无法读取私有仓库的 Actions 日志，未将远端构建写成通过。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（GitHub Windows/macOS 和 Gitee Linux 配置已完成，远端执行仍待确认）、安全持久化验证。
 
