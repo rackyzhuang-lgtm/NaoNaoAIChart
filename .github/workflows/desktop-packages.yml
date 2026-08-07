@@ -74,7 +74,6 @@ jobs:
     timeout-minutes: 60
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-      ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
       npm_config_registry: https://registry.npmmirror.com
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
@@ -119,3 +118,56 @@ jobs:
             release/build/*.blockmap
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify release tag
+        shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          package_version="$(node -p "require('./release/app/package.json').version")"
+          if [[ "$TAG_NAME" != "v$package_version" ]]; then
+            echo "Tag $TAG_NAME does not match packaged app version $package_version" >&2
+            exit 1
+          fi
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: naonaoai-*-installers
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          mapfile -d '' assets < <(
+            find release-assets -type f \(
+              -name '*.exe' -o -name '*.dmg' -o -name '*.zip'
+            \) -print0
+          )
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo 'No release installers were downloaded' >&2
+            exit 1
+          fi
+          gh release create "$TAG_NAME" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "NaoNaoAI Chat $TAG_NAME"
