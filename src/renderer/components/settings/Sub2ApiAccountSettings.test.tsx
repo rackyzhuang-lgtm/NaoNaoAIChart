@@ -154,6 +154,18 @@ describe('Sub2ApiAccountSettings', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
   })
 
+  test('keeps the login form visible when the account service is unavailable', async () => {
+    const api = createApi({
+      getPublicSettings: vi.fn().mockRejectedValue(new Error('network unavailable')),
+    })
+    renderAccount(api)
+
+    expect(await screen.findByText('Account unavailable')).toBeTruthy()
+    expect(screen.getByLabelText(/Email/)).toBeTruthy()
+    expect(screen.getByLabelText(/Password/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
+  })
+
   test('keeps the signed-in user visible when an account request is rate limited', async () => {
     const rateLimitError = new Error(
       '__NAONAO_SUB2API_ERROR__{"kind":"rate_limited","status":429,"retryAfterSeconds":4}'

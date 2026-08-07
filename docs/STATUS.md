@@ -348,3 +348,13 @@
 - `git diff --check`：通过。未改动业务代码，不重复运行全量代码测试。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。
+
+## 第二十四批：账户入口与启动品牌修复
+
+- 启动画面 `src/renderer/index.html` 与 `src/renderer/index.ejs` 已改用 NaoNaoAI 图标和 `NaoNaoAI Chat` 产品名；上游 Chatbox 字标及启动背景不再可见。
+- 桌面设置内存路由树已注册 `/settings/account`，账户路由补充可复用的 `RouteComponent`；桌面设置默认进入账户页，不再默认落到 Provider 页面。
+- 主侧栏桌面端增加 `NaoNaoAI Account` 直达导航，移动端增加账户图标入口；账户页现有用量、渠道、模型广场、公告、兑换码和 API Key 功能均从该入口进入。
+- 定向账户测试：2 个文件、7 项通过；账户服务暂时不可达时仍保留登录表单和重试入口；TypeScript 通过；变更文件 Biome 无 error（保留 `Settings.tsx` 既有 2 条 warning）；`git diff --check` 通过。
+- 生产产物已重新构建并通过桌面 Playwright 烟测：1 项通过，实际点击主侧栏账户入口并打开账户页；未登录、未调用真实模型、未写入线上数据。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（远端执行确认）、安全持久化验证。

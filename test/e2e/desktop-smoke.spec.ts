@@ -21,7 +21,9 @@ test('launches the branded desktop shell and opens the account setup entry', asy
     const window = await electronApp.firstWindow()
     await expect(window).toHaveTitle('NaoNaoAI Chat')
     await expect(window.getByText('NaoNaoAI Chat', { exact: true }).first()).toBeVisible()
-    await expect(window.getByText('NaoNaoAI Account', { exact: true }).first()).toBeVisible()
+    await window.keyboard.press('Escape')
+    await window.getByTestId('account-center-button').click()
+    await expect(window.getByRole('heading', { name: 'NaoNaoAI Account', exact: true }).first()).toBeVisible()
     await expect(window.locator('body')).not.toContainText('Chatbox AI')
   } finally {
     try {

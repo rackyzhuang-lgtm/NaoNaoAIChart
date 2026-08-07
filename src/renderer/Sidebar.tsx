@@ -14,6 +14,7 @@ import {
   IconPhotoPlus,
   IconSearch,
   IconSettingsFilled,
+  IconUserCircle,
 } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -286,6 +287,18 @@ export default function Sidebar() {
                 variant="transparent"
                 color="chatbox-secondary"
                 size={24}
+                aria-label={t('NaoNaoAI Account')}
+                onClick={() => {
+                  navigateToSettings('account')
+                  setShowSidebar(false)
+                }}
+              >
+                <ScalableIcon icon={IconUserCircle} size={20} />
+              </ActionIcon>
+              <ActionIcon
+                variant="transparent"
+                color="chatbox-secondary"
+                size={24}
                 onClick={() => {
                   navigateToSettings()
                   setShowSidebar(false)
@@ -298,6 +311,16 @@ export default function Sidebar() {
             </Flex>
           ) : (
             <>
+              <NavLink
+                data-testid="account-center-button"
+                c="chatbox-secondary"
+                className="rounded"
+                label={t('NaoNaoAI Account')}
+                leftSection={<ScalableIcon icon={IconUserCircle} size={20} />}
+                onClick={() => navigateToSettings('account')}
+                variant="light"
+                p="xs"
+              />
               <NavLink
                 c="chatbox-secondary"
                 className="rounded"

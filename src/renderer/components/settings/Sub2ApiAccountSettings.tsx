@@ -296,7 +296,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
         </Stack>
       )}
 
-      {phase === 'signed_out' && (
+      {(phase === 'signed_out' || phase === 'error') && (
         <Stack component="form" onSubmit={handleLogin} gap="md" maw={440}>
           {notice && (
             <Alert icon={<IconAlertCircle size={18} />} color="yellow">
@@ -332,7 +332,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             type="submit"
             leftSection={<IconLogin2 size={18} />}
             loading={busy}
-            disabled={verificationUnsupported || !email.trim() || !password}
+            disabled={!accountApi || verificationUnsupported || !email.trim() || !password}
             w="fit-content"
           >
             {t('Sign in')}

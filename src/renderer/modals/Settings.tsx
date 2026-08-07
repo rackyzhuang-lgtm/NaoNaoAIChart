@@ -19,6 +19,7 @@ import { Modal } from '@/components/layout/Overlay'
 import { getThemeDesign } from '@/hooks/useAppTheme'
 import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
 import { router } from '@/router'
+import { RouteComponent as SettingsAccountRouteComponent } from '@/routes/settings/account'
 import { RouteComponent as SettingsArchiveRouteComponent } from '@/routes/settings/archive'
 import { RouteComponent as SettingsChatRouteComponent } from '@/routes/settings/chat'
 import { RouteComponent as SettingsChatboxAiRouteComponent } from '@/routes/settings/chatbox-ai'
@@ -141,6 +142,12 @@ const SettingsIndexRoute = createRoute({
   getParentRoute: () => RootRoute,
 })
 
+const SettingsAccountRoute = createRoute({
+  component: SettingsAccountRouteComponent,
+  path: '/settings/account',
+  getParentRoute: () => RootRoute,
+})
+
 const SettingsChatboxAiRoute = createRoute({
   component: SettingsChatboxAiRouteComponent,
   path: '/settings/chatbox-ai',
@@ -239,6 +246,7 @@ SettingsProviderRouteRoute.addChildren([
 
 const routeTree = RootRoute.addChildren([
   SettingsIndexRoute,
+  SettingsAccountRoute,
   SettingsChatboxAiRoute,
   SettingsGeneralRoute,
   SettingsChatRoute,
