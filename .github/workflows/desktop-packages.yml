@@ -1,0 +1,125 @@
+name: Desktop packages
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installers
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+      npm_config_registry: https://registry.npmmirror.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build renderer and main process
+        run: pnpm run build
+
+      - name: Package Windows installers
+        run: pnpm exec electron-builder build --publish never --win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: naonaoai-windows-installers
+          path: |
+            release/build/*.exe
+            release/build/*.yml
+            release/build/*.blockmap
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS installers
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+      npm_config_registry: https://registry.npmmirror.com
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build renderer and main process
+        run: pnpm run build
+
+      - name: Package macOS installers
+        run: pnpm exec electron-builder build --publish never --mac dmg zip
+
+      - name: Upload macOS installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: naonaoai-macos-installers
+          path: |
+            release/build/*.dmg
+            release/build/*.zip
+            release/build/*.yml
+            release/build/*.blockmap
+          if-no-files-found: error
+          retention-days: 14

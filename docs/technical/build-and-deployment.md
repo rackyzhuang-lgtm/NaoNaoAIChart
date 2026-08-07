@@ -224,6 +224,16 @@ pnpm 迁移后，CI 的关键变更：
 
 当前只建立 Linux x64 云构建。Windows NSIS 必须在 Windows runner 上验证，macOS dmg 必须在 macOS runner 上构建并完成签名/公证；不得把 Linux 流水线视为三平台发布矩阵完成。未配置签名的产物仅用于内部验收。
 
+### NaoNaoAI GitHub Actions 桌面流水线
+
+`.github/workflows/desktop-packages.yml` 是当前 Windows/macOS 构建入口：
+
+1. `main` push、`v*` tag push 或手动执行会启动 Windows 和 macOS 两个独立 job。
+2. 两个 job 均固定 Node.js `22.16.0`、pnpm `10.33.0`，执行锁定安装、类型检查、lint、全量 Vitest 和生产构建。
+3. Windows runner 执行 `electron-builder --win`，按 `electron-builder.yml` 生成 NSIS x64/arm64；macOS runner 执行 `--mac dmg zip`，生成 x64/arm64 dmg/zip。
+4. 两个平台都使用 `--publish never`，并将未签名安装包、YAML 和 blockmap 上传到 Actions Artifacts，保留 14 天。
+5. workflow 不创建 GitHub Release；正式分发前仍需补充 Windows 签名、Apple 签名/公证、更新 feed 和回滚验证。
+
 ---
 
 ## 相关文档

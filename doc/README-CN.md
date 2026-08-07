@@ -37,6 +37,8 @@ pnpm test:e2e
 
 `pnpm package` 会打包当前桌面平台。Gitee Go 当前提供 [Linux x64 打包流水线](../.workflow/LinuxPackage.yml)，产出 AppImage 和 deb 安装包。
 
+GitHub Actions 提供 [Windows/macOS 打包流水线](../.github/workflows/desktop-packages.yml)。每次运行会将未签名的安装包分别上传为 `naonaoai-windows-installers` 和 `naonaoai-macos-installers` 制品。
+
 构建目录为 `release/build`。Gitee 流水线会将筛选后的 Linux 安装包上传为 `naonaoai-linux-x64` 制品。未完成平台签名的包仅用于内部验收。
 
 ## 文档

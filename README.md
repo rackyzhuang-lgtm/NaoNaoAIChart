@@ -37,6 +37,8 @@ The desktop E2E suite uses a temporary profile and does not call real model APIs
 
 `pnpm package` builds the current desktop platform. Gitee Go currently provides the Linux x64 packaging workflow in [.workflow/LinuxPackage.yml](./.workflow/LinuxPackage.yml), which produces AppImage and deb files.
 
+GitHub Actions provides the Windows and macOS packaging workflow in [.github/workflows/desktop-packages.yml](./.github/workflows/desktop-packages.yml). Each run uploads unsigned installers as `naonaoai-windows-installers` and `naonaoai-macos-installers` artifacts.
+
 Build output is written to `release/build`. The Gitee workflow uploads the filtered Linux packages as the `naonaoai-linux-x64` artifact. Packages without platform signing are for internal acceptance only.
 
 ## Documentation
