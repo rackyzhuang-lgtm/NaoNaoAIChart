@@ -33,3 +33,4 @@
 - 提交 `7273a111` 已推送到 GitHub `main`，并同步推送到 Gitee `main`。
 - workflow YAML、TypeScript、lint 和 `git diff --check` 已通过；GitHub Actions 首次运行及两个 artifact 的实际文件列表待仓库权限可见后确认。
 - GitHub API 在当前环境对该仓库返回 HTTP 404，无法读取私有仓库的 Actions 日志；未将远端构建写成通过。
+- 首次运行暴露 pnpm 配置冲突：workflow 的显式版本与 `package.json` 的带 SHA512 `packageManager` 重复声明；已删除 workflow 的 `version` 字段，改为单一读取仓库锁定值。

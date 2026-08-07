@@ -295,6 +295,14 @@
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（GitHub Windows/macOS 和 Gitee Linux 配置已完成，远端执行仍待确认）、安全持久化验证。
 
+## 第二十一批：修复 GitHub Actions pnpm 版本冲突
+
+- GitHub 首次运行在 `pnpm/action-setup` 步骤失败，原因是 workflow 的 `version: 10.33.0` 与 `package.json` 已锁定的带 SHA512 `packageManager` 被识别为两套版本。
+- 已删除两个 job 中重复的 `version` 字段，保留 `package.json` 作为 pnpm 唯一版本来源；后续仍由 `pnpm/action-setup` 自动读取仓库锁定值。
+- 本批尚未重新获得远端构建结果；修复后需重新运行 `Desktop packages` workflow 才能确认 Windows/macOS 制品。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待修复后的 GitHub/Gitee 远端执行确认）、安全持久化验证。
+
 ## 第十八批：Gitee Go Linux 安装包流水线
 
 - 新增 `.workflow/LinuxPackage.yml`，使用 Gitee Go 官方 YAML 1.0、`build@gcc` 暂存产物和 `publish@general_artifacts` 制品上传步骤。
