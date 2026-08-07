@@ -74,6 +74,7 @@ jobs:
     timeout-minutes: 60
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
       npm_config_registry: https://registry.npmmirror.com
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
