@@ -23,7 +23,7 @@
 ## 验收
 
 - workflow YAML 可解析，且 Release job 仅在 `v*` 标签运行。
-- macOS job 显式设置 electron-builder 最高优先级的 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL`，直接指向 `dmg-builder@1.2.0` 官方 GitHub Release 目录，绕过 runner 可能注入的所有 npm 镜像配置。
+- macOS 打包 Bash 步骤显式清除所有 mirror 变量，并在同一进程链中 export electron-builder 最高优先级的 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL`，直接指向 `dmg-builder@1.2.0` 官方 GitHub Release 目录；同时输出最终 URL 诊断，绕过并可验证 runner 注入的 npm 镜像配置。
 - Release job 使用 job 级 `contents: write` 和 GitHub 自动令牌，不扩大构建 job 权限。
 - 推送 `v1.22.1` 后，远端 Windows/macOS 构建与 Release 资产列表按实际结果记录。
 

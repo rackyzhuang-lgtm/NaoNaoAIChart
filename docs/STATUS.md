@@ -315,7 +315,7 @@
 ## 第二十三批：macOS 镜像修复与标签 Release
 
 - 项目所有者已确认 GitHub Windows job 成功；macOS job 已完成应用构建、arm64 打包和 ad-hoc 签名，但创建 DMG 时从 npmmirror 下载 `dmg-builder@1.2.0` arm64 bundle 返回 HTTP 404。
-- macOS job 已改用 electron-builder 最高优先级的 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL`，直接指向 `dmg-builder@1.2.0` 官方 GitHub Release 目录，绕过 runner 注入的 npmmirror 配置；Electron 本体与 npm 包继续使用现有 npmmirror。Windows 已通过的镜像配置保持不变。
+- macOS 打包 Bash 步骤已改为清除所有 mirror 变量后，在同一进程链中 export electron-builder 最高优先级的 `ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL`，并输出最终 URL 诊断；Electron 本体与 npm 包继续使用现有 npmmirror。Windows 已通过的镜像配置保持不变。
 - electron-builder 官方 `dmg-builder@1.2.0` Release 页面已确认包含失败日志所需的 arm64 bundle 和对应 x86_64 bundle；npmmirror 对该文件返回 404。
 - workflow 新增标签 Release job：仅在 `v*` 标签运行，等待 Windows/macOS 成功，校验标签与 `release/app/package.json` 的打包版本一致，并使用 job 级 `contents: write` 创建 Release、上传 `.exe`、`.dmg` 和 `.zip`。
 - 新增 ADR-0008 记录标签发布、权限、签名与自动更新边界。当前安装包仍未正式签名或公证，Release 不改变该事实。

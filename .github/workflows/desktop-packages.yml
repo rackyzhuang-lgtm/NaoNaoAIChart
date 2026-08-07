@@ -106,7 +106,14 @@ jobs:
         run: pnpm run build
 
       - name: Package macOS installers
-        run: pnpm exec electron-builder build --publish never --mac dmg zip
+        shell: bash
+        run: |
+          unset NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR
+          unset npm_config_electron_builder_binaries_mirror
+          unset npm_package_config_electron_builder_binaries_mirror
+          export ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL="https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder%401.2.0"
+          node -e "console.log('ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL=' + process.env.ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL)"
+          pnpm exec electron-builder build --publish never --mac dmg zip
 
       - name: Upload macOS installers
         uses: actions/upload-artifact@v4
