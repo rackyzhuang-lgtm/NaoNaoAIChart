@@ -73,8 +73,6 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
     env:
-      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-      ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder%401.2.0
       npm_config_registry: https://registry.npmmirror.com
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
@@ -108,12 +106,34 @@ jobs:
       - name: Package macOS installers
         shell: bash
         run: |
-          unset NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR
-          unset npm_config_electron_builder_binaries_mirror
-          unset npm_package_config_electron_builder_binaries_mirror
-          export ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL="https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder%401.2.0"
-          node -e "console.log('ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL=' + process.env.ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL)"
-          pnpm exec electron-builder build --publish never --mac dmg zip
+          while IFS='=' read -r name _; do
+            case "$name" in
+              ELECTRON_MIRROR|ELECTRON_CUSTOM_*|ELECTRON_BUILDER_BINARIES_*|NPM_CONFIG_ELECTRON_*|npm_config_electron_*|npm_package_config_electron_*)
+                unset "$name"
+                ;;
+            esac
+          done < <(env)
+          node <<'NODE'
+          const { getArtifactRemoteURL } = require('./node_modules/@electron/get/dist/cjs/artifact-utils.js')
+          const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64'
+          const filename = `dmgbuild-bundle-${arch}-75c8a6c.tar.gz`
+          getArtifactRemoteURL({
+            version: '9.9.9',
+            artifactName: filename,
+            isGeneric: true,
+            mirrorOptions: {
+              mirror: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/',
+              customDir: 'dmg-builder@1.2.0',
+              customFilename: filename,
+            },
+          }).then((url) => {
+            console.log(`Resolved DMG builder URL=${url}`)
+            if (!url.startsWith('https://github.com/electron-userland/electron-builder-binaries/releases/download/')) {
+              process.exit(1)
+            }
+          })
+          NODE
+          node ./node_modules/electron-builder/cli.js build --publish never --mac dmg zip
 
       - name: Upload macOS installers
         uses: actions/upload-artifact@v4
