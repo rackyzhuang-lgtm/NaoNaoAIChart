@@ -24,10 +24,15 @@ stages:
           NODE_VERSION=22.16.0
           PNPM_VERSION=10.33.0
           NODE_ROOT="$PWD/.tools/node-v${NODE_VERSION}-linux-x64"
+          NODE_MIRROR=https://npmmirror.com/mirrors/node
+
+          export COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
+          export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+          export ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
 
           if [ ! -x "$NODE_ROOT/bin/node" ]; then
             mkdir -p "$NODE_ROOT"
-            wget -q "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -O node.tar.gz
+            wget -q "${NODE_MIRROR}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" -O node.tar.gz
             tar -xzf node.tar.gz --strip-components=1 -C "$NODE_ROOT"
             rm node.tar.gz
           fi
@@ -39,6 +44,7 @@ stages:
           corepack enable
           corepack prepare "pnpm@${PNPM_VERSION}" --activate
           pnpm --version
+          pnpm config set registry https://registry.npmmirror.com
           pnpm config set store-dir .pnpm-store
 
           pnpm install --frozen-lockfile

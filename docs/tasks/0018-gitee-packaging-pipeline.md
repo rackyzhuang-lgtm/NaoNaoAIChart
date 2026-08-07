@@ -32,6 +32,7 @@
 
 - 选择 `build@gcc` 的 Ubuntu 20.04 基础环境，而不是 Gitee Go 的 `build@nodejs`；后者官方支持的最高 Node.js 版本为 15.12.0，不满足项目 Node 22 约束。
 - 构建阶段下载固定的官方 Node.js Linux x64 压缩包，并缓存工具目录、pnpm store、Electron 和 electron-builder 下载目录。
+- 构建阶段使用 npmmirror 的 Node.js、npm、Electron 和 electron-builder binaries 镜像，避免 Gitee 云 runner 访问海外默认源超时；版本和下载路径仍固定。
 - electron-builder 固定 `--publish never`，避免向任何上游或未配置的更新服务发布。
 - 安装包暂存名为 `LINUX_X64_PACKAGES`，永久制品名为 `naonaoai-linux-x64`。
 

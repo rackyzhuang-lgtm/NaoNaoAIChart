@@ -216,7 +216,7 @@ pnpm 迁移后，CI 的关键变更：
 
 1. `main` 分支 push 自动触发；项目成员也可在 Gitee Go 控制台手动执行。
 2. 使用 `build@gcc` 的 Ubuntu 20.04 环境，并固定下载 Node.js `22.16.0`。Gitee Go 的 `build@nodejs` 官方镜像最高只提供 Node.js 15，不符合本项目 `>=22.13.0 <23` 的约束。
-3. 通过 Corepack 固定 pnpm `10.33.0`，执行锁定安装、TypeScript、Biome、全量 Vitest、生产构建和 electron-builder Linux x64 打包。
+3. 通过 Corepack 固定 pnpm `10.33.0`，并将 Node.js、npm、Electron 和 electron-builder binaries 下载固定到 npmmirror 镜像；随后执行锁定安装、TypeScript、Biome、全量 Vitest、生产构建和 electron-builder Linux x64 打包。
 4. 只暂存 AppImage、deb、YAML 和 blockmap 文件，再通过 `publish@general_artifacts` 上传为默认制品库中的 `naonaoai-linux-x64`。
 5. electron-builder 始终使用 `--publish never`；Gitee 制品上传是流水线独立步骤，不会触发 Chatbox 上游发布或客户端自动更新。
 

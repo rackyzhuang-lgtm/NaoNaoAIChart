@@ -290,6 +290,7 @@
 - 新增 `.workflow/LinuxPackage.yml`，使用 Gitee Go 官方 YAML 1.0、`build@gcc` 暂存产物和 `publish@general_artifacts` 制品上传步骤。
 - 流水线固定 Node.js `22.16.0` 和 pnpm `10.33.0`，在 Ubuntu 20.04 云构建环境中执行锁定安装、TypeScript、Biome、全量 Vitest、生产构建和 Linux x64 AppImage/deb 打包。
 - 仅将安装包及 YAML/blockmap 元数据复制到 `artifacts/gitee/linux-x64`，并上传为默认制品库中的 `naonaoai-linux-x64`；electron-builder 继续固定 `--publish never`。
+- 已将 Node.js、Corepack/pnpm、Electron 和 electron-builder binaries 下载固定到 npmmirror 镜像，降低 Gitee 云 runner 的默认海外源超时风险。
 - 未加入账号、令牌、签名证书或 sub2api 数据；流水线不登录服务、不调用真实模型，也不向 Chatbox 上游发布。
 - 本地 YAML 解析：通过；解析到 1 个 stage，包含 `build@gcc` 和 `publish@general_artifacts`。
 - `corepack pnpm check`：通过，TypeScript 0 error。
