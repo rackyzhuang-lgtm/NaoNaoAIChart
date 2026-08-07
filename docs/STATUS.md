@@ -301,3 +301,12 @@
 - 本机 Windows 交叉执行 Linux x64 electron-builder 已进入解包阶段，但 Electron Linux 运行时下载长时间无进展后中止，未生成安装包；不代表 Gitee Go 远端执行结果。Gitee Go 首次远端执行只能在推送后确认，当前不得写成通过。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（已完成 Linux x64 配置，仍待首次远端执行及 Windows/macOS/Linux arm64）、安全持久化验证。
+
+## 第十九批：README 产品文案清理
+
+- 根 `README.md` 和 `doc/README-CN.md` 已改为 NaoNaoAI Chat 的产品范围、开发命令、Gitee 打包位置和许可证说明，删除旧品牌、官网、下载、推广和移动端入口。
+- `team-sharing/README*.md` 已改为历史材料和不支持能力说明，避免继续宣传共享 API Key 服务。
+- README 扫描只剩 `scripts/session-rag-eval/README.md` 的内部评测接口标识；环境变量、命令名和 fixture 路径与脚本实现绑定，本批未改名。
+- `git diff --check`：通过。未改动业务代码，不重复运行全量代码测试。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。
