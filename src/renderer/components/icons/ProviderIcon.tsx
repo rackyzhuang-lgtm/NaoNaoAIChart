@@ -3,6 +3,7 @@ import MoonshotMono from '@lobehub/icons/es/Moonshot/components/Mono'
 import QwenColor from '@lobehub/icons/es/Qwen/components/Color'
 import { type ModelProvider, ModelProviderEnum } from '@shared/types'
 import BrandGithub from './BrandGithub'
+import Robot from './Robot'
 
 export default function ProviderIcon(props: { className?: string; size?: number; provider: ModelProvider | string }) {
   const { className, size = 24, provider } = props
@@ -21,6 +22,12 @@ export default function ProviderIcon(props: { className?: string; size?: number;
 
   if ([ModelProviderEnum.Moonshot, ModelProviderEnum.MoonshotCN].includes(provider as ModelProviderEnum)) {
     return <MoonshotMono className={className} size={size} style={{ color: 'currentColor' }} />
+  }
+
+  // Historical Chatbox provider data remains readable, but its upstream logo
+  // must not reappear in the NaoNaoAI UI.
+  if (provider === ModelProviderEnum.ChatboxAI) {
+    return <Robot className={className} size={size} />
   }
 
   return (

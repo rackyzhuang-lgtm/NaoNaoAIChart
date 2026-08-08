@@ -13,5 +13,8 @@ const providerIconMap = new Map<string, string>(
 )
 
 export function getProviderIconSrc(providerId: string): string | undefined {
+  // Keep the legacy provider ID for migrations, but never surface its
+  // upstream-branded image in the NaoNaoAI interface.
+  if (providerId === 'chatbox-ai') return undefined
   return providerIconMap.get(providerId) || providerIconMap.get(PROVIDER_ICON_ALIASES[providerId] || '')
 }

@@ -1,6 +1,6 @@
 # 项目状态
 
-更新时间：2026-08-07（Asia/Shanghai）
+更新时间：2026-08-08（Asia/Shanghai）
 
 ## 当前结论
 
@@ -376,3 +376,25 @@
 - 应用发布版本递增到 `1.22.4`，用于创建不可变的新标签并触发新仓库远端 Release。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待新仓库远端执行确认）、安全持久化验证。
+
+## 第二十七批：按用户需求重新执行本地功能验收
+
+- 已重新读取项目状态、范围、架构、路线图、上游说明及账户/站点对接相关任务与 ADR；固定服务、凭证分离、普通用户范围和去除 Chatbox 默认运行入口的边界未发生变化。
+- 启动页源码静态验收通过：NaoNaoAI 图标与 `NaoNaoAI Chat` 产品名可见，旧启动字标保持隐藏；生产 Electron 窗口标题、首屏品牌和侧栏均未发现可见 `Chatbox AI` 字样。
+- 固定服务公共设置只读请求成功，返回版本 `0.1.171`；真实 Electron 中账户入口、电子邮件/密码表单和登录按钮均可操作，未显示“账户服务不可用”，renderer 无 page error。
+- 普通用户的用量、渠道监控、模型广场、公告、兑换码、API Key 和 Provider 绑定均在登录后的 NaoNaoAI 账户页；14 个相关测试文件、69 项定向测试通过。当前服务端渠道监控开启，但可用渠道和模型广场开关关闭，客户端不会将其伪装为可用。
+- TypeScript 通过；Biome lint 为 0 error、888 个既有 warning；生产构建和锁定 Playwright 桌面烟测 1 项通过。
+- 全量 Vitest 并发运行结果为 240 个文件通过、3 个跳过，2,453 项通过、61 项跳过；两个 Windows PowerShell Unicode 用例因并发编码环境失败，限制为单 worker 后对应 20 项全部通过。该问题不在账户或固定服务路径。
+- 本轮未执行真实登录，因为工作区没有测试账号凭据；未调用真实模型、兑换、Key 写操作或公告已读写入，不能把登录后的线上数据写成已验证。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待新仓库远端执行确认）、安全持久化验证。
+## Batch 028: Remove Visible Chatbox Logo
+
+- Replaced the onboarding card's legacy Chatbox logo with the bundled NaoNaoAI icon.
+- Kept historical `chatbox-ai` provider IDs readable, but changed provider icon rendering to a neutral robot and blocked the legacy PNG lookup.
+- Added focused provider icon regression tests: 3 tests passed.
+- `corepack pnpm check`: passed. Changed-file Biome check: passed. `corepack pnpm run test:e2e`: passed (1 desktop smoke test).
+- `git diff --check`: passed. No real account, token, API key, model request, or online data write was used.
+- Release version is prepared as `1.22.5`; the tag must remain `v1.22.5` for the GitHub workflow's version check.
+
+Remaining risk: legacy Chatbox compatibility modules and assets remain in the repository for migration/read compatibility, but are no longer selected by the updated visible rendering paths.
