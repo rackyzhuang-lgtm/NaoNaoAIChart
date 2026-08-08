@@ -1,4 +1,5 @@
 import { createSpotlight, Spotlight, type SpotlightActionData, type SpotlightActionGroupData } from '@mantine/spotlight'
+import { filterVisibleProviders } from '@shared/providers/visibility'
 import { type BuiltinProviderBaseInfo, ModelProviderEnum } from '@shared/types'
 import { IconFileImport, IconSearch, IconSquareRoundedPlusFilled } from '@tabler/icons-react'
 import { type FC, useMemo } from 'react'
@@ -20,10 +21,11 @@ const ProviderSpotlight: FC<{
   const { t } = useTranslation()
 
   const actions = useMemo<SpotlightActionGroupData[]>(() => {
-    const featured = allSystemProviders.filter(
+    const visibleProviders = filterVisibleProviders(allSystemProviders)
+    const featured = visibleProviders.filter(
       (p) => FEATURED_PROVIDER_IDS.includes(p.id) && p.id !== ModelProviderEnum.ChatboxAI
     )
-    const others = allSystemProviders.filter(
+    const others = visibleProviders.filter(
       (p) => !FEATURED_PROVIDER_IDS.includes(p.id) && p.id !== ModelProviderEnum.ChatboxAI
     )
 

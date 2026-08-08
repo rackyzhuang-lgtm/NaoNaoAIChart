@@ -185,7 +185,7 @@ export default function Sidebar() {
               onClick={() => navigate({ to: '/about' })}
               style={{ cursor: 'pointer', minWidth: 0 }}
             >
-              <Image src={icon} w={20} h={20} />
+              <Image src={icon} w={20} h={20} alt="NaoNaoAI Chat logo" data-testid="app-logo" />
               <Text span c="chatbox-secondary" size="xl" lh={1.2} fw="700" truncate>
                 NaoNaoAI Chat
               </Text>

@@ -1,3 +1,4 @@
+import { isProviderVisible } from '../providers/visibility'
 import { ModelProviderEnum } from '../types'
 
 // Re-export getModel and getProviderSettings from providers for backward compatibility
@@ -55,11 +56,6 @@ export const AIModelProviderMenuOptionList = [
     disabled: false,
   },
   {
-    value: ModelProviderEnum.Ollama,
-    label: aiProviderNameHash[ModelProviderEnum.Ollama],
-    disabled: false,
-  },
-  {
     value: ModelProviderEnum.LMStudio,
     label: aiProviderNameHash[ModelProviderEnum.LMStudio],
     disabled: false,
@@ -97,16 +93,6 @@ export const AIModelProviderMenuOptionList = [
   {
     value: ModelProviderEnum.MoonshotCN,
     label: aiProviderNameHash[ModelProviderEnum.MoonshotCN],
-    disabled: false,
-  },
-  {
-    value: ModelProviderEnum.SiliconFlow,
-    label: aiProviderNameHash[ModelProviderEnum.SiliconFlow],
-    disabled: false,
-  },
-  {
-    value: ModelProviderEnum.OpenRouter,
-    label: aiProviderNameHash[ModelProviderEnum.OpenRouter],
     disabled: false,
   },
   {
@@ -154,4 +140,4 @@ export const AIModelProviderMenuOptionList = [
   //     label: '腾讯混元',
   //     disabled: true,
   // },
-]
+].filter((option) => isProviderVisible(option.value))

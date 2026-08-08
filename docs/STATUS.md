@@ -2,6 +2,21 @@
 
 更新时间：2026-08-08（Asia/Shanghai）
 
+## 项目所有者最新要求（2026-08-08）
+
+- 未经项目所有者明确要求，不执行 Git 推送、软件打包或 Release 发布；本轮未执行这些动作。
+- 本轮已修复源码中的品牌入口：左上角和启动过渡动画均明确使用 NaoNaoAI `icon.png`；原 Chatbox 启动 SVG 已置于不可渲染模板。现有安装包未重新构建，桌面 E2E 未执行，因此不能据此宣称已安装软件包完成更新。
+- 后续每项工作开始前必须先提供细分计划，计划必须包含功能测试和验收标准；未实际执行测试不得向项目所有者报告任务完成。
+- 详细记录见 `docs/tasks/0028-owner-execution-and-branding-requirements.md`。
+
+## 本轮 Logo 修复与验证（2026-08-08）
+
+- `src/renderer/Sidebar.tsx` 的左上角 Logo 使用 `src/renderer/static/icon.png`，增加 `NaoNaoAI Chat logo` 标识。
+- `src/renderer/index.html` 与 `src/renderer/index.ejs` 的启动过渡动画使用 NaoNaoAI `icon.png`；旧 Chatbox 内联 SVG 置于不可渲染的 `<template>` 节点。
+- `logo192.png` 应用图标入口已改为 NaoNaoAI `icon.png`。
+- 定向 Vitest 3 项通过；TypeScript 0 error；变更相关 Biome 检查通过；`git diff --check` 通过。
+- 桌面 E2E 未执行，因为仓库脚本会先生成生产构建；本轮未执行构建、打包、推送或 Release 发布。
+
 ## 当前结论
 
 - Chatbox Community Edition 基线已导入，保留完整可达历史；基线 SHA 为 `f90fc31afd634494bdf8f074eca3e38fcf8da740`。
@@ -364,6 +379,28 @@
 - `main`、`.github/workflows/desktop-packages.yml` 和 `v1.22.2` 已确认推送到 `git@github.com:racky77-coder/NaoNaoAIChart.git`；项目所有者反馈新仓库没有 Actions 运行记录，Releases 页面仅有 GitHub 自动生成的源码压缩包，不能写成安装包发布成功。
 - 当前环境可通过 SSH 推送新仓库，但 GitHub REST 对私有仓库返回 404，内置浏览会话未登录，本机也没有 `gh` CLI；仓库级 Actions 开关及远端日志状态待有 GitHub 网页权限的会话确认。
 - 按项目所有者要求将应用版本递增到 `1.22.3`，用新提交和不可变的新标签重试远端工作流；不移动或覆盖已推送的 `v1.22.2`。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待新仓库远端执行确认）、安全持久化验证。
+
+## Batch 030：准备发布 NaoNaoAI Chat v1.22.6
+
+- 项目所有者已明确授权本轮执行推送、桌面打包和 Release 发布。
+- `release/app/package.json` 已从 `1.22.5` 更新为 `1.22.6`，目标标签为 `v1.22.6`。
+- `github-release` 远端已认证且当前为 `v1.22.5`；`v1.22.6` 尚不存在。
+- Gitee `origin` 远端检查返回 SSH `Permission denied (publickey)`，本轮不能将 Gitee 推送写成成功。
+- 锁定依赖解析完成；`release/app` 本机 postinstall 因缺少其本地 Electron 版本失败，随后使用 `--ignore-scripts` 完成依赖恢复。
+- 单 worker 全量 Vitest：249 个测试文件中 246 个通过、3 个跳过；2524 项中 2463 项通过、61 项跳过。
+- TypeScript 通过，0 error；全量 Biome lint 0 error、888 个既有 warning；变更文件 Biome check 和 `git diff --check` 通过。
+- 生产 `electron-vite build` 通过；保留既有构建 warning。本地安装包打包按最新要求未执行。
+- 提交、GitHub 推送和远端 Release 结果待后续步骤执行。
+
+## Batch 029：移除三个模型提供方的用户可见入口
+
+- 已从模型提供方菜单、推荐列表、Provider Spotlight、设置页列表和已配置模型集合中移除 SiliconFlow、OpenRouter、Ollama。
+- 新增共享 Provider 可见性规则；保留三个 Provider 的枚举、注册定义、模型实现及历史配置读取能力，避免旧配置损坏。
+- 定向功能测试已执行：4 个测试文件、19 项通过，包含 Provider 可见性、品牌回归和旧配置迁移回归；未调用真实模型或写入线上数据。
+- 本批不执行软件打包、Git 推送或 Release 发布。
+- TypeScript：通过，0 error；Biome：通过，变更相关源码 0 error；`git diff --check`：通过。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵（等待新仓库远端执行确认）、安全持久化验证。
 

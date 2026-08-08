@@ -1,5 +1,6 @@
 import { Box, Flex } from '@mantine/core'
 import { SystemProviders } from '@shared/defaults'
+import { filterVisibleProviders } from '@shared/providers/visibility'
 import type { ModelProviderEnum, ProviderInfo, ProviderSettings } from '@shared/types'
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
@@ -38,7 +39,7 @@ export function RouteComponent() {
   const { isExceeded } = useVersion()
 
   const providers = useMemo<ProviderInfo[]>(() => {
-    const systemProviders = SystemProviders().filter(
+    const systemProviders = filterVisibleProviders(SystemProviders()).filter(
       (p) => !(isExceeded && p.name.toLocaleLowerCase().match(/openai|claude|gemini/i))
     )
     return [...systemProviders, ...(customProviders || [])].map((p) => ({

@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="NaoNaoAI Chat" />
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="NaoNaoAI Chat" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
@@ -91,14 +91,6 @@
         text-align: center;
       }
 
-      .splash-screen-logo-bg {
-        display: none;
-      }
-
-      .splash-screen-logo-legacy {
-        display: none;
-      }
-
       html[data-theme="dark"] .splash-screen-product-name {
         color: #f1f3f5;
       }
@@ -123,8 +115,14 @@
     <div class="splash-screen">
       <div class="splash-screen-top"></div>
       <div class="splash-screen-content">
-        <img class="splash-screen-logo" src="%PUBLIC_URL%/icon.png" alt="" />
+        <img
+          class="splash-screen-logo"
+          src="%PUBLIC_URL%/icon.png"
+          alt="NaoNaoAI Chat logo"
+          data-testid="splash-screen-logo"
+        />
         <div class="splash-screen-product-name">NaoNaoAI Chat</div>
+        <template id="legacy-splash-assets">
         <svg
           class="splash-screen-logo-legacy"
           width="132"
@@ -254,6 +252,7 @@
             stroke-width="0.5"
           />
         </svg>
+        </template>
       </div>
       <div class="splash-screen-bottom" id="log-root"></div>
     </div>

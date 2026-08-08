@@ -1,5 +1,6 @@
 import { SystemProviders } from '@shared/defaults'
 import { isUsingOAuth, mergeSharedOAuthProviderSettings } from '@shared/oauth'
+import { filterVisibleProviders } from '@shared/providers/visibility'
 import { ModelProviderEnum, type ProviderInfo } from '@shared/types'
 import { useCallback, useMemo } from 'react'
 import { enrichModelsFromRegistry, useModelRegistryVersion } from '@/packages/model-registry'
@@ -14,7 +15,10 @@ export const useProviders = () => {
   const favoritedModelsSetting = useSettingsStore((state) => state.favoritedModels)
   const providerSettingsMap = useSettingsStore((state) => state.providers)
 
-  const allProviderBaseInfos = useMemo(() => [...SystemProviders(), ...(customProviders || [])], [customProviders])
+  const allProviderBaseInfos = useMemo(
+    () => filterVisibleProviders([...SystemProviders(), ...(customProviders || [])]),
+    [customProviders]
+  )
   const providers = useMemo(
     () =>
       allProviderBaseInfos
