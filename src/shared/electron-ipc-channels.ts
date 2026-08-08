@@ -21,6 +21,7 @@ const RENDERER_INVOKE_CHANNELS = [
   'getArch',
   'getConfig',
   'getDeviceName',
+  'infinite-canvas:get-url',
   'getLocale',
   'getPlatform',
   'getSettings',

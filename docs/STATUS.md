@@ -447,3 +447,39 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 本轮 `git diff --check` 通过；本仓库 TypeScript/lint/Vitest/构建/E2E 未执行（本轮无代码变更）；上游 Git clone 因 GitHub SSL 连接重置未执行，HTTP Raw/API 只读检查已执行。
 
 当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。无限画布后续实施需先由项目所有者确认首发范围、窗口形态和 sub2api 图像/视频端点能力。
+
+## 第三十二批：无限画布内嵌开发计划
+
+- 已按项目所有者要求创建开发分支 `codex/infinite-canvas-embed`，基线为 `b67841ed745059a8b6e5141578ef5f83f764d971`。
+- 已建立 `docs/tasks/0032-infinite-canvas-embed.md`，计划采用“固定上游 web 子项目 + Electron loopback 静态服务器 + renderer iframe 宿主”，不重写上游画布业务代码。
+- 首期边界为菜单、宿主页、资源打包、生命周期和存储隔离；不注入 JWT/API Key，不默认启用远程插件、Agent/MCP、WebDAV 或视频/音频扩展。
+- 本轮未执行上游安装/构建、应用 TypeScript/lint/Vitest、生产构建或桌面 E2E；仅完成分支和计划准备。
+
+## 第三十三批：无限画布跨域请求要求
+
+- 项目所有者新增要求：内嵌 Infinite Canvas 必须支持跨域请求。
+- 已新增 Proposed ADR-0009：保持 Electron `webSecurity: true`，采用 loopback canvas origin + 固定 HTTPS allowlist/主进程受控代理；不使用通配符 CORS、任意代理 URL 或全局关闭同源策略。
+- 跨域目标已明确限定为两个精确 origin：`https://naonaoai.shop`、`https://eazyai.shop`；不包含 HTTP、`www`、其他子域名、非默认端口或 IP 地址。
+- `docs/tasks/0032-infinite-canvas-embed.md` 已增加跨域阶段、OPTIONS 预检、目标 URL 校验、SSRF/重定向阻断、日志脱敏和功能验收标准。
+- 本轮未修改业务代码，未执行 CORS/代理实现、上游安装/构建、应用类型检查、lint、Vitest、生产构建或桌面 E2E；待固定 sub2api CORS 契约和第三方 provider 范围确认。
+
+## 第三十四批：无限画布内嵌实现（进行中）
+
+- 已固定上游 `v0.15.1` / commit `a2576d559ad765ba83e9563894adfbcd4e63405a`，源码位于 `vendor/infinite-canvas/`，MIT LICENSE 和独立 lockfile 保留；生产 web 产物位于 `assets/infinite-canvas/`。
+- 已实现仅监听 `127.0.0.1` 的静态服务器、SPA fallback、MIME、路径 containment、生命周期关闭和单一 `infinite-canvas:get-url` IPC；iframe 只允许 loopback URL，preload 仅在主 frame 暴露。
+- 已实现 `/infinite-canvas` 路由、侧栏入口、加载/错误/重试状态和 sandbox iframe；没有向 iframe 注入 JWT、refresh token 或 API Key。
+- 已实现同源 loopback 代理：只映射 `https://naonaoai.shop`、`https://eazyai.shop`，拒绝其他域名、管理路径、非允许方法、重定向和任意代理目标；上游源码未改写，仅增加运行时 URL bridge。
+- loopback 画布响应增加 `Content-Security-Policy`；bridge 拒绝非本地且非两条白名单服务的 fetch/XHR，使远程插件、Agent/WebDAV 默认不可用。
+- 已执行：`corepack pnpm check` 通过（根 TypeScript 0 error）；无限画布/IPC 定向 Vitest 3 文件、6 项通过；`corepack pnpm run build` 通过；`git diff --check` 通过。
+- 上游 `npm run typecheck` 仍因上游 `canvas-generation-helpers.ts:51` 的既有类型错误失败；上游生产构建在补齐 Windows 可选平台包后通过，保留动态导入和大 chunk warning。
+- `corepack pnpm lint` 已执行，0 error、889 个 warning（其中 888 个为既有 warning）；全量 `pnpm test` 已执行但未通过：239 个文件通过、3 个跳过、9 个 Electron 依赖测试失败，原因是本机 Electron 二进制在前次中断安装后缺失。重装被无关的 `zipfile` ABI 下载 403 / 缺少 v140 工具集阻断。
+- 尚未执行：锁定桌面 E2E、Windows 实际菜单点击/画布操作、macOS/Linux 构建矩阵；本轮未打包、推送或发布。
+
+当前风险：需在真实 Electron 窗口验证 iframe 的 BrowserRouter 深链接、画布 IndexedDB 刷新恢复、代理真实 OPTIONS/流式响应和关闭释放端口；跨域代理未使用真实 API Key。
+# Infinite Canvas Streaming Agent (2026-08-09)
+
+- Branch: `codex/infinite-canvas-openai-agent`.
+- Added an Electron main-process compatibility gateway for the embedded Infinite Canvas Agent. It calls only the OpenAI-compatible Chat Completions endpoint with `stream: true`, reassembles SSE text/tool-call chunks, and limits tool loops to eight rounds and 90 seconds.
+- The upstream URL policy permits only `https://naonaoai.shop` and `https://eazyai.shop`; redirects and arbitrary origins are not accepted. The API key is held in main-process memory for the running session and is not returned through IPC, URL query strings, iframe storage, or gateway responses.
+- Added a trusted-renderer host bridge: enabled Skills use a bounded `load_skill` result without absolute paths; running MCP tools use stable server-ID names, require Canvas opt-in, and require user confirmation for every call. Arbitrary command execution, Skill management, filesystem operations, MCP transport configuration, and raw MCP credentials remain unavailable to Canvas.
+- Verification passed: focused Infinite Canvas tests (4 files / 6 tests), `corepack pnpm check`, lint of newly added gateway/host bridge files, and production build. Full lint completed with 889 existing warnings. Electron development startup and loopback server startup succeeded; the full interactive desktop smoke test remains unexecuted. The full test command showed no observed failing test output, but its final summary was truncated and is not recorded as a pass.

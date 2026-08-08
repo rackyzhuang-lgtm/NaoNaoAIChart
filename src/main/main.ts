@@ -19,6 +19,7 @@ import './legacy-database-migration'
  */
 
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
 import electronDebug from 'electron-debug'
@@ -35,6 +36,8 @@ import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
 import { handleDeepLink } from './deeplinks'
 import { parseFile } from './file-parser'
+import { InfiniteCanvasAgentGateway, type CanvasAgentHostTool } from './infinite-canvas/agent-gateway'
+import { type InfiniteCanvasServer, startInfiniteCanvasServer } from './infinite-canvas/static-server'
 import { isQuitForInstallRequested } from './installer-command'
 import Locale from './locales'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
@@ -202,6 +205,36 @@ log.info(`📱 URL Scheme registered: ${PROTOCOL_SCHEME}://`)
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let infiniteCanvasServer: InfiniteCanvasServer | null = null
+type PendingCanvasHostTool = {
+  resolve: (value: unknown) => void
+  reject: (reason: Error) => void
+  timer: NodeJS.Timeout
+}
+const pendingCanvasHostTools = new Map<string, PendingCanvasHostTool>()
+
+function executeCanvasHostTool(name: string, input: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+  const target = mainWindow
+  if (!target || target.isDestroyed()) return Promise.resolve({ error: 'NaoNaoAI host is unavailable.' })
+  const requestId = crypto.randomUUID()
+  return new Promise<unknown>((resolve, reject) => {
+    const finish = (callback: (value: unknown) => void, value: unknown) => {
+      const pending = pendingCanvasHostTools.get(requestId)
+      if (!pending) return
+      pendingCanvasHostTools.delete(requestId)
+      clearTimeout(pending.timer)
+      signal.removeEventListener('abort', abort)
+      callback(value)
+    }
+    const abort = () => finish(reject, new Error('Host tool cancelled.'))
+    const timer = setTimeout(() => finish(reject, new Error('Host tool timed out.')), 60_000)
+    pendingCanvasHostTools.set(requestId, { resolve, reject, timer })
+    signal.addEventListener('abort', abort, { once: true })
+    target.webContents.send('infinite-canvas:host-tool-call', { requestId, name, input })
+  })
+}
+
+const infiniteCanvasAgentGateway = new InfiniteCanvasAgentGateway({ executeHostTool: executeCanvasHostTool })
 
 function isTrustedRendererUrl(url: string): boolean {
   try {
@@ -625,6 +658,13 @@ if (quitForInstallRequested) {
     .whenReady()
     .then(async () => {
       await knowledgeBaseInitPromise
+      try {
+        infiniteCanvasServer = await startInfiniteCanvasServer(getAssetPath('infinite-canvas'), infiniteCanvasAgentGateway)
+        infiniteCanvasAgentGateway.setUrl(`${infiniteCanvasServer.url}_canvas_agent`)
+        log.info(`[Infinite Canvas] loopback server listening on ${infiniteCanvasServer.url}`)
+      } catch (error) {
+        log.error('[Infinite Canvas] failed to start loopback server', error)
+      }
       await createWindow()
       await initializeSessionAttachmentRagAfterAppReady()
       ensureTray()
@@ -679,6 +719,17 @@ if (quitForInstallRequested) {
         }
         mcpIpc.closeAllTransports()
         destroyTray()
+        infiniteCanvasAgentGateway.close()
+        for (const pending of pendingCanvasHostTools.values()) {
+          clearTimeout(pending.timer)
+          pending.reject(new Error('Application is closing.'))
+        }
+        pendingCanvasHostTools.clear()
+        const server = infiniteCanvasServer
+        infiniteCanvasServer = null
+        if (server) {
+          void server.close().catch((error) => log.warn('[Infinite Canvas] failed to close loopback server', error))
+        }
       })
       app.on('before-quit', () => {
         destroyTray()
@@ -723,6 +774,77 @@ app.on('open-url', async (_event, url) => {
 })
 
 // --------- IPC 监听 ---------
+
+ipcMain.handle('infinite-canvas:get-url', (event) => {
+  if (!isTrustedSub2ApiSender(event)) {
+    throw new Error('Untrusted renderer')
+  }
+  if (!infiniteCanvasServer) {
+    throw new Error('Infinite Canvas is unavailable')
+  }
+  return infiniteCanvasServer.url
+})
+
+ipcMain.handle('infinite-canvas:get-agent-connection', (event) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  if (!infiniteCanvasServer) throw new Error('Infinite Canvas is unavailable')
+  return {
+    endpoint: `${infiniteCanvasServer.url}_canvas_agent`,
+    token: infiniteCanvasAgentGateway.token,
+    configured: infiniteCanvasAgentGateway.isConfigured(),
+  }
+})
+
+ipcMain.handle('infinite-canvas:configure-agent', (event, input: unknown) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid agent configuration')
+  const { baseUrl, apiKey, model } = input as Record<string, unknown>
+  if (
+    typeof baseUrl !== 'string' ||
+    typeof apiKey !== 'string' ||
+    typeof model !== 'string' ||
+    baseUrl.length > 2_000 ||
+    apiKey.length > 8_000 ||
+    model.length > 256
+  ) {
+    throw new Error('Invalid agent configuration')
+  }
+  infiniteCanvasAgentGateway.configure({ baseUrl, apiKey, model })
+  return { configured: true, model: model.trim() }
+})
+
+ipcMain.handle('infinite-canvas:set-host-tools', (event, tools: unknown) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  if (!Array.isArray(tools) || tools.length > 100) throw new Error('Invalid canvas tool catalog')
+  infiniteCanvasAgentGateway.setHostTools(
+    tools.filter(
+      (tool): tool is CanvasAgentHostTool =>
+        !!tool &&
+        typeof tool === 'object' &&
+        !Array.isArray(tool) &&
+        typeof (tool as CanvasAgentHostTool).name === 'string' &&
+        typeof (tool as CanvasAgentHostTool).description === 'string' &&
+        !!(tool as CanvasAgentHostTool).parameters &&
+        typeof (tool as CanvasAgentHostTool).parameters === 'object' &&
+        !Array.isArray((tool as CanvasAgentHostTool).parameters)
+    )
+  )
+  return { ok: true }
+})
+
+ipcMain.handle('infinite-canvas:host-tool-result', (event, input: unknown) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid host tool result')
+  const { requestId, result, error } = input as Record<string, unknown>
+  if (typeof requestId !== 'string') throw new Error('Invalid host tool result')
+  const pending = pendingCanvasHostTools.get(requestId)
+  if (!pending) return { ok: false }
+  pendingCanvasHostTools.delete(requestId)
+  clearTimeout(pending.timer)
+  if (typeof error === 'string' && error) pending.reject(new Error(error.slice(0, 2_000)))
+  else pending.resolve(result)
+  return { ok: true }
+})
 
 ipcMain.handle('getStoreValue', (event, key) => {
   return store.get(key)

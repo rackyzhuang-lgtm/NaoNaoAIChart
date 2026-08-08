@@ -16,7 +16,7 @@ import {
   IconSettingsFilled,
   IconUserCircle,
 } from '@tabler/icons-react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -58,6 +58,7 @@ export default function Sidebar() {
   const versionHook = useVersion()
   const language = useLanguage()
   const navigate = useNavigate()
+  const currentPath = useRouterState({ select: (state) => state.location.pathname })
   const showSidebar = useUIStore((s) => s.showSidebar)
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
@@ -91,6 +92,13 @@ export default function Sidebar() {
     }
     trackingEvent('open_image_creator', { event_category: 'user' })
   }, [isSmallScreen, setShowSidebar, navigate])
+
+  const handleOpenInfiniteCanvas = useCallback(() => {
+    navigate({ to: '/infinite-canvas' })
+    if (isSmallScreen) {
+      setShowSidebar(false)
+    }
+  }, [isSmallScreen, navigate, setShowSidebar])
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -251,6 +259,10 @@ export default function Sidebar() {
               <ScalableIcon icon={IconPhotoPlus} className="mr-2" />
               {t('Create Image')}
             </Button>
+            <Button variant="light" fullWidth data-testid="infinite-canvas-button" onClick={handleOpenInfiniteCanvas}>
+              <ScalableIcon icon={IconCode} className="mr-2" />
+              Infinite Canvas
+            </Button>
           </Stack>
 
           {isSmallScreen ? (
@@ -318,6 +330,16 @@ export default function Sidebar() {
                 label={t('NaoNaoAI Account')}
                 leftSection={<ScalableIcon icon={IconUserCircle} size={20} />}
                 onClick={() => navigateToSettings('account')}
+                variant="light"
+                p="xs"
+              />
+              <NavLink
+                c="chatbox-secondary"
+                className="rounded"
+                label="Infinite Canvas"
+                leftSection={<ScalableIcon icon={IconCode} size={20} />}
+                active={currentPath.startsWith('/infinite-canvas')}
+                onClick={handleOpenInfiniteCanvas}
                 variant="light"
                 p="xs"
               />

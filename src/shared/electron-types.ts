@@ -3,6 +3,14 @@ import type { Sub2ApiRendererApi } from './sub2api/ipc'
 export interface ElectronIPC {
   invoke: (channel: string, ...args: any[]) => Promise<any>
   getPathForFile: (file: File) => string
+  getInfiniteCanvasUrl: () => Promise<string>
+  getInfiniteCanvasAgentConnection: () => Promise<{ endpoint: string; token: string; configured: boolean }>
+  configureInfiniteCanvasAgent: (input: { baseUrl: string; apiKey: string; model: string }) => Promise<{ configured: boolean; model: string }>
+  setInfiniteCanvasHostTools: (tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>) => Promise<{ ok: boolean }>
+  completeInfiniteCanvasHostTool: (input: { requestId: string; result?: unknown; error?: string }) => Promise<{ ok: boolean }>
+  onInfiniteCanvasHostToolCall: (
+    callback: (input: { requestId: string; name: string; input: Record<string, unknown> }) => void
+  ) => () => void
   onSystemThemeChange: (callback: () => void) => () => void
   onWindowMaximizedChanged: (callback: (_: Electron.IpcRendererEvent, windowMaximized: boolean) => void) => () => void
   onWindowShow: (callback: () => void) => () => void

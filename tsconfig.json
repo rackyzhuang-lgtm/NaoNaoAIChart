@@ -27,6 +27,7 @@
     "test",
     "release",
     "out",
+    "vendor",
     ".erb/dll",
     "ios",
     "android",

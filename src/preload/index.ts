@@ -21,6 +21,12 @@ const electronHandler: ElectronIPC = {
     return ipcRenderer.invoke(channel, ...args)
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  getInfiniteCanvasUrl: () => ipcRenderer.invoke('infinite-canvas:get-url'),
+  getInfiniteCanvasAgentConnection: () => ipcRenderer.invoke('infinite-canvas:get-agent-connection'),
+  configureInfiniteCanvasAgent: (input) => ipcRenderer.invoke('infinite-canvas:configure-agent', input),
+  setInfiniteCanvasHostTools: (tools) => ipcRenderer.invoke('infinite-canvas:set-host-tools', tools),
+  completeInfiniteCanvasHostTool: (input) => ipcRenderer.invoke('infinite-canvas:host-tool-result', input),
+  onInfiniteCanvasHostToolCall: createListener('infinite-canvas:host-tool-call'),
   onSystemThemeChange: (callback: () => void) => {
     ipcRenderer.on('system-theme-updated', callback)
     return () => ipcRenderer.off('system-theme-updated', callback)
@@ -91,4 +97,6 @@ const electronHandler: ElectronIPC = {
   onUpdaterError: createListener('updater:error'),
 }
 
-contextBridge.exposeInMainWorld('electronAPI', electronHandler)
+if (process.isMainFrame) {
+  contextBridge.exposeInMainWorld('electronAPI', electronHandler)
+}
