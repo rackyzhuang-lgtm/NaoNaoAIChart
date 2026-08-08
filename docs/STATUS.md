@@ -489,7 +489,7 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - Main branch contains merge commit `26a2032c` (`feat: embed Infinite Canvas OpenAI agent`).
 - `github-release/main` was pushed successfully to `26a2032c`.
 - Push to the `github` remote failed with `Repository not found`; push to Gitee `origin` failed with SSH `Permission denied (publickey)`.
-- `corepack pnpm run package` completed successfully after using the local Electron Builder NSIS caches. The build ran under Node `24.14.0` and pnpm `11.16.0`, outside the repository requirement of Node `>=22.13.0 <23` and pnpm `10.33.0`; a clean release rebuild under the pinned toolchain remains a risk.
+- `corepack pnpm run package` completed the application build but its NSIS stage hit a GitHub download timeout. The same `electron-builder --win --publish never` stage then completed successfully using the local Electron Builder NSIS caches. The build ran under Node `24.14.0` and pnpm `11.16.0`, outside the repository requirement of Node `>=22.13.0 <23` and pnpm `10.33.0`; a clean release rebuild under the pinned toolchain remains a risk.
 - Windows installer: `release/build/NaoNaoAI Chat-1.22.6-Setup.exe`, 312,862,992 bytes, SHA-256 `922E3AC2325629E7E177328AF639582C51536D88F8124F3A34DEEE7D421BD9FA`.
 - Blockmap: `release/build/NaoNaoAI Chat-1.22.6-Setup.exe.blockmap`, 325,292 bytes, SHA-256 `0DC47B5E8E69F8BF1C68A84F385C74C3859AC50395E2A236C24E02CF1F271B69`.
 - The installer is unsigned (`signtool.exe` was invoked without a signing identity). macOS/Linux packages and a full interactive desktop smoke test were not executed in this release run.
