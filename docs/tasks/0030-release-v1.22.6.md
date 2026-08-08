@@ -1,6 +1,6 @@
 # 任务 0030：发布 NaoNaoAI Chat v1.22.6
 
-- 状态：已提交，等待 GitHub Actions 发布结果
+- 状态：代码与标签已推送，GitHub Actions/Release 结果待权限恢复后确认
 - 日期：2026-08-08
 - 发布版本：`1.22.6`
 - 触发标签：`v1.22.6`
@@ -42,4 +42,12 @@
 - 变更文件 Biome check：通过。
 - 生产 `electron-vite build`：通过；保留既有构建 warning。
 - 本地安装包打包：按项目所有者最新要求未执行。
-- Git 推送与 GitHub Release：待提交后执行。
+- Git 推送：已完成；GitHub Actions/Release 资产：待权限恢复后确认。
+
+## 推送结果
+
+- `github-release/main` 已推送至提交 `6198edcb`。
+- `github-release` 的 `v1.22.6` 标签已推送，未移动或覆盖既有标签。
+- 按 `.github/workflows/desktop-packages.yml` 的触发规则，标签推送已触发 Windows/macOS 打包与 Release 流程。
+- 当前环境没有 `gh` CLI；GitHub Actions API 返回 HTTP 403，Release 页面请求也无法建立，Windows/macOS 制品和 Release 资产尚未确认。
+- Gitee `origin` 推送失败：SSH `Permission denied (publickey)`；未将其记录为成功。

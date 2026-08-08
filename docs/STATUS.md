@@ -392,7 +392,9 @@
 - 单 worker 全量 Vitest：249 个测试文件中 246 个通过、3 个跳过；2524 项中 2463 项通过、61 项跳过。
 - TypeScript 通过，0 error；全量 Biome lint 0 error、888 个既有 warning；变更文件 Biome check 和 `git diff --check` 通过。
 - 生产 `electron-vite build` 通过；保留既有构建 warning。本地安装包打包按最新要求未执行。
-- 提交、GitHub 推送和远端 Release 结果待后续步骤执行。
+- 提交 `6198edcb` 已推送到 `github-release/main`，`v1.22.6` 标签已推送且未移动既有标签。
+- 按工作流触发规则，标签推送已触发 Windows/macOS 打包与 Release 流程；当前环境没有 `gh` CLI，GitHub API 返回 HTTP 403，远端安装包和 Release 资产尚未确认。
+- Gitee `origin` 推送失败：SSH `Permission denied (publickey)`；未将其记录为成功。
 
 ## Batch 029：移除三个模型提供方的用户可见入口
 
@@ -435,3 +437,13 @@
 - Release version is prepared as `1.22.5`; the tag must remain `v1.22.5` for the GitHub workflow's version check.
 
 Remaining risk: legacy Chatbox compatibility modules and assets remain in the repository for migration/read compatibility, but are no longer selected by the updated visible rendering paths.
+
+## 第三十一批：无限画布项目嵌入可行性评估
+
+- 已只读复核 `basketikun/infinite-canvas` 的 GitHub 元数据、README、LICENSE、`web/package.json`、路由、画布状态存储、模型请求、WebDAV 和插件运行时代码；详细记录见 `docs/tasks/0031-infinite-canvas-feasibility.md`。
+- 上游是私有 Vite SPA，不是可直接安装的画布组件；画布核心复用价值高，但原样合并会与当前 React 18/TanStack Router/Tailwind 3/MUI+Mantine 运行时冲突。
+- 上游 renderer 直接持有并持久化 API Key，远程插件可访问页面数据；这不符合当前 Electron 主进程凭证边界，首发建议只移植画布核心并禁用插件/Agent/WebDAV。
+- 结论：画布核心入口高可行；完整 SPA 原样嵌入中低可行；模型、插件和同步能力需拆分适配并分别验收。
+- 本轮 `git diff --check` 通过；本仓库 TypeScript/lint/Vitest/构建/E2E 未执行（本轮无代码变更）；上游 Git clone 因 GitHub SSL 连接重置未执行，HTTP Raw/API 只读检查已执行。
+
+当前 MVP 待执行任务（0 项）。发布阶段待执行任务（2 项）：跨平台构建矩阵、安全持久化验证。无限画布后续实施需先由项目所有者确认首发范围、窗口形态和 sub2api 图像/视频端点能力。
