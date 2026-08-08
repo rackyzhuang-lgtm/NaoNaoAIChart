@@ -483,3 +483,14 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - The upstream URL policy permits only `https://naonaoai.shop` and `https://eazyai.shop`; redirects and arbitrary origins are not accepted. The API key is held in main-process memory for the running session and is not returned through IPC, URL query strings, iframe storage, or gateway responses.
 - Added a trusted-renderer host bridge: enabled Skills use a bounded `load_skill` result without absolute paths; running MCP tools use stable server-ID names, require Canvas opt-in, and require user confirmation for every call. Arbitrary command execution, Skill management, filesystem operations, MCP transport configuration, and raw MCP credentials remain unavailable to Canvas.
 - Verification passed: focused Infinite Canvas tests (4 files / 6 tests), `corepack pnpm check`, lint of newly added gateway/host bridge files, and production build. Full lint completed with 889 existing warnings. Electron development startup and loopback server startup succeeded; the full interactive desktop smoke test remains unexecuted. The full test command showed no observed failing test output, but its final summary was truncated and is not recorded as a pass.
+
+## Release 2026-08-09
+
+- Main branch contains merge commit `26a2032c` (`feat: embed Infinite Canvas OpenAI agent`).
+- `github-release/main` was pushed successfully to `26a2032c`.
+- Push to the `github` remote failed with `Repository not found`; push to Gitee `origin` failed with SSH `Permission denied (publickey)`.
+- `corepack pnpm run package` completed successfully after using the local Electron Builder NSIS caches. The build ran under Node `24.14.0` and pnpm `11.16.0`, outside the repository requirement of Node `>=22.13.0 <23` and pnpm `10.33.0`; a clean release rebuild under the pinned toolchain remains a risk.
+- Windows installer: `release/build/NaoNaoAI Chat-1.22.6-Setup.exe`, 312,862,992 bytes, SHA-256 `922E3AC2325629E7E177328AF639582C51536D88F8124F3A34DEEE7D421BD9FA`.
+- Blockmap: `release/build/NaoNaoAI Chat-1.22.6-Setup.exe.blockmap`, 325,292 bytes, SHA-256 `0DC47B5E8E69F8BF1C68A84F385C74C3859AC50395E2A236C24E02CF1F271B69`.
+- The installer is unsigned (`signtool.exe` was invoked without a signing identity). macOS/Linux packages and a full interactive desktop smoke test were not executed in this release run.
+- GitHub Release publication was not performed locally: the `gh` CLI is unavailable, and the canonical `github` remote is inaccessible. The repository workflow remains configured to create the cross-platform Release when a matching `v*` tag is pushed to an accessible GitHub repository.
