@@ -35,6 +35,8 @@ interface StoreType {
   configVersion: number
   settings: Settings
   configs: Config
+  sub2apiAutoLogin?: string
+  infiniteCanvasStoragePath?: string
   lastShownAboutDialogVersion: string // 上次启动时自动弹出关于对话框的应用版本
 }
 export const store = new Store<StoreType>({

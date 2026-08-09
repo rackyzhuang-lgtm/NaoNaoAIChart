@@ -1,7 +1,20 @@
-import { Alert, Badge, Button, Group, Loader, Paper, Stack, Table, Text, TextInput, ThemeIcon } from '@mantine/core'
+import {
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Loader,
+  Modal,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  ThemeIcon,
+} from '@mantine/core'
 import type { Sub2ApiRedeemHistorySummary, Sub2ApiRedeemResult, Sub2ApiUser } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { IconAlertCircle, IconCheck, IconGift, IconHistory } from '@tabler/icons-react'
+import { IconAlertCircle, IconCheck, IconExternalLink, IconGift, IconHistory } from '@tabler/icons-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -10,6 +23,8 @@ interface Props {
   user: Sub2ApiUser
   onUserChange: (user: Sub2ApiUser) => void
 }
+
+const REDEEM_CODE_STORE_URL = 'https://pay.ldxp.cn/shop/naonaoai'
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
@@ -53,6 +68,7 @@ export default function Sub2ApiRedeem({ api, user, onUserChange }: Props) {
   const [history, setHistory] = useState<Sub2ApiRedeemHistorySummary[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyFailed, setHistoryFailed] = useState(false)
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -105,6 +121,14 @@ export default function Sub2ApiRedeem({ api, user, onUserChange }: Props) {
           <IconGift size={18} />
         </ThemeIcon>
         <Text fw={600}>{t('Redeem code')}</Text>
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          leftSection={<IconExternalLink size={15} />}
+          onClick={() => setPurchaseOpen(true)}
+        >
+          {t('Get redemption code')}
+        </Button>
       </Group>
 
       <Group align="flex-end">
@@ -211,6 +235,20 @@ export default function Sub2ApiRedeem({ api, user, onUserChange }: Props) {
           </div>
         )}
       </Paper>
+      <Modal
+        opened={purchaseOpen}
+        onClose={() => setPurchaseOpen(false)}
+        title={t('Get redemption code')}
+        size="xl"
+        centered
+      >
+        <iframe
+          title={String(t('Get redemption code'))}
+          src={REDEEM_CODE_STORE_URL}
+          sandbox="allow-forms allow-popups allow-same-origin allow-scripts"
+          style={{ border: 0, display: 'block', height: 640, maxHeight: '70vh', width: '100%' }}
+        />
+      </Modal>
     </Stack>
   )
 }

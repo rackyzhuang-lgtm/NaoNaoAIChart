@@ -3,14 +3,34 @@ export type IndexedDbDatabaseUsage = { name: string; version: number; bytes: num
 export type LocalStorageUsage = { usage: number; quota: number; contentBytes: number; databases: IndexedDbDatabaseUsage[] };
 
 export async function readLocalStorageUsage(): Promise<LocalStorageUsage> {
-    const [estimate, database] = await Promise.all([navigator.storage.estimate(), readDatabaseUsage("infinite-canvas")]);
-    return { usage: estimate.usage!, quota: estimate.quota!, contentBytes: database.bytes, databases: [database] };
+    const [estimate, database] = await Promise.all([readStorageEstimate(), readDatabaseUsage("infinite-canvas")]);
+    return { usage: estimate.usage, quota: estimate.quota, contentBytes: database.bytes, databases: [database] };
 }
 
-function readDatabaseUsage(name: string) {
+async function readStorageEstimate(): Promise<{ usage: number; quota: number }> {
+    try {
+        const estimate = await navigator.storage?.estimate?.();
+        return { usage: Number(estimate?.usage) || 0, quota: Number(estimate?.quota) || 0 };
+    } catch {
+        return { usage: 0, quota: 0 };
+    }
+}
+
+function emptyDatabase(name: string): IndexedDbDatabaseUsage {
+    return { name, version: 0, bytes: 0, stores: [] };
+}
+
+function readDatabaseUsage(name: string): Promise<IndexedDbDatabaseUsage> {
+    if (typeof indexedDB === "undefined") return Promise.resolve(emptyDatabase(name));
     return new Promise<IndexedDbDatabaseUsage>((resolve, reject) => {
-        const request = indexedDB.open(name);
-        request.onerror = () => reject(request.error);
+        let request: IDBOpenDBRequest;
+        try {
+            request = indexedDB.open(name);
+        } catch {
+            resolve(emptyDatabase(name));
+            return;
+        }
+        request.onerror = () => reject(request.error || new Error("IndexedDB is unavailable"));
         request.onsuccess = () => {
             const database = request.result;
             const names = Array.from(database.objectStoreNames);
@@ -19,13 +39,26 @@ function readDatabaseUsage(name: string) {
                 resolve({ name, version: database.version, bytes: 0, stores: [] });
                 return;
             }
-            const transaction = database.transaction(names, "readonly");
-            Promise.all(names.map((storeName) => readStoreUsage(transaction.objectStore(storeName))))
-                .then((stores) => resolve({ name, version: database.version, bytes: stores.reduce((total, store) => total + store.bytes, 0), stores: stores.sort((a, b) => b.bytes - a.bytes) }))
-                .catch(reject)
-                .finally(() => database.close());
+            let transaction: IDBTransaction;
+            try {
+                transaction = database.transaction(names, "readonly");
+            } catch (error) {
+                database.close();
+                reject(error);
+                return;
+            }
+            try {
+                const storeUsage = names.map((storeName) => readStoreUsage(transaction.objectStore(storeName)));
+                Promise.all(storeUsage)
+                    .then((stores) => resolve({ name, version: database.version, bytes: stores.reduce((total, store) => total + store.bytes, 0), stores: stores.sort((a, b) => b.bytes - a.bytes) }))
+                    .catch(reject)
+                    .finally(() => database.close());
+            } catch (error) {
+                database.close();
+                reject(error);
+            }
         };
-    });
+    }).catch(() => emptyDatabase(name));
 }
 
 function readStoreUsage(store: IDBObjectStore) {

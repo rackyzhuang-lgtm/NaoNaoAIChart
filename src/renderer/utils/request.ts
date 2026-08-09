@@ -11,6 +11,32 @@ interface RequestOptions {
   useProxy?: boolean
 }
 
+const SUB2API_ORIGIN = 'https://naonaoai.shop'
+const SUB2API_PROXY_ALIAS = 'naonaoai.shop'
+
+/**
+ * Routes the fixed sub2api gateway through the app-owned loopback server.
+ * Electron renderer fetches are subject to CORS, while the main process can
+ * make the same request directly and stream the response back to the UI.
+ */
+export async function resolveDesktopProviderUrl(url: string): Promise<string> {
+  let target: URL
+  try {
+    target = new URL(url)
+  } catch {
+    return url
+  }
+
+  if (target.origin !== SUB2API_ORIGIN || platform.type !== 'desktop' || !platform.getInfiniteCanvasUrl) {
+    return url
+  }
+
+  const loopbackUrl = await platform.getInfiniteCanvasUrl()
+  const proxyBase = new URL(loopbackUrl.endsWith('/') ? loopbackUrl : `${loopbackUrl}/`)
+  const proxyPath = `/_naonao_proxy/${SUB2API_PROXY_ALIAS}${target.pathname}${target.search}`
+  return new URL(proxyPath, proxyBase).toString()
+}
+
 async function retryRequest<T>(fn: () => Promise<T>, retry: number, url: string): Promise<T> {
   let requestError: BaseError | null = null
 
@@ -46,7 +72,7 @@ function buildHeaders(options: RequestOptions, _url: string): Headers {
 
 async function doRequest(url: string, options: RequestOptions): Promise<Response> {
   const { signal, retry = 3, useProxy = false, body, method } = options
-  const requestUrl = url
+  const requestUrl = await resolveDesktopProviderUrl(url)
   const headers = buildHeaders(options, url)
 
   const makeRequest = async () => {

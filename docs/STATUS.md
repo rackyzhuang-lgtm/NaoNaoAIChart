@@ -1,4 +1,80 @@
+# 品牌资产与标识盘点（2026-08-09）
+
+- 已新增 `docs/BRAND-INVENTORY.md`，作为后续统一重品牌的基线，覆盖用户可见名称、Logo/图标资源、业务域名与外链、Chatbox 历史内容、应用 ID、深度链接协议和本地持久化键。
+- 本轮明确区分普通显示文案与运行时标识：`naonaoai.shop` 是模型/面板网关及 Canvas allowlist，`xyz.chatboxapp.app`、`chatbox://` 和 `chatbox:*` 本地键会影响安装升级、协议链接和用户数据，均不能作为普通文本批量替换。
+- 当前主 Logo 资源为 `assets/icon.png`、`assets/icon.ico`、`assets/icon.icns`、`assets/icon.svg` 及 `src/renderer/static/icon.png`；历史 `icon-chatbox.svg` 和 `chatbox-ai.png` 已记录为兼容资源，暂不删除。
+- 已记录仍保留的 Chatbox Provider、远程域名、示例资源、支持邮箱、语言包和第三方请求头。是否移除旧 Provider 或替换第三方归因，待项目所有者明确决定。
+- 本轮没有更改产品品牌、域名、后端地址、应用 ID、协议或业务代码；没有执行打包、发布或 Git 推送。
+- 验证：关键位置 `rg` 复核已执行；`git diff --check` 通过。TypeScript、lint、单元测试、构建和桌面 E2E 未执行，因为本轮仅修改 Markdown 文档。
+
+## 任务 0042：API 密钥入口导航（2026-08-09）
+
+- “用于聊天”现在会保存所选 API Key 的 OpenAI-compatible Provider 配置，创建并切换到新聊天会话；会话明确使用绑定结果中的首个可用模型。
+- “导入到无限画布”现在通过 TanStack Router 导航到 `/infinite-canvas`，保留待导入数据供画布读取，避免 `window.history.pushState` 在 Electron Hash Router 下只改变地址而不切换页面。
+- 验证：定向 Vitest 1 个文件、5 项通过；变更文件 Biome 通过；锁定 Node 22 TypeScript 检查退出码 0；`git diff --check` 通过。
+- 真实 Electron 窗口点击、设置弹窗关闭和最终页面手工验收未执行；未执行真实 API 请求、打包、发布和 Git 推送。任务记录：`docs/tasks/0042-api-key-entry-navigation.md`。
+
+## 任务 0043：发布 v1.22.7（2026-08-09）
+
+- 项目所有者已明确授权本轮执行推送、桌面安装包打包和 Release 发布。
+- 发布版本从 `1.22.6` 递增为 `1.22.7`，目标标签为 `v1.22.7`，目标远程为已记录的 `github-release`。
+- 发布前质量门禁、安装包构建、远程分支/标签推送和 GitHub Actions Release 结果待执行，未提前记录为成功。
+- 任务记录：`docs/tasks/0043-release-v1.22.7.md`。
+
 # 项目状态
+
+## 主聊天 Failed to fetch 修复（2026-08-09）
+
+- 已定位主聊天与无限画布的网络差异：画布 Agent 在主进程请求固定模型网关，主聊天 renderer 直接跨源 `fetch`，在 Electron `webSecurity: true` 下失败并显示 `Failed to fetch`。
+- 主聊天固定 `https://naonaoai.shop` `/v1` 请求现在复用主进程 loopback 代理；代理目标仍由现有 allowlist 严格限制，转发请求体、`Authorization`、SSE 响应和取消信号，不开放任意 URL。
+- loopback 代理的 OPTIONS 和实际响应增加跨端口读取所需 CORS 头；未修改 Electron `webSecurity`、CSP 或 sub2api 服务端。
+- 定向 Vitest：2 个文件、5 项通过；Node `v22.16.0` TypeScript：通过；变更范围 Biome：无 error（保留既有 warning）；`git diff --check`：通过。
+- 直接访问固定网关 `/v1/models` 未携带 Key 返回 HTTP 401，网络可达；本地 Electron 重启后 renderer `http://localhost:1212/` 返回 HTTP 200，loopback 预检仅允许本地 Origin；真实模型请求和真实 Electron 窗口发送“你好”手工验收未执行。
+- 本轮 `electron-vite build` 的 main/preload 阶段完成，renderer 阶段因既有生成 chunk 转译错误 `Expected ";" but found "\\b"` 失败，不能记录为生产构建通过。
+- 任务记录：`docs/tasks/0039-main-chat-network-request.md`。
+
+## 无限画布旧 preload 兼容修复（2026-08-09）
+
+- 已定位用户反馈的“无限画布不可用”：运行中的旧 Electron preload 不含 `getInfiniteCanvasStoragePath`，但 renderer 已经热更新并调用该新接口，造成页面渲染报错 `TypeError: window.electronAPI.getInfiniteCanvasStoragePath is not a function`。
+- 画布页面现先检测目录存储 IPC 能力。旧 preload 下不会调用缺失方法，保留既有画布 URL 加载流程，提示“本地存储目录功能需要重启软件后使用”并禁用目录选择；完整重启后加载新版 preload 可恢复目录功能。
+- 本地启动调试时进一步发现目录能力辅助文件位于路由目录会被 TanStack 路由生成器误识别为页面，产生不存在的 `Route` 导入并阻断 renderer。已迁移至 `src/renderer/utils/` 并重建路由树；本地 NaoNaoAI Chat 开发窗口已启动，renderer `http://localhost:1213/` 返回 HTTP 200。
+- Chat renderer 与 Infinite Canvas 已共享同一个 Chromium `sessionData`。为避免多个开发实例同时写入这份共享数据而触发 quota/IndexedDB `Internal error`，开发版现与安装版一样使用 Electron 单实例锁；需要并行调试必须使用独立用户数据目录，详见 ADR-0013。
+- 已重启本地开发窗口并验证第二次开发协议启动请求被单实例锁拦截：探测进程退出码为 0，系统只保留一个可见的 NaoNaoAI Chat 窗口；会话维护和 `kb:list` 未再出现 quota/IndexedDB `Internal error`。真实模型发送未自动执行，避免使用实际 API 凭证。
+- 定向 Vitest 2 个文件、4 项通过；变更范围 Biome 通过，0 error；运行中的画布 loopback 入口和 bundle 实测均返回 HTTP 200；`git diff --check` 通过。
+- 真实 Electron 窗口重新进入画布及重启后的目录选择手工验收未执行，根生产构建状态仍按下文记录为未通过。
+
+## 分组 preload 兼容修复（2026-08-09）
+
+- 已确认 `getAvailableGroups` 的共享契约、主进程 handler 和新版 preload 均完整。用户遇到的 `api.getAvailableGroups is not a function` 来自正在运行的旧 preload，页面代码已先于 preload 热更新。
+- 密钥创建/修改表单现在检测旧 preload 缺少方法的情况，向中文用户提示重启软件后重试，不再显示内部错误；应用重启后即可加载新版窄 IPC API。
+- 定向 Vitest 2 个文件、8 项通过；变更范围 Biome 通过。真实 Electron 重启后的分组请求手工验收未执行。
+
+## 无限画布本地存储修复（2026-08-09）
+
+- 无限画布的本地存储统计已对 `navigator.storage.estimate()`、IndexedDB 打开、事务和游标读取失败做容错，失败时显示 0/空数据，不再把诊断统计失败升级为 `Internal error`。
+- 无限画布页面增加“本地存储目录”和“选择目录”。主进程仅接受受信主窗口调用，保存绝对路径；下次启动在 Electron ready 前创建目录并设置 `sessionData`，界面明确提示“重启后生效”。该目录包含整个 renderer Chromium 会话数据，不自动迁移或删除旧目录数据，详见 ADR-0012。
+- 画布静态 bundle 已重新生成，入口加载 NaoNaoAI 桥接脚本并指向新 bundle；旧 hash bundle 已按新 `dist` 精确移除。
+- 定向 Vitest 2 文件、4 项通过；根 TypeScript 检查通过；变更范围 Biome 无 error（既有 warning 保留）；`git diff --check` 通过。画布独立 `typecheck` 仍受上游 `canvas-generation-helpers.ts:51` 的既有 `node.metadata` 可空错误阻塞。
+- 真实 Electron 的目录选择、重启和数据落盘手工验收未执行。根 `pnpm run build` 在 Node 24 环境因 Windows `0xC0000005` 失败；以 `D:\software\nodejs\node.exe`（Node `v22.16.0`）直接运行 `electron-vite build` 时 main/preload 已完成，但在路由生成阶段未返回 renderer 完成信息或退出码，故根生产构建仍未记为通过。
+
+## API Key 分组选择与列表精简（2026-08-09）
+
+- 已依据上游普通用户路由接入 `GET /api/v1/groups/available`；创建和修改 API Key 均提交用户选择的 `group_id`。
+- 新建和编辑统一为“密钥名称 -> 获取分组 -> 设置分组 -> 保存/修改”表单；列表只显示密钥名称、脱敏密钥及复制操作、`quota_used / quota` 用量，不显示状态列。
+- 复制完整密钥由主进程受信 IPC 读取单个 Key 后直接写入系统剪贴板，完整密钥不返回 renderer；列表、创建和更新结果仍为脱敏摘要。
+- 定向 Vitest 4 个文件、40 项通过；TypeScript 通过；生产构建通过；变更文件 Biome 无 error，保留既有 preload `any` warning；`git diff --check` 通过。
+- 未执行真实账户创建、修改、删除或复制验证，未执行打包、推送或发布。
+
+更新时间：2026-08-09（Asia/Shanghai）
+
+## 账户精简、自动登录与品牌资源修正（2026-08-09）
+
+- 登录页增加“启动应用时自动登录”选项。只有用户勾选后，主进程才使用 Electron `safeStorage` 加密 refresh token 并保存密文；启动阶段在主进程刷新会话，renderer 不接收 access token、refresh token 或密文。退出登录、刷新失败和安全存储不可用时会清除或不创建自动登录记录。
+- 账户页、preload 和主进程受信 IPC 已移除用量明细、平台配额、模型广场和错误请求；相关请求不会从当前产品路径发起。趋势、模型用量摘要、订阅和其他未要求移除的账户功能保留。
+- 兑换码模块增加“获取兑换码”，打开固定 `https://pay.ldxp.cn/shop/naonaoai` 的 sandbox iframe 弹窗。
+- 简体中文语言包已覆盖“获取兑换码”“保持登录”，不会再对这两个账户控件回退显示英文。
+- 经资源比对确认，旧 `src/renderer/static/icon.png` 是项目所有者截图中的橙色 Chatbox 图标；已用仓库 `assets/icon.png` 的 NaoNaoAI 猫脸轨道图标替换。Sidebar 与启动页继续共用该 renderer 资源。
+- 本批定向 Vitest 7 文件、42 项通过；TypeScript 通过；变更文件 Biome 无新增 error（保留既有 warning）；生产构建和 Electron 开发启动烟测完成。真实账号自动登录重启恢复未执行，避免本轮使用或持久化实际凭证；开发启动存在既有 Chromium 缓存目录权限 warning。
 
 更新时间：2026-08-08（Asia/Shanghai）
 
@@ -494,3 +570,40 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - Blockmap: `release/build/NaoNaoAI Chat-1.22.6-Setup.exe.blockmap`, 325,292 bytes, SHA-256 `0DC47B5E8E69F8BF1C68A84F385C74C3859AC50395E2A236C24E02CF1F271B69`.
 - The installer is unsigned (`signtool.exe` was invoked without a signing identity). macOS/Linux packages and a full interactive desktop smoke test were not executed in this release run.
 - GitHub Release publication was not performed locally: the `gh` CLI is unavailable, and the canonical `github` remote is inaccessible. The repository workflow remains configured to create the cross-platform Release when a matching `v*` tag is pushed to an accessible GitHub repository.
+
+## 任务 0040：右侧栏示例会话与右键删除（2026-08-09）
+
+- 已将首次启动的中文默认会话收敛为截图中的 9 个示例：`Just chat`、`Markdown 101 (Example)`、`Software Developer (Example)`、`简单问候`、`Translator (Example)`、`翻译助手 (示例)`、`夸夸机 (示例)`、`小红书文案生成器 (示例)`、`做图表`；前三个保持置顶。
+- 已将默认示例对话中的可见 `Chatbox` 品牌文案替换为 `NaoNaoAI Chat`，保留历史 ID、provider ID 和迁移模板兼容字段。
+- 桌面会话项现支持右键打开菜单，菜单包含置顶、归档和永久删除；删除复用现有清理流程，删除当前会话后返回新会话入口。移动端长按菜单同步提供删除。
+- 验证：定向 Vitest 2 个文件 / 8 个测试通过；Node 22 TypeScript 检查通过；变更范围 Biome 无 error；`git diff --check` 通过。
+- 遗留：真实 Electron 右键菜单、删除确认和当前会话导航尚未手工执行；未执行打包、发布和真实模型请求。
+
+## 菜单文案补充（2026-08-09）
+
+- 侧栏两个 `Infinite Canvas` 用户可见入口已统一改为“无限画布”；路由和内部标识保持不变。
+- 验证：`biome check src/renderer/Sidebar.tsx` 通过；`git diff --check` 通过。
+# API Key 导入无限画布（2026-08-09）
+
+- API Key 列表新增“导入到无限画布”入口；用户可选择文本模型、图片模型或视频模型类型。
+- 主进程用所选 API Key 请求 `/v1/models`，将模型按选择的类型导入画布配置，并设置对应默认模型；面板 JWT/refresh token 不进入画布。
+- 定向 Vitest 5 个文件、32 项通过；TypeScript、变更文件 Biome、桥接脚本语法检查和 `git diff --check` 已执行并通过。
+- 真实账户线上导入、画布手工冒烟、多平台验证、打包和 Git 推送未执行。
+# 无限画布内置 Agent 修复（2026-08-09）
+- 已定位“Codex 对话初始化失败”的根因：画布仅连接 loopback 网关但未在加载前注入 NaoNaoAI Chat 文本模型配置，导致网关会话处于未配置状态。
+- 已由 renderer 自动解析导入文本模型或当前默认 OpenAI-compatible 文本模型，并通过窄 IPC 配置主进程内置网关；用户不需要安装 Codex、CCSwitch、canvas-agent 或执行命令。
+- 已移除 vendor 连接面板的外部插件、npx、Local URL 和 Connect token 引导，连接和初始化失败提示改为中文；网关运行时错误也已中文化。
+- 已执行：定向 Agent/配置/静态服务器测试 9 项通过；vendor 构建并同步新 bundle；Node `v22.16.0` 根 TypeScript 检查通过。默认 Node `v24.14.0` 下 `pnpm check` 在 TypeScript 阶段发生 Windows `0xC0000005`，未将其报告为通过。真实凭证模型发送和真实 Electron 手工对话验收尚未执行，不能视为通过。
+- 追加修复：发现现有用户配置只有 `providers.openai` 的地址、Key 和模型列表，没有设置全局 `defaultChatModel`；画布现在会从已配置的兼容 Provider 自动选择文本模型，并跳过 `codex-auto-review` 占位模型。
+- 追加修复：首次画布连接现在以 `idle` 状态触发线程初始化；发送后立即同步线程 ID；停止请求缺少线程 ID 时也会中止当前网关流式请求，避免长期停留在“正在思考”。
+- 追加修复：画布入口不再包含被 `script-src 'self'` 拒绝的内联主题脚本，主题初始化已移入同源桥接脚本；网关补齐 `GET /agent/codex/skills` 空列表响应，消除连接期间技能加载 404。
+- 任务记录：`docs/tasks/0038-infinite-canvas-built-in-agent.md`；架构决策：`docs/decisions/0014-infinite-canvas-built-in-agent.md`。
+
+## 发布 v1.22.7（2026-08-09）
+
+- `release/app/package.json` 已更新为 `1.22.7`；本轮发布包含当前未提交的 NaoNaoAI 品牌、账户、API Key、无限画布、主聊天网络代理和 API Key 入口导航变更。
+- 已在 Node `22.16.0` / pnpm `10.33.0` 下完成：`pnpm check`、`pnpm lint`（888 个既有 warning，无 error）、全量 `pnpm test`（255 个文件通过、3 个跳过；2489 项通过、61 项跳过）以及 `pnpm run build`。构建保留既有 eval、循环依赖、Browserslist 和大 chunk warning。
+- `pnpm install --frozen-lockfile` 因 `zipfile@0.5.12` 原生模块缺少 VS2015/v140 工具失败；使用 `--ignore-scripts` 恢复依赖，并手动恢复 Electron 二进制后完成上述验证。该安装环境限制已记录，不能将普通安装报告为通过。
+- Windows x64 NSIS 包已生成：`release/build/NaoNaoAI Chat-1.22.7-Setup.exe`，147,393,374 字节，SHA-256 `7AEE310A24A5FFB13B02A0462A42129F7C6490FE5C06E1A56711039EBE33A428`；blockmap SHA-256 为 `400501B7220DB4E9586417D6ACE27157B519CD2B0466F1424CF6B67146841455`。
+- 首次 NSIS 下载 GitHub 资源超时；改用工作流同源 `npmmirror` 后打包成功。安装程序为未签名状态（`NotSigned`）。
+- 待执行：将发布提交和 `v1.22.7` 标签推送至 `github-release`，并确认 GitHub Actions 的 Windows/macOS 产物和 GitHub Release 状态；macOS/Linux 本地打包、桌面端交互 E2E、真实账户/模型请求均未执行。

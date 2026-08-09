@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { readOpenAIChatCompletionStream, type OpenAIStreamToolCall } from './openai-stream'
+import { type OpenAIStreamToolCall, readOpenAIChatCompletionStream } from './openai-stream'
 import { isAllowedInfiniteCanvasTargetOrigin } from './policy'
 
 const PROTOCOL_VERSION = 6
@@ -17,10 +17,23 @@ export type CanvasAgentHostTool = {
 export type OpenAIAgentConfiguration = { baseUrl: string; apiKey: string; model: string }
 export type CanvasAgentGatewayOptions = {
   executeHostTool?: (name: string, input: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>
+  fetchImplementation?: typeof fetch
 }
 
-type CanvasAgentMessage = { id: string; threadId: string; turnId: string; role: 'user' | 'assistant' | 'tool' | 'error'; text: string }
-type Thread = { id: string; createdAt: number; updatedAt: number; messages: CanvasAgentMessage[]; modelMessages: OpenAIMessage[] }
+type CanvasAgentMessage = {
+  id: string
+  threadId: string
+  turnId: string
+  role: 'user' | 'assistant' | 'tool' | 'error'
+  text: string
+}
+type Thread = {
+  id: string
+  createdAt: number
+  updatedAt: number
+  messages: CanvasAgentMessage[]
+  modelMessages: OpenAIMessage[]
+}
 type OpenAIMessage = Record<string, unknown>
 type Client = { response: ServerResponse; clientId: string }
 type PendingCanvasTool = { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: NodeJS.Timeout }
@@ -44,7 +57,7 @@ export class InfiniteCanvasAgentGateway {
 
   configure(config: OpenAIAgentConfiguration) {
     const baseUrl = validateOpenAIBaseUrl(config.baseUrl)
-    if (!config.apiKey.trim() || !config.model.trim()) throw new Error('API key and model are required')
+    if (!config.apiKey.trim() || !config.model.trim()) throw new Error('请先配置文本模型和 API Key')
     this.#config = { baseUrl, apiKey: config.apiKey.trim(), model: config.model.trim() }
   }
 
@@ -89,7 +102,9 @@ export class InfiniteCanvasAgentGateway {
       return true
     }
     if (path === '/canvas/state' && req.method === 'POST') {
-      void this.#saveCanvasState(req, res, url.searchParams.get('clientId') || '').catch((error) => sendRequestError(res, error))
+      void this.#saveCanvasState(req, res, url.searchParams.get('clientId') || '').catch((error) =>
+        sendRequestError(res, error)
+      )
       return true
     }
     if (path === '/canvas/result' && req.method === 'POST') {
@@ -104,8 +119,16 @@ export class InfiniteCanvasAgentGateway {
       sendJson(res, 200, { ok: true, data: this.#models() })
       return true
     }
+    if (path === '/agent/codex/skills' && req.method === 'GET') {
+      sendJson(res, 200, { ok: true, data: [], errors: [] })
+      return true
+    }
     if (path === '/agent/codex/threads' && req.method === 'GET') {
-      sendJson(res, 200, { ok: true, data: [...this.#threads.values()].map(threadSummary), workspace: { workspacePath: 'NaoNaoAI Canvas Agent' } })
+      sendJson(res, 200, {
+        ok: true,
+        data: [...this.#threads.values()].map(threadSummary),
+        workspace: { workspacePath: 'NaoNaoAI Canvas Agent' },
+      })
       return true
     }
     if (path === '/agent/codex/threads/reset' && req.method === 'POST') {
@@ -140,11 +163,25 @@ export class InfiniteCanvasAgentGateway {
 
   #openEvents(res: ServerResponse, clientId: string) {
     if (!clientId) return sendJson(res, 400, { ok: false, error: 'clientId is required' })
+    const latestThread = [...this.#threads.values()].at(-1)
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' })
     res.write(': connected\n\n')
     const client = { response: res, clientId }
     this.#clients.set(clientId, client)
-    this.#emit(clientId, 'hello', { ok: true, protocolVersion: PROTOCOL_VERSION, clientId, conversation: { revision: 1, conversationId: clientId, threadId: '', status: this.#config ? 'ready' : 'failed', mcpStatuses: {}, ...(this.#config ? {} : { error: 'Configure the OpenAI Agent in NaoNaoAI Chat first.' }) }, codex: { busy: false } })
+    this.#emit(clientId, 'hello', {
+      ok: true,
+      protocolVersion: PROTOCOL_VERSION,
+      clientId,
+      conversation: {
+        revision: 1,
+        conversationId: clientId,
+        threadId: latestThread?.id || '',
+        status: this.#config ? (latestThread ? 'ready' : 'idle') : 'failed',
+        mcpStatuses: {},
+        ...(this.#config ? {} : { error: '未检测到可用的文本模型，请先在 NaoNaoAI Chat 中配置聊天模型。' }),
+      },
+      codex: { busy: false },
+    })
     res.once('close', () => this.#clients.delete(clientId))
   }
 
@@ -154,7 +191,7 @@ export class InfiniteCanvasAgentGateway {
   }
 
   async #resolveCanvasTool(req: IncomingMessage, res: ServerResponse) {
-    const body = await readJson(req) as { requestId?: string; result?: unknown; error?: string }
+    const body = (await readJson(req)) as { requestId?: string; result?: unknown; error?: string }
     const requestId = body.requestId
     const pending = requestId ? this.#pendingCanvasTools.get(requestId) : undefined
     if (!requestId || !pending) return sendJson(res, 404, { ok: false, error: 'tool request not found' })
@@ -166,20 +203,35 @@ export class InfiniteCanvasAgentGateway {
   }
 
   async #resetThread(req: IncomingMessage, res: ServerResponse) {
-    const body = await readJson(req) as { clientId?: string }
+    const body = (await readJson(req)) as { clientId?: string }
     const thread = this.#newThread()
-    this.#emit(body.clientId || '', 'workspace_changed', { activeThreadId: thread.id, emptyThread: true, conversation: conversation(thread.id) })
-    sendJson(res, 200, { ok: true, workspace: { workspacePath: 'NaoNaoAI Canvas Agent', activeThreadId: thread.id }, conversation: conversation(thread.id) })
+    this.#emit(body.clientId || '', 'workspace_changed', {
+      activeThreadId: thread.id,
+      emptyThread: true,
+      conversation: conversation(thread.id),
+    })
+    sendJson(res, 200, {
+      ok: true,
+      workspace: { workspacePath: 'NaoNaoAI Canvas Agent', activeThreadId: thread.id },
+      conversation: conversation(thread.id),
+    })
   }
 
   async #startTurn(req: IncomingMessage, res: ServerResponse) {
-    if (!this.#config) return sendJson(res, 409, { ok: false, error: 'OpenAI Agent is not configured' })
-    const body = await readJson(req) as { prompt?: string; threadId?: string; clientId?: string }
+    if (!this.#config)
+      return sendJson(res, 409, { ok: false, error: '未检测到可用的文本模型，请先在 NaoNaoAI Chat 中配置聊天模型。' })
+    const body = (await readJson(req)) as { prompt?: string; threadId?: string; clientId?: string }
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     if (!prompt) return sendJson(res, 400, { ok: false, error: 'prompt is required' })
-    const thread = body.threadId && this.#threads.get(body.threadId) || this.#newThread()
+    const thread = (body.threadId && this.#threads.get(body.threadId)) || this.#newThread()
     const turnId = crypto.randomUUID()
-    const userMessage: CanvasAgentMessage = { id: crypto.randomUUID(), threadId: thread.id, turnId, role: 'user', text: prompt }
+    const userMessage: CanvasAgentMessage = {
+      id: crypto.randomUUID(),
+      threadId: thread.id,
+      turnId,
+      role: 'user',
+      text: prompt,
+    }
     thread.messages.push(userMessage)
     thread.modelMessages.push({ role: 'user', content: prompt })
     thread.updatedAt = Date.now()
@@ -190,8 +242,9 @@ export class InfiniteCanvasAgentGateway {
   }
 
   async #interruptTurn(req: IncomingMessage, res: ServerResponse) {
-    const body = await readJson(req) as { threadId?: string }
+    const body = (await readJson(req)) as { threadId?: string }
     if (body.threadId) this.#turnControllers.get(body.threadId)?.abort()
+    else for (const controller of this.#turnControllers.values()) controller.abort()
     sendJson(res, 200, { ok: true })
   }
 
@@ -203,14 +256,26 @@ export class InfiniteCanvasAgentGateway {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const calls = await this.#streamCompletion(clientId, thread, turnId, controller.signal)
         if (!calls.length) break
-        thread.modelMessages.push({ role: 'assistant', content: null, tool_calls: calls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) })
+        thread.modelMessages.push({
+          role: 'assistant',
+          content: null,
+          tool_calls: calls.map((call) => ({
+            id: call.id,
+            type: 'function',
+            function: { name: call.name, arguments: call.arguments },
+          })),
+        })
         for (const call of calls) {
           const result = await this.#executeTool(clientId, call, controller.signal)
           thread.modelMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) })
         }
       }
     } catch (error) {
-      const text = controller.signal.aborted ? 'Generation stopped.' : error instanceof Error ? error.message : 'OpenAI Agent failed.'
+      const text = controller.signal.aborted
+        ? '生成已停止。'
+        : error instanceof Error
+          ? error.message
+          : 'NaoNaoAI Agent 请求失败，请稍后重试。'
       const message: CanvasAgentMessage = { id: crypto.randomUUID(), threadId: thread.id, turnId, role: 'error', text }
       thread.messages.push(message)
       this.#emit(clientId, 'chat_message', { threadId: thread.id, turnId, message })
@@ -223,11 +288,28 @@ export class InfiniteCanvasAgentGateway {
 
   async #streamCompletion(clientId: string, thread: Thread, turnId: string, signal: AbortSignal) {
     const config = this.#config
-    if (!config) throw new Error('OpenAI Agent is not configured')
-    const response = await fetch(openAIChatCompletionsUrl(config.baseUrl), {
+    if (!config) throw new Error('未检测到可用的文本模型，请先在 NaoNaoAI Chat 中配置聊天模型。')
+    const response = await (this.options.fetchImplementation || fetch)(openAIChatCompletionsUrl(config.baseUrl), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ model: config.model, stream: true, stream_options: { include_usage: true }, messages: [{ role: 'system', content: 'You are NaoNaoAI Canvas Agent. Use tools when needed and never claim a tool action succeeded without its result.' }, ...thread.modelMessages], tools: this.#tools() }),
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are NaoNaoAI Canvas Agent. Use tools when needed and never claim a tool action succeeded without its result.',
+          },
+          ...thread.modelMessages,
+        ],
+        tools: this.#tools(),
+      }),
       redirect: 'manual',
       signal,
     })
@@ -245,7 +327,13 @@ export class InfiniteCanvasAgentGateway {
         this.#emit(clientId, 'chat_message', { threadId: thread.id, turnId, message })
       }
       if (event.type === 'tool-call') calls.push(event.call)
-      if (event.type === 'usage') this.#emit(clientId, 'agent_event', { type: 'usage.updated', threadId: thread.id, turnId, usage: { input_tokens: event.inputTokens || 0, output_tokens: event.outputTokens || 0 } })
+      if (event.type === 'usage')
+        this.#emit(clientId, 'agent_event', {
+          type: 'usage.updated',
+          threadId: thread.id,
+          turnId,
+          usage: { input_tokens: event.inputTokens || 0, output_tokens: event.outputTokens || 0 },
+        })
     })
     if (text) thread.modelMessages.push({ role: 'assistant', content: text })
     return calls
@@ -275,43 +363,105 @@ export class InfiniteCanvasAgentGateway {
         reject(new Error('Canvas tool cancelled.'))
       }
       signal.addEventListener('abort', abort, { once: true })
-      this.#pendingCanvasTools.set(requestId, { resolve: (value) => { signal.removeEventListener('abort', abort); resolve(value) }, reject: (error) => { signal.removeEventListener('abort', abort); reject(error) }, timer })
+      this.#pendingCanvasTools.set(requestId, {
+        resolve: (value) => {
+          signal.removeEventListener('abort', abort)
+          resolve(value)
+        },
+        reject: (error) => {
+          signal.removeEventListener('abort', abort)
+          reject(error)
+        },
+        timer,
+      })
       this.#emit(clientId, 'tool_call', { requestId, name, input })
     })
   }
 
   #tools() {
     return [
-      { type: 'function', function: { name: 'canvas_get_state', description: 'Read the current canvas snapshot.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-      { type: 'function', function: { name: 'canvas_apply_ops', description: 'Propose canvas operations. The user approves canvas writes before they are applied.', parameters: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object' } } }, required: ['ops'], additionalProperties: false } } },
-      ...this.#hostTools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.parameters } })),
+      {
+        type: 'function',
+        function: {
+          name: 'canvas_get_state',
+          description: 'Read the current canvas snapshot.',
+          parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'canvas_apply_ops',
+          description: 'Propose canvas operations. The user approves canvas writes before they are applied.',
+          parameters: {
+            type: 'object',
+            properties: { ops: { type: 'array', items: { type: 'object' } } },
+            required: ['ops'],
+            additionalProperties: false,
+          },
+        },
+      },
+      ...this.#hostTools.map((tool) => ({
+        type: 'function',
+        function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+      })),
     ]
   }
 
   #models() {
-    return this.#config ? [{ id: this.#config.model, model: this.#config.model, displayName: this.#config.model, defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }, { reasoningEffort: 'high' }], isDefault: true }] : []
+    return this.#config
+      ? [
+          {
+            id: this.#config.model,
+            model: this.#config.model,
+            displayName: this.#config.model,
+            defaultReasoningEffort: 'medium',
+            supportedReasoningEfforts: [
+              { reasoningEffort: 'low' },
+              { reasoningEffort: 'medium' },
+              { reasoningEffort: 'high' },
+            ],
+            isDefault: true,
+          },
+        ]
+      : []
   }
 
   #newThread() {
-    const thread: Thread = { id: crypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(), messages: [], modelMessages: [] }
+    const thread: Thread = {
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      modelMessages: [],
+    }
     this.#threads.set(thread.id, thread)
     return thread
   }
 
   #threadResponse(id: string) {
     const thread = this.#threads.get(id)
-    return thread ? { ok: true, thread: threadSummary(thread), messages: thread.messages, settledTurnIds: [], historyReady: true } : { ok: false, error: 'thread not found' }
+    return thread
+      ? { ok: true, thread: threadSummary(thread), messages: thread.messages, settledTurnIds: [], historyReady: true }
+      : { ok: false, error: 'thread not found' }
   }
 
   #emit(clientId: string, type: string, data: unknown) {
     const client = this.#clients.get(clientId)
-    if (client && !client.response.writableEnded) client.response.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
+    if (client && !client.response.writableEnded)
+      client.response.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
   }
 }
 
 function threadSummary(thread: Thread) {
   const text = thread.messages.at(-1)?.text || ''
-  return { id: thread.id, preview: text.slice(0, 160), name: text.slice(0, 80) || 'New canvas conversation', createdAt: thread.createdAt, updatedAt: thread.updatedAt }
+  return {
+    id: thread.id,
+    preview: text.slice(0, 160),
+    name: text.slice(0, 80) || 'New canvas conversation',
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+  }
 }
 
 function conversation(threadId: string) {
@@ -324,13 +474,22 @@ function validToken(req: IncomingMessage, url: URL, token: string) {
 
 function validateOpenAIBaseUrl(value: string) {
   const url = new URL(value.trim())
-  if (url.protocol !== 'https:' || !isAllowedInfiniteCanvasTargetOrigin(url.origin) || url.username || url.password || url.hash) throw new Error('OpenAI API URL is not allowed')
+  if (
+    url.protocol !== 'https:' ||
+    !isAllowedInfiniteCanvasTargetOrigin(url.origin) ||
+    url.username ||
+    url.password ||
+    url.hash
+  )
+    throw new Error('OpenAI API URL is not allowed')
   return url.toString().replace(/\/$/, '')
 }
 
 function openAIChatCompletionsUrl(baseUrl: string) {
   const url = new URL(baseUrl)
-  url.pathname = url.pathname.replace(/\/+$/, '').endsWith('/v1') ? `${url.pathname.replace(/\/+$/, '')}/chat/completions` : `${url.pathname.replace(/\/+$/, '')}/v1/chat/completions`
+  url.pathname = url.pathname.replace(/\/+$/, '').endsWith('/v1')
+    ? `${url.pathname.replace(/\/+$/, '')}/chat/completions`
+    : `${url.pathname.replace(/\/+$/, '')}/v1/chat/completions`
   url.search = ''
   return url
 }
@@ -338,7 +497,7 @@ function openAIChatCompletionsUrl(baseUrl: string) {
 function parseToolInput(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
   } catch {
     return {}
   }
@@ -364,7 +523,9 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(value))
+  res
+    .writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+    .end(JSON.stringify(value))
 }
 
 function sendRequestError(res: ServerResponse, error: unknown) {

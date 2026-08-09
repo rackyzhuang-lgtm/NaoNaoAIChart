@@ -261,7 +261,7 @@ export default function Sidebar() {
             </Button>
             <Button variant="light" fullWidth data-testid="infinite-canvas-button" onClick={handleOpenInfiniteCanvas}>
               <ScalableIcon icon={IconCode} className="mr-2" />
-              Infinite Canvas
+              无限画布
             </Button>
           </Stack>
 
@@ -336,7 +336,7 @@ export default function Sidebar() {
               <NavLink
                 c="chatbox-secondary"
                 className="rounded"
-                label="Infinite Canvas"
+                label="无限画布"
                 leftSection={<ScalableIcon icon={IconCode} size={20} />}
                 active={currentPath.startsWith('/infinite-canvas')}
                 onClick={handleOpenInfiniteCanvas}

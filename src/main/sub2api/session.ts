@@ -45,6 +45,17 @@ export class Sub2ApiSession {
     this.#credentialGeneration += 1
   }
 
+  restoreFromRefresh(response: Sub2ApiRefreshResponse): void {
+    this.#credentials = {
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token,
+      expiresAt: Date.now() + response.expires_in * 1000,
+    }
+    this.#user = null
+    this.#pendingTwoFactor = null
+    this.#credentialGeneration += 1
+  }
+
   setUser(user: Sub2ApiUser): void {
     if (!this.#credentials) {
       throw new Error('Cannot update user for an empty sub2api session')

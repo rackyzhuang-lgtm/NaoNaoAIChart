@@ -2,7 +2,7 @@
 
 import { MantineProvider } from '@mantine/core'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
 
@@ -93,66 +93,6 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       start_date: '2026-07-30',
       end_date: '2026-08-05',
     }),
-    getUsageRecords: vi.fn().mockResolvedValue({
-      items: [
-        {
-          id: 11,
-          api_key_id: 7,
-          model: 'gpt-5',
-          request_type: 'chat_completion',
-          billing_mode: 'token',
-          stream: true,
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_creation_tokens: 0,
-          cache_read_tokens: 10,
-          total_cost: 0.2,
-          actual_cost: 0.125,
-          duration_ms: 420,
-          created_at: '2026-08-05T12:00:00Z',
-        },
-      ],
-      total: 1,
-      page: 1,
-      page_size: 20,
-      pages: 1,
-    }),
-    getUsageErrors: vi.fn().mockResolvedValue({
-      items: [
-        {
-          id: 41,
-          created_at: '2026-08-05T13:00:00Z',
-          model: 'gpt-5',
-          inbound_endpoint: '/v1/chat/completions',
-          status_code: 429,
-          category: 'rate_limit',
-          platform: 'openai',
-          message: 'Rate limit exceeded',
-          key_name: 'desktop-key',
-          key_deleted: false,
-          stream: true,
-        },
-      ],
-      total: 1,
-      page: 1,
-      page_size: 20,
-      pages: 1,
-    }),
-    getUsageErrorDetail: vi.fn().mockResolvedValue({
-      id: 41,
-      created_at: '2026-08-05T13:00:00Z',
-      model: 'gpt-5',
-      inbound_endpoint: '/v1/chat/completions',
-      status_code: 429,
-      category: 'rate_limit',
-      platform: 'openai',
-      message: 'Rate limit exceeded',
-      key_name: 'desktop-key',
-      key_deleted: false,
-      stream: true,
-      error_body: '{"error":"rate limited"}',
-      upstream_status_code: 429,
-    }),
     redeemCode: vi.fn(),
     getRedeemHistory: vi.fn().mockResolvedValue([]),
     getSubscriptionSummary: vi.fn().mockResolvedValue({
@@ -170,29 +110,17 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
         },
       ],
     }),
-    getPlatformQuotas: vi.fn().mockResolvedValue({
-      platform_quotas: [
-        {
-          platform: 'openai',
-          daily_limit_usd: 10,
-          weekly_limit_usd: null,
-          monthly_limit_usd: null,
-          daily_usage_usd: 2,
-          weekly_usage_usd: 3,
-          monthly_usage_usd: 4,
-          daily_window_resets_at: '2026-08-07T00:00:00Z',
-        },
-      ],
-    }),
     getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
-    getModelPlaza: vi.fn().mockResolvedValue({ groups: [] }),
     getAnnouncements: vi.fn().mockResolvedValue([]),
     markAnnouncementRead: vi.fn(),
+    getAvailableGroups: vi.fn().mockResolvedValue([]),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),
     deleteApiKey: vi.fn(),
+    copyApiKey: vi.fn(),
     prepareProviderBinding: vi.fn(),
+    prepareInfiniteCanvasImport: vi.fn(),
     ...overrides,
   }
 }
@@ -213,17 +141,12 @@ describe('Sub2ApiUsageSummary', () => {
     expect(screen.getByText('All time')).toBeTruthy()
     expect(screen.getByText('$1.2345')).toBeTruthy()
     expect(screen.getByText('$1.00 / $5.00')).toBeTruthy()
-    expect(screen.getByText('OpenAI')).toBeTruthy()
-    expect(screen.getByText('$2.00 / $10.00')).toBeTruthy()
     expect(screen.getByText('Recent usage trend')).toBeTruthy()
     expect(screen.getByText('Usage by model')).toBeTruthy()
-    expect(screen.getAllByText('gpt-5').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('Usage details')).toBeTruthy()
-    expect(screen.getByText(/chat_completion/)).toBeTruthy()
-    expect(screen.getByText('Error requests')).toBeTruthy()
-    expect(screen.getByText('Rate limit exceeded')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('View error details'))
-    expect(await screen.findByText('{"error":"rate limited"}')).toBeTruthy()
+    expect(screen.getByText('gpt-5')).toBeTruthy()
+    expect(screen.queryByText('Usage details')).toBeNull()
+    expect(screen.queryByText('Error requests')).toBeNull()
+    expect(screen.queryByText('Platform quotas')).toBeNull()
   })
 
   test('keeps usage visible when the subscription request fails', async () => {
@@ -239,16 +162,11 @@ describe('Sub2ApiUsageSummary', () => {
       createApi({
         getUsageDashboardTrend: vi.fn().mockRejectedValue(new Error('unavailable')),
         getUsageDashboardModels: vi.fn().mockRejectedValue(new Error('unavailable')),
-        getUsageRecords: vi.fn().mockRejectedValue(new Error('unavailable')),
-        getUsageErrors: vi.fn().mockRejectedValue(new Error('disabled')),
-        getUsageErrorDetail: vi.fn(),
       })
     )
 
     expect(await screen.findByText('Unable to load usage trend.')).toBeTruthy()
     expect(screen.getByText('Unable to load model usage.')).toBeTruthy()
     expect(screen.getByText('All time')).toBeTruthy()
-    expect(screen.getByText('Unable to load usage details.')).toBeTruthy()
-    expect(screen.getByText('Unable to load error requests.')).toBeTruthy()
   })
 })

@@ -5,11 +5,12 @@ import {
   type Sub2ApiApiKeyCreateRequest,
   type Sub2ApiApiKeyPage,
   type Sub2ApiApiKeyUpdateRequest,
+  type Sub2ApiAvailableGroup,
   type Sub2ApiChannelMonitorResponse,
+  type Sub2ApiInfiniteCanvasCapability,
+  type Sub2ApiInfiniteCanvasImport,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
-  type Sub2ApiModelPlazaResponse,
-  type Sub2ApiPlatformQuotasResponse,
   type Sub2ApiProviderBinding,
   type Sub2ApiPublicSettings,
   type Sub2ApiRedeemCodeRequest,
@@ -19,25 +20,24 @@ import {
   type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
   type Sub2ApiUsageDashboardTrend,
-  type Sub2ApiUsageErrorRequestDetail,
-  type Sub2ApiUsageErrorRequestPage,
-  type Sub2ApiUsageRecordPage,
   type Sub2ApiUser,
   sub2ApiAnnouncementIdSchema,
   sub2ApiAnnouncementReadResponseSchema,
   sub2ApiAnnouncementsSchema,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyDeleteResponseSchema,
+  sub2ApiApiKeyIdSchema,
   sub2ApiApiKeyPageSchema,
   sub2ApiApiKeySchema,
   sub2ApiApiKeyUpdateRequestSchema,
   sub2ApiAuthResponseSchema,
+  sub2ApiAvailableGroupsSchema,
   sub2ApiChannelMonitorResponseSchema,
+  sub2ApiInfiniteCanvasCapabilitySchema,
+  sub2ApiInfiniteCanvasImportSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
-  sub2ApiModelPlazaResponseSchema,
   sub2ApiModelsResponseSchema,
-  sub2ApiPlatformQuotasResponseSchema,
   sub2ApiProviderBindingSchema,
   sub2ApiPublicSettingsSchema,
   sub2ApiRedeemCodeRequestSchema,
@@ -48,11 +48,6 @@ import {
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
   sub2ApiUsageDashboardTrendSchema,
-  sub2ApiUsageErrorIdSchema,
-  sub2ApiUsageErrorRequestDetailSchema,
-  sub2ApiUsageErrorRequestPageSchema,
-  sub2ApiUsagePageRequestSchema,
-  sub2ApiUsageRecordPageSchema,
   sub2ApiUserSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
@@ -60,6 +55,13 @@ import { buildSub2ApiGatewayUrl, buildSub2ApiPanelUrl, SUB2API_GATEWAY_BASE_URL 
 import { Sub2ApiSession } from './session'
 
 type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+
+export interface Sub2ApiAutoLoginStore {
+  isAvailable(): boolean
+  load(): string | null
+  save(refreshToken: string): boolean
+  clear(): void
+}
 
 interface PanelEnvelope {
   code?: number | string
@@ -109,14 +111,43 @@ async function readJson(response: Response): Promise<unknown> {
 
 export class Sub2ApiClient {
   #refreshInFlight: { generation: number; promise: Promise<void> } | null = null
+  #autoLoginStore: Sub2ApiAutoLoginStore | undefined
+  #autoLoginEnabled = false
+  #autoLoginRequested = false
 
   constructor(
     private readonly session = new Sub2ApiSession(),
     private readonly fetchImplementation: FetchImplementation = fetch
   ) {}
 
+  configureAutoLogin(store: Sub2ApiAutoLoginStore): void {
+    this.#autoLoginStore = store
+  }
+
   getSessionState() {
     return this.session.getState()
+  }
+
+  async restoreAutoLogin(): Promise<boolean> {
+    const refreshToken = this.#autoLoginStore?.load()
+    if (!refreshToken) {
+      return false
+    }
+    try {
+      const response = await this.requestPublic(
+        SUB2API_ROUTES.refresh,
+        { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) },
+        sub2ApiRefreshResponseSchema
+      )
+      this.session.restoreFromRefresh(response)
+      this.#autoLoginEnabled = this.#autoLoginStore?.save(response.refresh_token) ?? false
+      return true
+    } catch {
+      this.#autoLoginEnabled = false
+      this.session.clear()
+      this.#autoLoginStore?.clear()
+      return false
+    }
   }
 
   getPublicSettings(): Promise<Sub2ApiPublicSettings> {
@@ -124,11 +155,15 @@ export class Sub2ApiClient {
   }
 
   async login(request: Sub2ApiLoginRequest): Promise<Sub2ApiLoginResult> {
+    const { auto_login: autoLogin, ...loginRequest } = request
     this.session.clear()
+    this.#autoLoginEnabled = false
+    this.#autoLoginRequested = autoLogin === true
+    this.#autoLoginStore?.clear()
     const generation = this.session.getCredentialGeneration()
     const response = await this.requestPublic(
       SUB2API_ROUTES.login,
-      { method: 'POST', body: JSON.stringify(request) },
+      { method: 'POST', body: JSON.stringify(loginRequest) },
       sub2ApiLoginResponseSchema
     )
     if (!this.session.isCredentialGeneration(generation)) {
@@ -141,6 +176,8 @@ export class Sub2ApiClient {
     }
 
     this.session.setAuthenticated(response)
+    this.persistAutoLogin(this.#autoLoginRequested)
+    this.#autoLoginRequested = false
     return { status: 'authenticated', user: response.user }
   }
 
@@ -160,6 +197,8 @@ export class Sub2ApiClient {
       throw new Sub2ApiError('Session changed during two-factor login', 'SESSION_CHANGED')
     }
     this.session.setAuthenticated(response)
+    this.persistAutoLogin(this.#autoLoginRequested)
+    this.#autoLoginRequested = false
     return { status: 'authenticated', user: response.user }
   }
 
@@ -181,6 +220,15 @@ export class Sub2ApiClient {
       `${SUB2API_ROUTES.apiKeys}?page=1&page_size=100`,
       { method: 'GET' },
       sub2ApiApiKeyPageSchema
+    )
+    return data
+  }
+
+  async getAvailableGroups(): Promise<Sub2ApiAvailableGroup[]> {
+    const { data } = await this.requestAuthenticated(
+      SUB2API_ROUTES.availableGroups,
+      { method: 'GET' },
+      sub2ApiAvailableGroupsSchema
     )
     return data
   }
@@ -221,36 +269,6 @@ export class Sub2ApiClient {
     return data
   }
 
-  async getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage> {
-    const parsedPage = sub2ApiUsagePageRequestSchema.parse(page)
-    const { data } = await this.requestAuthenticated(
-      `${SUB2API_ROUTES.usageRecords}?page=${parsedPage}&page_size=20`,
-      { method: 'GET' },
-      sub2ApiUsageRecordPageSchema
-    )
-    return data
-  }
-
-  async getUsageErrors(page: number): Promise<Sub2ApiUsageErrorRequestPage> {
-    const parsedPage = sub2ApiUsagePageRequestSchema.parse(page)
-    const { data } = await this.requestAuthenticated(
-      `${SUB2API_ROUTES.usageErrors}?page=${parsedPage}&page_size=20`,
-      { method: 'GET' },
-      sub2ApiUsageErrorRequestPageSchema
-    )
-    return data
-  }
-
-  async getUsageErrorDetail(id: number): Promise<Sub2ApiUsageErrorRequestDetail> {
-    const parsedId = sub2ApiUsageErrorIdSchema.parse(id)
-    const { data } = await this.requestAuthenticated(
-      `${SUB2API_ROUTES.usageErrors}/${parsedId}`,
-      { method: 'GET' },
-      sub2ApiUsageErrorRequestDetailSchema
-    )
-    return data
-  }
-
   async redeemCode(request: Sub2ApiRedeemCodeRequest): Promise<Sub2ApiRedeemResult> {
     const parsedRequest = sub2ApiRedeemCodeRequestSchema.parse(request)
     const { data } = await this.requestAuthenticated(
@@ -270,29 +288,11 @@ export class Sub2ApiClient {
     return data
   }
 
-  async getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse> {
-    const { data } = await this.requestAuthenticated(
-      SUB2API_ROUTES.platformQuotas,
-      { method: 'GET' },
-      sub2ApiPlatformQuotasResponseSchema
-    )
-    return data
-  }
-
   async getChannelMonitors(): Promise<Sub2ApiChannelMonitorResponse> {
     const { data } = await this.requestAuthenticated(
       SUB2API_ROUTES.channelMonitors,
       { method: 'GET' },
       sub2ApiChannelMonitorResponseSchema
-    )
-    return data
-  }
-
-  async getModelPlaza(): Promise<Sub2ApiModelPlazaResponse> {
-    const { data } = await this.requestAuthenticated(
-      SUB2API_ROUTES.modelPlaza,
-      { method: 'GET' },
-      sub2ApiModelPlazaResponseSchema
     )
     return data
   }
@@ -343,6 +343,16 @@ export class Sub2ApiClient {
     )
   }
 
+  async copyApiKeyToClipboard(id: number, writeText: (text: string) => void): Promise<void> {
+    const parsedId = sub2ApiApiKeyIdSchema.parse(id)
+    const { data: apiKey } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}/${parsedId}`,
+      { method: 'GET' },
+      sub2ApiApiKeySchema
+    )
+    writeText(apiKey.key)
+  }
+
   async prepareProviderBinding(id: number): Promise<Sub2ApiProviderBinding> {
     const { data: apiKey } = await this.requestAuthenticated(
       `${SUB2API_ROUTES.apiKeys}/${id}`,
@@ -354,6 +364,28 @@ export class Sub2ApiClient {
       apiKey: apiKey.key,
       apiHost: SUB2API_GATEWAY_BASE_URL.replace(/\/$/, ''),
       models: modelsResponse.data,
+    })
+  }
+
+  async prepareInfiniteCanvasImport(
+    id: number,
+    capability: Sub2ApiInfiniteCanvasCapability
+  ): Promise<Sub2ApiInfiniteCanvasImport> {
+    const parsedId = sub2ApiApiKeyIdSchema.parse(id)
+    const parsedCapability = sub2ApiInfiniteCanvasCapabilitySchema.parse(capability)
+    const { data: apiKey } = await this.requestAuthenticated(
+      `${SUB2API_ROUTES.apiKeys}/${parsedId}`,
+      { method: 'GET' },
+      sub2ApiApiKeySchema
+    )
+    const models = await this.requestGatewayModels(apiKey.key)
+    return sub2ApiInfiniteCanvasImportSchema.parse({
+      keyId: apiKey.id,
+      keyName: apiKey.name,
+      baseUrl: SUB2API_GATEWAY_BASE_URL.replace(/\/v1\/?$/, ''),
+      apiKey: apiKey.key,
+      capability: parsedCapability,
+      models: models.data,
     })
   }
 
@@ -372,7 +404,14 @@ export class Sub2ApiClient {
       // Remote logout is best-effort; local credentials must always be discarded.
     } finally {
       this.session.clearIfCredentialGeneration(generation)
+      this.#autoLoginEnabled = false
+      this.#autoLoginStore?.clear()
     }
+  }
+
+  private persistAutoLogin(enabled: boolean): void {
+    const refreshToken = this.session.getRefreshToken()
+    this.#autoLoginEnabled = enabled && refreshToken ? (this.#autoLoginStore?.save(refreshToken) ?? false) : false
   }
 
   private async requestPublic<T>(route: string, init: RequestInit, schema: z.ZodType<T>): Promise<T> {
@@ -446,9 +485,14 @@ export class Sub2ApiClient {
           throw new Sub2ApiError('Session changed during refresh', 'SESSION_CHANGED')
         }
         this.session.rotateTokens(response)
+        if (this.#autoLoginEnabled) {
+          this.#autoLoginEnabled = this.#autoLoginStore?.save(response.refresh_token) ?? false
+        }
       })
       .catch((error: unknown) => {
         this.session.clearIfCredentialGeneration(generation)
+        this.#autoLoginEnabled = false
+        this.#autoLoginStore?.clear()
         throw error
       })
 

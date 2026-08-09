@@ -1,33 +1,42 @@
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Center,
   Group,
   Loader,
+  Modal,
+  SegmentedControl,
+  Select,
+  SimpleGrid,
   Stack,
-  Switch,
   Text,
   TextInput,
   Tooltip,
 } from '@mantine/core'
 import type { Sub2ApiApiKeySummary, Sub2ApiProviderBinding } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
+import { ModelProviderEnum } from '@shared/types'
 import {
   IconAlertCircle,
   IconCheck,
+  IconCopy,
   IconLink,
   IconPencil,
   IconPlus,
   IconRefresh,
   IconTrash,
-  IconX,
+  IconUpload,
 } from '@tabler/icons-react'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import PopoverConfirm from '@/components/common/PopoverConfirm'
+import { router } from '@/router'
+import { createSession } from '@/stores/chatStore'
+import { setPendingInfiniteCanvasImport } from '@/stores/infiniteCanvasImportStore'
+import { switchCurrentSession } from '@/stores/sessionActions'
+import { initEmptyChatSession } from '@/stores/sessionHelpers'
 import { settingsStore } from '@/stores/settingsStore'
 import { buildSub2ApiProviderSettings } from './sub2api-provider-binding'
 
@@ -52,13 +61,18 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
   const [keys, setKeys] = useState<Sub2ApiApiKeySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editingName, setEditingName] = useState('')
+  const [formKey, setFormKey] = useState<Sub2ApiApiKeySummary | null | undefined>(undefined)
+  const [formName, setFormName] = useState('')
+  const [formGroupId, setFormGroupId] = useState<string | null>(null)
+  const [groups, setGroups] = useState<{ id: number; name: string; platform: string }[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [importKey, setImportKey] = useState<Sub2ApiApiKeySummary | null>(null)
+  const [importCapability, setImportCapability] = useState<'text' | 'image' | 'video'>('text')
+  const [importing, setImporting] = useState(false)
 
   const loadKeys = useCallback(async () => {
     setLoading(true)
@@ -77,38 +91,66 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
     void loadKeys()
   }, [loadKeys])
 
-  const createKey = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!newName.trim() || creating) {
+  const openKeyForm = async (key: Sub2ApiApiKeySummary | null) => {
+    setFormKey(key)
+    setFormName(key?.name ?? '')
+    setFormGroupId(key?.group_id?.toString() ?? null)
+    setError(null)
+    setLoadingGroups(true)
+    const getAvailableGroups = api.getAvailableGroups
+    if (typeof getAvailableGroups !== 'function') {
+      setGroups([])
+      setError(t('Group selection needs an app restart. Please restart and try again.'))
+      setLoadingGroups(false)
       return
     }
-    setCreating(true)
-    setError(null)
     try {
-      const created = await api.createApiKey({ name: newName.trim() })
-      setKeys((current) => [created, ...current])
-      setNewName('')
-      setShowCreate(false)
-    } catch (createError) {
-      setError(safeError(createError, t('Unable to create API key.')))
+      setGroups(await getAvailableGroups.call(api))
+    } catch (loadError) {
+      setError(safeError(loadError, t('Unable to load groups.')))
     } finally {
-      setCreating(false)
+      setLoadingGroups(false)
     }
   }
 
-  const updateKey = async (key: Sub2ApiApiKeySummary, update: { name?: string; status?: 'active' | 'inactive' }) => {
+  const saveKey = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!formName.trim() || !formGroupId || saving) {
+      return
+    }
+    const request = { name: formName.trim(), group_id: Number(formGroupId) }
+    setSaving(true)
+    setError(null)
+    try {
+      if (formKey) {
+        const updated = await api.updateApiKey(formKey.id, request)
+        setKeys((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      } else {
+        const created = await api.createApiKey(request)
+        setKeys((current) => [created, ...current])
+      }
+      setFormKey(undefined)
+      setFormName('')
+      setFormGroupId(null)
+    } catch (saveError) {
+      setError(safeError(saveError, formKey ? t('Unable to update API key.') : t('Unable to create API key.')))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const copyApiKey = async (key: Sub2ApiApiKeySummary) => {
     if (busyId !== null) {
       return
     }
     setBusyId(key.id)
     setError(null)
     try {
-      const updated = await api.updateApiKey(key.id, update)
-      setKeys((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-      setEditingId(null)
-      setEditingName('')
-    } catch (updateError) {
-      setError(safeError(updateError, t('Unable to update API key.')))
+      await api.copyApiKey(key.id)
+      setCopiedId(key.id)
+      setNotice(t('API key copied to clipboard.'))
+    } catch (copyError) {
+      setError(safeError(copyError, t('Unable to copy API key.')))
     } finally {
       setBusyId(null)
     }
@@ -139,16 +181,41 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
     setNotice(null)
     try {
       const binding = await api.prepareProviderBinding(key.id)
-      if (onBindProvider) {
-        onBindProvider(binding)
-      } else {
-        settingsStore.setState((currentSettings) => buildSub2ApiProviderSettings(currentSettings, binding))
-      }
+      settingsStore.setState((currentSettings) => buildSub2ApiProviderSettings(currentSettings, binding))
+      onBindProvider?.(binding)
+
+      const initialSession = initEmptyChatSession()
+      const firstModelId = binding.models[0]?.id
+      const newSession = await createSession({
+        ...initialSession,
+        settings: {
+          ...initialSession.settings,
+          provider: ModelProviderEnum.OpenAI,
+          ...(firstModelId ? { modelId: firstModelId } : {}),
+        },
+      })
+      switchCurrentSession(newSession.id)
       setNotice(t('Provider connected with {{count}} models.', { count: binding.models.length }))
     } catch (bindError) {
       setError(safeError(bindError, t('Unable to connect provider.')))
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const importToInfiniteCanvas = async () => {
+    if (!importKey || importing) return
+    setImporting(true)
+    setError(null)
+    try {
+      const payload = await api.prepareInfiniteCanvasImport(importKey.id, importCapability)
+      setPendingInfiniteCanvasImport(payload)
+      setImportKey(null)
+      await router.navigate({ to: '/infinite-canvas' })
+    } catch (importError) {
+      setError(safeError(importError, t('Unable to import API key to Infinite Canvas.')))
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -166,28 +233,81 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
             size="compact-sm"
             variant="light"
             leftSection={<IconPlus size={15} />}
-            onClick={() => setShowCreate((value) => !value)}
+            onClick={() => void openKeyForm(null)}
           >
             {t('Create API Key')}
           </Button>
         </Group>
       </Group>
 
-      {showCreate && (
-        <Group component="form" onSubmit={createKey} align="flex-end" wrap="nowrap">
+      {formKey !== undefined && (
+        <Stack component="form" onSubmit={saveKey} gap="sm">
           <TextInput
             label={t('Key name')}
-            value={newName}
-            onChange={(event) => setNewName(event.currentTarget.value)}
+            value={formName}
+            onChange={(event) => setFormName(event.currentTarget.value)}
             maxLength={100}
             required
-            flex={1}
           />
-          <Button type="submit" loading={creating} disabled={!newName.trim()}>
-            {t('Create')}
-          </Button>
-        </Group>
+          <Select
+            label={String(t('Group'))}
+            aria-label={String(t('Group'))}
+            placeholder={String(loadingGroups ? t('Loading groups...') : t('Select a group'))}
+            data={groups.map((group) => ({ value: String(group.id), label: `${group.name} (${group.platform})` }))}
+            value={formGroupId}
+            onChange={setFormGroupId}
+            disabled={loadingGroups || groups.length === 0}
+            nothingFoundMessage={String(t('No available groups'))}
+            required
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setFormKey(undefined)
+                setFormName('')
+                setFormGroupId(null)
+              }}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button type="submit" loading={saving} disabled={!formName.trim() || !formGroupId || loadingGroups}>
+              {formKey ? t('Save') : t('Create')}
+            </Button>
+          </Group>
+        </Stack>
       )}
+
+      <Modal
+        opened={importKey !== null}
+        onClose={() => {
+          if (!importing) setImportKey(null)
+        }}
+        title={t('Import to Infinite Canvas')}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">{t('Choose the model type to import.')}</Text>
+          <SegmentedControl
+            fullWidth
+            value={importCapability}
+            onChange={(value) => setImportCapability(value as 'text' | 'image' | 'video')}
+            data={[
+              { label: t('Text model'), value: 'text' },
+              { label: t('Image model'), value: 'image' },
+              { label: t('Video model'), value: 'video' },
+            ]}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" disabled={importing} onClick={() => setImportKey(null)}>
+              {t('Cancel')}
+            </Button>
+            <Button loading={importing} onClick={() => void importToInfiniteCanvas()}>
+              {t('Import')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {error && (
         <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -215,71 +335,52 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
               gap="md"
               style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
             >
-              <Stack gap={3} flex={1} miw={0}>
-                {editingId === key.id ? (
-                  <Group
-                    component="form"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      void updateKey(key, { name: editingName.trim() })
-                    }}
-                    gap="xs"
-                    wrap="nowrap"
-                  >
-                    <TextInput
-                      aria-label={String(t('Key name'))}
-                      value={editingName}
-                      onChange={(event) => setEditingName(event.currentTarget.value)}
-                      maxLength={100}
-                      size="xs"
-                      flex={1}
-                    />
-                    <ActionIcon type="submit" aria-label={t('Save')} disabled={!editingName.trim()}>
-                      <IconCheck size={15} />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      aria-label={t('Cancel')}
-                      onClick={() => setEditingId(null)}
-                    >
-                      <IconX size={15} />
-                    </ActionIcon>
-                  </Group>
-                ) : (
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" flex={1} miw={0}>
+                <Stack gap={2} miw={0}>
+                  <Text c="dimmed" size="xs">
+                    {t('Key name')}
+                  </Text>
+                  <Text fw={500} truncate>
+                    {key.name}
+                  </Text>
+                </Stack>
+                <Stack gap={2} miw={0}>
+                  <Text c="dimmed" size="xs">
+                    {t('API Key')}
+                  </Text>
                   <Group gap="xs" wrap="nowrap">
-                    <Text fw={500} truncate>
-                      {key.name}
+                    <Text c="dimmed" size="xs" ff="monospace" truncate>
+                      {key.key_hint}
                     </Text>
-                    <Badge color={key.status === 'active' ? 'green' : 'gray'} variant="light" size="sm">
-                      {t(key.status === 'active' ? 'Active' : 'Disabled')}
-                    </Badge>
+                    <Tooltip label={t(copiedId === key.id ? 'Copied' : 'Copy API key')}>
+                      <ActionIcon
+                        variant="subtle"
+                        aria-label={t('Copy API key')}
+                        disabled={busyId !== null}
+                        onClick={() => void copyApiKey(key)}
+                      >
+                        {copiedId === key.id ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                      </ActionIcon>
+                    </Tooltip>
                   </Group>
-                )}
-                <Text c="dimmed" size="xs" ff="monospace">
-                  {key.key_hint}
-                </Text>
-              </Stack>
+                </Stack>
+                <Stack gap={2}>
+                  <Text c="dimmed" size="xs">
+                    {t('Usage')}
+                  </Text>
+                  <Text size="sm" fw={500} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    ${key.quota_used.toFixed(4)} / {key.quota > 0 ? `$${key.quota.toFixed(4)}` : t('Unlimited')}
+                  </Text>
+                </Stack>
+              </SimpleGrid>
 
-              <Group gap="xs" wrap="nowrap">
-                <Switch
-                  size="sm"
-                  checked={key.status === 'active'}
-                  disabled={busyId !== null}
-                  aria-label={String(t('Toggle API Key'))}
-                  onChange={(event) =>
-                    void updateKey(key, { status: event.currentTarget.checked ? 'active' : 'inactive' })
-                  }
-                />
+              <Group gap="xs" wrap="wrap" justify="flex-end">
                 <Tooltip label={t('Edit')}>
                   <ActionIcon
                     variant="subtle"
                     aria-label={t('Edit')}
                     disabled={busyId !== null}
-                    onClick={() => {
-                      setEditingId(key.id)
-                      setEditingName(key.name)
-                    }}
+                    onClick={() => void openKeyForm(key)}
                   >
                     <IconPencil size={16} />
                   </ActionIcon>
@@ -304,6 +405,18 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
                   onClick={() => void bindProvider(key)}
                 >
                   {t('Use for chat')}
+                </Button>
+                <Button
+                  size="compact-sm"
+                  variant="default"
+                  leftSection={<IconUpload size={15} />}
+                  disabled={busyId !== null || key.status !== 'active'}
+                  onClick={() => {
+                    setImportCapability('text')
+                    setImportKey(key)
+                  }}
+                >
+                  {t('Import to Infinite Canvas')}
                 </Button>
               </Group>
             </Group>

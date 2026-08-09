@@ -36,13 +36,9 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     getUsageDashboardStats: vi.fn(),
     getUsageDashboardTrend: vi.fn(),
     getUsageDashboardModels: vi.fn(),
-    getUsageRecords: vi.fn(),
-    getUsageErrors: vi.fn(),
-    getUsageErrorDetail: vi.fn(),
     redeemCode: vi.fn(),
     getRedeemHistory: vi.fn(),
     getSubscriptionSummary: vi.fn(),
-    getPlatformQuotas: vi.fn(),
     getChannelMonitors: vi.fn().mockResolvedValue({
       items: [
         {
@@ -57,14 +53,16 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
         },
       ],
     }),
-    getModelPlaza: vi.fn(),
     getAnnouncements: vi.fn(),
     markAnnouncementRead: vi.fn(),
+    getAvailableGroups: vi.fn().mockResolvedValue([]),
     listApiKeys: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),
     deleteApiKey: vi.fn(),
+    copyApiKey: vi.fn(),
     prepareProviderBinding: vi.fn(),
+    prepareInfiniteCanvasImport: vi.fn(),
     ...overrides,
   }
 }

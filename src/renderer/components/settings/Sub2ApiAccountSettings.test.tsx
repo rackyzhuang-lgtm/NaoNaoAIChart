@@ -79,22 +79,20 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     getUsageDashboardModels: vi
       .fn()
       .mockResolvedValue({ models: [], start_date: '2026-07-30', end_date: '2026-08-05' }),
-    getUsageRecords: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 }),
-    getUsageErrors: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 }),
-    getUsageErrorDetail: vi.fn(),
     redeemCode: vi.fn(),
     getRedeemHistory: vi.fn().mockResolvedValue([]),
     getSubscriptionSummary: vi.fn().mockResolvedValue({ active_count: 0, total_used_usd: 0, subscriptions: [] }),
-    getPlatformQuotas: vi.fn().mockResolvedValue({ platform_quotas: [] }),
     getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
-    getModelPlaza: vi.fn().mockResolvedValue({ groups: [] }),
     getAnnouncements: vi.fn().mockResolvedValue([]),
     markAnnouncementRead: vi.fn(),
+    getAvailableGroups: vi.fn().mockResolvedValue([]),
     listApiKeys: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 1 }),
     createApiKey: vi.fn(),
     updateApiKey: vi.fn(),
     deleteApiKey: vi.fn(),
+    copyApiKey: vi.fn(),
     prepareProviderBinding: vi.fn(),
+    prepareInfiniteCanvasImport: vi.fn(),
     ...overrides,
   }
 }
@@ -124,10 +122,11 @@ describe('Sub2ApiAccountSettings', () => {
 
     fireEvent.change(await screen.findByLabelText(/Email/), { target: { value: 'user@example.com' } })
     fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'secret-password' } })
+    fireEvent.click(screen.getByLabelText('Keep me signed in'))
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByText('desktop-user')).toBeTruthy()
-    expect(api.login).toHaveBeenCalledWith({ email: 'user@example.com', password: 'secret-password' })
+    expect(api.login).toHaveBeenCalledWith({ email: 'user@example.com', password: 'secret-password', auto_login: true })
     expect(screen.queryByText('secret-password')).toBeNull()
   })
 

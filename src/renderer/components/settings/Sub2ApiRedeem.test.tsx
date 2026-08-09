@@ -102,4 +102,14 @@ describe('Sub2ApiRedeem', () => {
     expect(await screen.findByText('Unable to redeem code. Check the code and try again.')).toBeTruthy()
     expect(screen.queryByText('internal server details')).toBeNull()
   })
+
+  test('opens the fixed redemption-code store in an embedded dialog', async () => {
+    renderRedeem(createApi())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get redemption code' }))
+
+    expect((await screen.findByTitle('Get redemption code')).getAttribute('src')).toBe(
+      'https://pay.ldxp.cn/shop/naonaoai'
+    )
+  })
 })

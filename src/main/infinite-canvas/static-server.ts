@@ -95,6 +95,19 @@ function proxyHeaders(req: IncomingMessage): Headers {
   return headers
 }
 
+function proxyCorsHeaders(req: IncomingMessage): Record<string, string> {
+  const origin = req.headers.origin
+  const isLocalRendererOrigin =
+    origin === 'null' ||
+    origin === 'file://' ||
+    (typeof origin === 'string' && /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin))
+  if (!isLocalRendererOrigin || typeof origin !== 'string') return {}
+  return {
+    'Access-Control-Allow-Origin': origin,
+    Vary: 'Origin',
+  }
+}
+
 async function proxyRequest(req: IncomingMessage, res: ServerResponse, requestUrl: URL): Promise<void> {
   const method = req.method ?? 'GET'
   if (!ALLOWED_PROXY_METHODS.has(method)) {
@@ -113,6 +126,7 @@ async function proxyRequest(req: IncomingMessage, res: ServerResponse, requestUr
   if (method === 'OPTIONS') {
     res
       .writeHead(204, {
+        ...proxyCorsHeaders(req),
         Allow: [...ALLOWED_PROXY_METHODS].join(', '),
         'Access-Control-Allow-Methods': [...ALLOWED_PROXY_METHODS].join(', '),
         'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type',
@@ -144,7 +158,7 @@ async function proxyRequest(req: IncomingMessage, res: ServerResponse, requestUr
       if (value) res.setHeader(name, value)
     }
     res.setHeader('Cache-Control', 'no-store')
-    res.writeHead(response.status)
+    res.writeHead(response.status, proxyCorsHeaders(req))
     if (response.body) Readable.fromWeb(response.body as unknown as NodeReadableStream).pipe(res)
     else res.end()
   } catch (error) {
@@ -159,7 +173,7 @@ async function handleRequest(
   index: string,
   req: IncomingMessage,
   res: ServerResponse,
-  agentGateway?: InfiniteCanvasAgentGateway,
+  agentGateway?: InfiniteCanvasAgentGateway
 ): Promise<void> {
   const rawPathname = (req.url || '/').split('?', 1)[0]
   try {
@@ -195,7 +209,7 @@ async function handleRequest(
 
 export async function startInfiniteCanvasServer(
   assetsDirectory: string,
-  agentGateway?: InfiniteCanvasAgentGateway,
+  agentGateway?: InfiniteCanvasAgentGateway
 ): Promise<InfiniteCanvasServer> {
   const root = await realpath(assetsDirectory)
   const index = path.join(root, 'index.html')

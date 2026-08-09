@@ -92,6 +92,48 @@ describe('Sub2ApiClient', () => {
     expect(client.getSessionState()).toMatchObject({ authenticated: true, user })
   })
 
+  it('restores an opted-in session without sending the UI preference to sub2api', async () => {
+    let persistedRefreshToken: string | null = null
+    const autoLoginStore = {
+      isAvailable: () => true,
+      load: () => persistedRefreshToken,
+      save: (refreshToken: string) => {
+        persistedRefreshToken = refreshToken
+        return true
+      },
+      clear: () => {
+        persistedRefreshToken = null
+      },
+    }
+    const loginFetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) =>
+      authSuccess('first-access', 'first-refresh')
+    )
+    const firstClient = new Sub2ApiClient(new Sub2ApiSession(), loginFetch)
+    firstClient.configureAutoLogin(autoLoginStore)
+
+    await firstClient.login({ email: 'user@example.test', password: 'synthetic-password', auto_login: true })
+
+    expect(loginFetch.mock.calls[0][1]?.body).not.toContain('auto_login')
+    expect(persistedRefreshToken).toBe('first-refresh')
+
+    const restoredClient = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(async () =>
+        success({
+          access_token: 'restored-access',
+          refresh_token: 'rotated-refresh',
+          expires_in: 900,
+          token_type: 'Bearer',
+        })
+      )
+    )
+    restoredClient.configureAutoLogin(autoLoginStore)
+
+    await expect(restoredClient.restoreAutoLogin()).resolves.toBe(true)
+    expect(restoredClient.getSessionState()).toMatchObject({ authenticated: true, user: null })
+    expect(persistedRefreshToken).toBe('rotated-refresh')
+  })
+
   it('keeps the temporary 2FA token out of renderer-facing results', async () => {
     const fetchImplementation = vi
       .fn()
@@ -182,6 +224,8 @@ describe('Sub2ApiClient', () => {
   })
 
   it('uses panel JWT for API key CRUD and the selected user key for model discovery', async () => {
+    const availableGroups = [{ id: 4, name: 'Standard', platform: 'openai' }]
+    const copiedKeys: string[] = []
     const requests: { url: string; method: string; authorization: string | null; body?: unknown }[] = []
     const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
@@ -199,6 +243,9 @@ describe('Sub2ApiClient', () => {
       }
       if (url.includes('/api/v1/keys?page=')) {
         return Promise.resolve(success({ items: [apiKeyRecord], total: 1, page: 1, page_size: 100, pages: 1 }))
+      }
+      if (url.endsWith('/api/v1/groups/available')) {
+        return Promise.resolve(success(availableGroups))
       }
       if (url.endsWith('/api/v1/keys') && method === 'POST') {
         return Promise.resolve(success(apiKeyRecord))
@@ -221,11 +268,24 @@ describe('Sub2ApiClient', () => {
     await client.login({ email: 'user@example.test', password: 'synthetic-password' })
 
     await expect(client.listApiKeys()).resolves.toMatchObject({ total: 1, items: [apiKeyRecord] })
-    await expect(client.createApiKey({ name: 'desktop-key' })).resolves.toMatchObject(apiKeyRecord)
-    await expect(client.updateApiKey(7, { name: 'renamed-key' })).resolves.toMatchObject({ name: 'renamed-key' })
+    await expect(client.getAvailableGroups()).resolves.toEqual(availableGroups)
+    await expect(client.createApiKey({ name: 'desktop-key', group_id: 4 })).resolves.toMatchObject(apiKeyRecord)
+    await expect(client.updateApiKey(7, { name: 'renamed-key', group_id: 4 })).resolves.toMatchObject({
+      name: 'renamed-key',
+    })
+    await expect(client.copyApiKeyToClipboard(7, (key) => copiedKeys.push(key))).resolves.toBeUndefined()
+    expect(copiedKeys).toEqual(['synthetic-user-api-key'])
     await expect(client.prepareProviderBinding(7)).resolves.toEqual({
       apiKey: 'synthetic-user-api-key',
       apiHost: 'https://naonaoai.shop/v1',
+      models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
+    })
+    await expect(client.prepareInfiniteCanvasImport(7, 'image')).resolves.toEqual({
+      keyId: 7,
+      keyName: 'desktop-key',
+      baseUrl: 'https://naonaoai.shop',
+      apiKey: 'synthetic-user-api-key',
+      capability: 'image',
       models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
     })
     await expect(client.deleteApiKey(7)).resolves.toBeUndefined()
@@ -236,8 +296,11 @@ describe('Sub2ApiClient', () => {
       'Bearer synthetic-user-api-key'
     )
     expect(requests.find((request) => request.method === 'POST' && request.url.endsWith('/api/v1/keys'))?.body).toEqual(
-      { name: 'desktop-key' }
+      { name: 'desktop-key', group_id: 4 }
     )
+    expect(
+      requests.find((request) => request.method === 'PUT' && request.url.endsWith('/api/v1/keys/7'))?.body
+    ).toEqual({ name: 'renamed-key', group_id: 4 })
   })
 
   it('uses panel JWT for read-only usage and subscription summaries', async () => {
@@ -290,7 +353,7 @@ describe('Sub2ApiClient', () => {
     await expect(client.getSubscriptionSummary()).resolves.toEqual(subscriptionSummary)
   })
 
-  it('uses panel JWT for read-only platform quotas', async () => {
+  it('does not expose the removed platform quotas request', async () => {
     const platformQuotas = { platform_quotas: [] }
     const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
@@ -306,7 +369,7 @@ describe('Sub2ApiClient', () => {
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
     await client.login({ email: 'user@example.test', password: 'synthetic-password' })
 
-    await expect(client.getPlatformQuotas()).resolves.toEqual(platformQuotas)
+    expect('getPlatformQuotas' in client).toBe(false)
   })
 
   it('uses panel JWT for read-only channel monitors', async () => {
@@ -343,7 +406,7 @@ describe('Sub2ApiClient', () => {
     await expect(client.getChannelMonitors()).resolves.toEqual(channelMonitors)
   })
 
-  it('uses panel JWT for the read-only model plaza', async () => {
+  it('does not expose the removed model plaza request', async () => {
     const modelPlaza = {
       description: 'Available models',
       groups: [
@@ -366,7 +429,7 @@ describe('Sub2ApiClient', () => {
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
     await client.login({ email: 'user@example.test', password: 'synthetic-password' })
 
-    await expect(client.getModelPlaza()).resolves.toEqual(modelPlaza)
+    expect('getModelPlaza' in client).toBe(false)
   })
 
   it('uses panel JWT for announcements and validates the read id', async () => {
@@ -424,7 +487,7 @@ describe('Sub2ApiClient', () => {
     await expect(client.getUsageDashboardModels()).resolves.toEqual(models)
   })
 
-  it('uses panel JWT and a bounded page size for usage records', async () => {
+  it('does not expose the removed usage records request', async () => {
     const records = { items: [], total: 0, page: 2, page_size: 20, pages: 1 }
     const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
@@ -440,11 +503,10 @@ describe('Sub2ApiClient', () => {
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
     await client.login({ email: 'user@example.test', password: 'synthetic-password' })
 
-    await expect(client.getUsageRecords(2)).resolves.toEqual(records)
-    await expect(client.getUsageRecords(0)).rejects.toThrow()
+    expect('getUsageRecords' in client).toBe(false)
   })
 
-  it('uses panel JWT for error requests and redacted error details', async () => {
+  it('does not expose removed error-request actions', async () => {
     const errors = { items: [], total: 0, page: 1, page_size: 20, pages: 1 }
     const detail = {
       id: 41,
@@ -478,9 +540,8 @@ describe('Sub2ApiClient', () => {
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
     await client.login({ email: 'user@example.test', password: 'synthetic-password' })
 
-    await expect(client.getUsageErrors(1)).resolves.toEqual(errors)
-    await expect(client.getUsageErrorDetail(41)).resolves.toEqual(detail)
-    await expect(client.getUsageErrorDetail(0)).rejects.toThrow()
+    expect('getUsageErrors' in client).toBe(false)
+    expect('getUsageErrorDetail' in client).toBe(false)
   })
 
   it('uses panel JWT for redemption and history', async () => {

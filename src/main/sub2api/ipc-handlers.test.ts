@@ -5,7 +5,9 @@ import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
 import type { Sub2ApiClient } from './client'
 import { registerSub2ApiHandlers } from './ipc-handlers'
 
-vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
+const mocks = vi.hoisted(() => ({ writeText: vi.fn() }))
+
+vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() }, clipboard: { writeText: mocks.writeText } }))
 
 describe('registerSub2ApiHandlers', () => {
   it('registers only fixed business actions and returns no tokens', async () => {
@@ -34,9 +36,6 @@ describe('registerSub2ApiHandlers', () => {
       getUsageDashboardStats: vi.fn(),
       getUsageDashboardTrend: vi.fn(),
       getUsageDashboardModels: vi.fn(),
-      getUsageRecords: vi.fn(),
-      getUsageErrors: vi.fn(),
-      getUsageErrorDetail: vi.fn(),
       redeemCode: vi.fn(async () => ({ message: 'Redeemed', type: 'balance', value: 5 })),
       getRedeemHistory: vi.fn(async () => [
         {
@@ -50,11 +49,10 @@ describe('registerSub2ApiHandlers', () => {
         },
       ]),
       getSubscriptionSummary: vi.fn(),
-      getPlatformQuotas: vi.fn(),
       getChannelMonitors: vi.fn(),
-      getModelPlaza: vi.fn(),
       getAnnouncements: vi.fn(),
       markAnnouncementRead: vi.fn(),
+      getAvailableGroups: vi.fn(async () => [{ id: 4, name: 'Standard', platform: 'openai' }]),
       listApiKeys: vi.fn(async () => ({
         items: [
           {
@@ -79,12 +77,28 @@ describe('registerSub2ApiHandlers', () => {
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),
       deleteApiKey: vi.fn(),
+      copyApiKeyToClipboard: vi.fn((_id: number, writeText: (key: string) => void) => {
+        writeText('synthetic-user-api-key')
+        return Promise.resolve()
+      }),
       prepareProviderBinding: vi.fn(),
+      prepareInfiniteCanvasImport: vi.fn(async () => ({
+        keyId: 7,
+        keyName: 'desktop-key',
+        baseUrl: 'https://naonaoai.shop',
+        apiKey: 'synthetic-user-api-key',
+        capability: 'text' as const,
+        models: [{ id: 'gpt-test' }],
+      })),
     } as unknown as Sub2ApiClient
 
     registerSub2ApiHandlers(client, registrar, () => true)
 
     expect([...handlers.keys()].sort()).toEqual(Object.values(SUB2API_IPC_CHANNELS).sort())
+    expect(handlers.has('sub2api:get-usage-records')).toBe(false)
+    expect(handlers.has('sub2api:get-usage-errors')).toBe(false)
+    expect(handlers.has('sub2api:get-platform-quotas')).toBe(false)
+    expect(handlers.has('sub2api:get-model-plaza')).toBe(false)
     const loginResult = await handlers.get(SUB2API_IPC_CHANNELS.login)?.(
       {},
       {
@@ -97,9 +111,18 @@ describe('registerSub2ApiHandlers', () => {
     const keyPage = await handlers.get(SUB2API_IPC_CHANNELS.listApiKeys)?.({})
     expect(keyPage).toMatchObject({ items: [{ key_hint: 'synthe...-key' }] })
     expect(JSON.stringify(keyPage)).not.toContain('synthetic-user-api-key')
+    await expect(handlers.get(SUB2API_IPC_CHANNELS.getAvailableGroups)?.({})).resolves.toEqual([
+      { id: 4, name: 'Standard', platform: 'openai' },
+    ])
+    await expect(handlers.get(SUB2API_IPC_CHANNELS.copyApiKey)?.({}, 7)).resolves.toBeUndefined()
+    expect(mocks.writeText).toHaveBeenCalledWith('synthetic-user-api-key')
     const history = await handlers.get(SUB2API_IPC_CHANNELS.getRedeemHistory)?.({})
     expect(history).toMatchObject([{ code_hint: 'secr...code' }])
     expect(JSON.stringify(history)).not.toContain('secret-code')
+    await expect(handlers.get(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport)?.({}, 7, 'text')).resolves.toMatchObject({
+      capability: 'text',
+      models: [{ id: 'gpt-test' }],
+    })
   })
 
   it('rejects a remote sender before invoking the client', async () => {
@@ -119,22 +142,20 @@ describe('registerSub2ApiHandlers', () => {
       getUsageDashboardStats: vi.fn(),
       getUsageDashboardTrend: vi.fn(),
       getUsageDashboardModels: vi.fn(),
-      getUsageRecords: vi.fn(),
-      getUsageErrors: vi.fn(),
-      getUsageErrorDetail: vi.fn(),
       redeemCode: vi.fn(),
       getRedeemHistory: vi.fn(),
       getSubscriptionSummary: vi.fn(),
-      getPlatformQuotas: vi.fn(),
       getChannelMonitors: vi.fn(),
-      getModelPlaza: vi.fn(),
       getAnnouncements: vi.fn(),
       markAnnouncementRead: vi.fn(),
+      getAvailableGroups: vi.fn(),
       listApiKeys: vi.fn(),
       createApiKey: vi.fn(),
       updateApiKey: vi.fn(),
       deleteApiKey: vi.fn(),
+      copyApiKeyToClipboard: vi.fn(),
       prepareProviderBinding: vi.fn(),
+      prepareInfiniteCanvasImport: vi.fn(),
     } as unknown as Sub2ApiClient
 
     registerSub2ApiHandlers(client, registrar, (event) => event.senderFrame?.url.startsWith('file:') === true)
@@ -145,7 +166,15 @@ describe('registerSub2ApiHandlers', () => {
         { email: 'user@example.test', password: 'synthetic-password' }
       )
     ).rejects.toThrow('untrusted renderer')
+    await expect(
+      handlers.get(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport)?.(
+        { senderFrame: { url: 'https://untrusted.example' } },
+        7,
+        'text'
+      )
+    ).rejects.toThrow('untrusted renderer')
     expect(client.login).not.toHaveBeenCalled()
+    expect(client.prepareInfiniteCanvasImport).not.toHaveBeenCalled()
   })
 
   it('serializes only the safe error descriptor for renderer callers', async () => {

@@ -1,16 +1,15 @@
-import { ipcMain } from 'electron'
+import { clipboard, ipcMain } from 'electron'
 import {
   sub2ApiAnnouncementIdSchema,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyIdSchema,
   sub2ApiApiKeySummarySchema,
   sub2ApiApiKeyUpdateRequestSchema,
+  sub2ApiInfiniteCanvasCapabilitySchema,
   sub2ApiLoginRequestSchema,
   sub2ApiRedeemCodeRequestSchema,
   sub2ApiRedeemHistorySummarySchema,
   sub2ApiTotpCodeSchema,
-  sub2ApiUsageErrorIdSchema,
-  sub2ApiUsagePageRequestSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiError, serializeSub2ApiError } from '../../shared/sub2api/errors'
 import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
@@ -107,18 +106,6 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.getUsageDashboardModels()
   })
-  registerHandler(SUB2API_IPC_CHANNELS.getUsageRecords, (event, page) => {
-    requireTrustedSender(event)
-    return client.getUsageRecords(sub2ApiUsagePageRequestSchema.parse(page))
-  })
-  registerHandler(SUB2API_IPC_CHANNELS.getUsageErrors, (event, page) => {
-    requireTrustedSender(event)
-    return client.getUsageErrors(sub2ApiUsagePageRequestSchema.parse(page))
-  })
-  registerHandler(SUB2API_IPC_CHANNELS.getUsageErrorDetail, (event, id) => {
-    requireTrustedSender(event)
-    return client.getUsageErrorDetail(sub2ApiUsageErrorIdSchema.parse(id))
-  })
   registerHandler(SUB2API_IPC_CHANNELS.redeemCode, (event, request) => {
     requireTrustedSender(event)
     return client.redeemCode(sub2ApiRedeemCodeRequestSchema.parse(request))
@@ -132,17 +119,9 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.getSubscriptionSummary()
   })
-  registerHandler(SUB2API_IPC_CHANNELS.getPlatformQuotas, (event) => {
-    requireTrustedSender(event)
-    return client.getPlatformQuotas()
-  })
   registerHandler(SUB2API_IPC_CHANNELS.getChannelMonitors, (event) => {
     requireTrustedSender(event)
     return client.getChannelMonitors()
-  })
-  registerHandler(SUB2API_IPC_CHANNELS.getModelPlaza, (event) => {
-    requireTrustedSender(event)
-    return client.getModelPlaza()
   })
   registerHandler(SUB2API_IPC_CHANNELS.getAnnouncements, (event) => {
     requireTrustedSender(event)
@@ -151,6 +130,10 @@ export function registerSub2ApiHandlers(
   registerHandler(SUB2API_IPC_CHANNELS.markAnnouncementRead, (event, id) => {
     requireTrustedSender(event)
     return client.markAnnouncementRead(sub2ApiAnnouncementIdSchema.parse(id))
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.getAvailableGroups, (event) => {
+    requireTrustedSender(event)
+    return client.getAvailableGroups()
   })
   registerHandler(SUB2API_IPC_CHANNELS.listApiKeys, async (event) => {
     requireTrustedSender(event)
@@ -177,8 +160,19 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     await client.deleteApiKey(sub2ApiApiKeyIdSchema.parse(id))
   })
+  registerHandler(SUB2API_IPC_CHANNELS.copyApiKey, async (event, id) => {
+    requireTrustedSender(event)
+    await client.copyApiKeyToClipboard(sub2ApiApiKeyIdSchema.parse(id), clipboard.writeText)
+  })
   registerHandler(SUB2API_IPC_CHANNELS.prepareProviderBinding, (event, id) => {
     requireTrustedSender(event)
     return client.prepareProviderBinding(sub2ApiApiKeyIdSchema.parse(id))
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, (event, id, capability) => {
+    requireTrustedSender(event)
+    return client.prepareInfiniteCanvasImport(
+      sub2ApiApiKeyIdSchema.parse(id),
+      sub2ApiInfiniteCanvasCapabilitySchema.parse(capability)
+    )
   })
 }

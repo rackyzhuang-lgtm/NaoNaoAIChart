@@ -122,6 +122,10 @@ export default class DesktopPlatform implements Platform {
   public async ensureProxyConfig(config: { proxy?: string }): Promise<void> {
     return this.ipc.invoke('ensureProxy', JSON.stringify(config))
   }
+
+  public async getInfiniteCanvasUrl(): Promise<string> {
+    return this.ipc.getInfiniteCanvasUrl()
+  }
   public async relaunch(): Promise<void> {
     return this.ipc.invoke('relaunch')
   }

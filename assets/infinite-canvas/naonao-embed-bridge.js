@@ -1,9 +1,17 @@
 (function () {
   'use strict'
 
+  try {
+    var themeState = JSON.parse(localStorage.getItem('infinite-canvas:theme_store') || '{}')
+    var theme = themeState.state && themeState.state.theme === 'light' ? 'light' : 'dark'
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.style.colorScheme = theme
+  } catch (_) {}
+
   var agentUrl = new URLSearchParams(window.location.search).get('agentUrl')
   var agentToken = new URLSearchParams(window.location.search).get('agentToken')
   var volatileAgentSettings = {}
+  var aiConfigStorageKey = 'infinite-canvas:ai_config_store'
   if (agentUrl && agentToken) {
     try {
       var parsedAgentUrl = new URL(agentUrl)
@@ -23,6 +31,65 @@
       }
     } catch (_) {}
   }
+
+  function importAiConfig(message) {
+    var payload = message && message.payload
+    if (!payload || typeof payload !== 'object') return
+    if (!Number.isInteger(payload.keyId) || typeof payload.keyName !== 'string' || typeof payload.apiKey !== 'string') return
+    if (payload.apiKey.length < 1 || payload.apiKey.length > 8000) return
+    if (payload.capability !== 'text' && payload.capability !== 'image' && payload.capability !== 'video') return
+    if (typeof payload.baseUrl !== 'string') return
+    var baseUrl
+    try {
+      baseUrl = new URL(payload.baseUrl)
+      if (baseUrl.protocol !== 'https:' || !allowedOrigins[baseUrl.origin]) return
+      baseUrl.hash = ''
+      baseUrl.search = ''
+      baseUrl.pathname = baseUrl.pathname.replace(/\/+$/, '')
+    } catch (_) {
+      return
+    }
+    var models = Array.isArray(payload.models)
+      ? payload.models.filter(function (model) { return model && typeof model.id === 'string' && model.id.length > 0 && model.id.length <= 256 }).map(function (model) { return model.id })
+      : []
+    if (!models.length) return
+    var marker = String(payload.keyId) + ':' + payload.capability + ':' + models.join('|')
+    if (localStorage.getItem('naonaoai:last-canvas-import') === marker) return
+    var stored = {}
+    try { stored = JSON.parse(localStorage.getItem(aiConfigStorageKey) || '{}') || {} } catch (_) {}
+    var config = stored.state && stored.state.config && typeof stored.state.config === 'object' ? stored.state.config : {}
+    var channelId = 'naonao-key-' + String(payload.keyId)
+    var channel = {
+      id: channelId,
+      name: payload.keyName.slice(0, 100),
+      baseUrl: baseUrl.toString(),
+      apiKey: payload.apiKey,
+      apiFormat: 'openai',
+      models: models.map(function (name) { return { name: name, capability: payload.capability } }),
+    }
+    var channels = Array.isArray(config.channels) ? config.channels.filter(function (item) { return item && item.id !== channelId }) : []
+    channels.push(channel)
+    var encoded = models.map(function (name) { return channelId + '::' + name })
+    var nextConfig = Object.assign({}, config, {
+      channelMode: 'local',
+      baseUrl: channel.baseUrl,
+      apiKey: channel.apiKey,
+      apiFormat: 'openai',
+      channels: channels,
+      models: Array.from(new Set((Array.isArray(config.models) ? config.models : []).concat(encoded))),
+    })
+    nextConfig[payload.capability === 'text' ? 'textModel' : payload.capability === 'image' ? 'imageModel' : 'videoModel'] = encoded[0]
+    nextConfig.model = encoded[0]
+    localStorage.setItem(aiConfigStorageKey, JSON.stringify({ state: { config: nextConfig }, version: stored.version || 0 }))
+    localStorage.setItem('naonaoai:last-canvas-import', marker)
+    window.location.reload()
+  }
+
+  window.addEventListener('message', function (event) {
+    if (event.source !== window.parent) return
+    if (!event.data || event.data.type !== 'naonao-import-ai-config') return
+    importAiConfig(event.data)
+  })
 
   var allowedOrigins = {
     'https://naonaoai.shop': 'naonaoai.shop',

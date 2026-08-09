@@ -26,6 +26,9 @@ export interface Storage {
 export interface Platform extends Storage {
   type: PlatformType
 
+  /** Returns the app-owned loopback server used for fixed provider requests. */
+  getInfiniteCanvasUrl?(): Promise<string>
+
   exporter: Exporter
 
   // 系统相关

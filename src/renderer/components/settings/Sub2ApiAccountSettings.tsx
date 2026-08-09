@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Center,
+  Checkbox,
   Divider,
   Group,
   Loader,
@@ -35,7 +36,6 @@ import { useTranslation } from 'react-i18next'
 import Sub2ApiAnnouncements from './Sub2ApiAnnouncements'
 import Sub2ApiChannelMonitors from './Sub2ApiChannelMonitors'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
-import Sub2ApiModelPlaza from './Sub2ApiModelPlaza'
 import Sub2ApiRedeem from './Sub2ApiRedeem'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
 
@@ -77,6 +77,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   const [user, setUser] = useState<Sub2ApiUser | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [autoLogin, setAutoLogin] = useState(false)
   const [totpCode, setTotpCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -186,7 +187,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
     setError(null)
     setNotice(null)
     try {
-      const result = await accountApi.login({ email: email.trim(), password })
+      const result = await accountApi.login({ email: email.trim(), password, auto_login: autoLogin })
       setPassword('')
       if (result.status === 'two_factor_required') {
         setPhase('two_factor')
@@ -328,6 +329,11 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             value={password}
             onChange={(event) => setPassword(event.currentTarget.value)}
           />
+          <Checkbox
+            label={t('Keep me signed in')}
+            checked={autoLogin}
+            onChange={(event) => setAutoLogin(event.currentTarget.checked)}
+          />
           <Button
             type="submit"
             leftSection={<IconLogin2 size={18} />}
@@ -432,8 +438,6 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             availableChannelsEnabled={publicSettings?.available_channels_enabled}
             channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
           />
-          <Divider />
-          <Sub2ApiModelPlaza api={accountApi} enabled={publicSettings?.model_plaza_enabled} />
           <Divider />
           <Sub2ApiAnnouncements api={accountApi} />
           <Divider />

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -16,6 +17,15 @@ describe('NaoNaoAI branding entry points', () => {
     expect(existsSync(path.join(rendererDir, 'static/icon.png'))).toBe(true)
     expect(sidebarSource).toContain("import icon from './static/icon.png'")
     expect(sidebarSource).toContain('alt="NaoNaoAI Chat logo" data-testid="app-logo"')
+    expect(
+      createHash('sha256')
+        .update(readFileSync(path.join(rendererDir, 'static/icon.png')).toString('base64'))
+        .digest('hex')
+    ).toBe(
+      createHash('sha256')
+        .update(readFileSync(path.join(rendererDir, '../../assets/icon.png')).toString('base64'))
+        .digest('hex')
+    )
   })
 
   it.each([

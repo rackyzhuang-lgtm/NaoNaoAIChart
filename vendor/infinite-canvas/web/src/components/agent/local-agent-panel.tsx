@@ -115,7 +115,7 @@ function conversationBootstrapView(conversation: AgentConversationState) {
         : conversation.status === "warning"
             ? { key: "mcp:warning", text: rt("someMcpFailed"), detail: rt("remainingToolsReady"), status: "error" }
             : conversation.status === "failed"
-                ? { key: "codex:prepare_failed", text: rt("conversationInitFailed"), detail: conversation.error || rt("conversationCreateFailed"), status: "error" }
+                ? { key: "agent:prepare_failed", text: "NaoNaoAI Agent 对话初始化失败", detail: conversation.error || "未检测到可用的文本模型，请先在 NaoNaoAI Chat 中配置聊天模型。", status: "error" }
                 : conversation.status === "ready"
                     ? { key: "mcp:ready", text: rt("mcpServicesReady", { count: services.length }), detail: rt("toolsReady"), status: "ready" }
                     : null;
@@ -702,6 +702,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             });
             threadId = accepted.threadId || threadId;
             if (!threadId) throw new Error(rt("startConversationFailed"));
+            setAgentState({ activeThreadId: threadId });
             if (selectedSkill) clearSkillSelection(selectedSkillRevision);
             files.forEach((item) => {
                 URL.revokeObjectURL(item.url);
@@ -1334,14 +1335,10 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             {activeTab === "setup" ? (
                 <AgentConnectView
                     theme={theme}
-                    url={url}
-                    token={token}
                     enabled={enabled}
                     connected={connected}
                     activity={activity}
                     connectError={connectError}
-                    onUrlChange={(url) => setAgentState({ url, connectError: "" })}
-                    onTokenChange={(token) => setAgentState({ token, connectError: "" })}
                     onToggleEnabled={toggleAgentConnection}
                 />
             ) : activeTab === "skills" ? (

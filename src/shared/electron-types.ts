@@ -5,9 +5,26 @@ export interface ElectronIPC {
   getPathForFile: (file: File) => string
   getInfiniteCanvasUrl: () => Promise<string>
   getInfiniteCanvasAgentConnection: () => Promise<{ endpoint: string; token: string; configured: boolean }>
-  configureInfiniteCanvasAgent: (input: { baseUrl: string; apiKey: string; model: string }) => Promise<{ configured: boolean; model: string }>
-  setInfiniteCanvasHostTools: (tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>) => Promise<{ ok: boolean }>
-  completeInfiniteCanvasHostTool: (input: { requestId: string; result?: unknown; error?: string }) => Promise<{ ok: boolean }>
+  configureInfiniteCanvasAgent: (input: {
+    baseUrl: string
+    apiKey: string
+    model: string
+  }) => Promise<{ configured: boolean; model: string }>
+  getInfiniteCanvasStoragePath: () => Promise<string>
+  chooseInfiniteCanvasStoragePath: () => Promise<{
+    canceled: boolean
+    path?: string
+    requiresRestart?: boolean
+  }>
+  // Explicit user action; the key is held only until it is delivered to the canvas iframe.
+  setInfiniteCanvasHostTools: (
+    tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>
+  ) => Promise<{ ok: boolean }>
+  completeInfiniteCanvasHostTool: (input: {
+    requestId: string
+    result?: unknown
+    error?: string
+  }) => Promise<{ ok: boolean }>
   onInfiniteCanvasHostToolCall: (
     callback: (input: { requestId: string; name: string; input: Record<string, unknown> }) => void
   ) => () => void

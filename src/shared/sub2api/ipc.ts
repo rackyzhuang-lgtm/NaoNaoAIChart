@@ -4,11 +4,12 @@ import type {
   Sub2ApiApiKeyPageSummary,
   Sub2ApiApiKeySummary,
   Sub2ApiApiKeyUpdateRequest,
+  Sub2ApiAvailableGroup,
   Sub2ApiChannelMonitorResponse,
+  Sub2ApiInfiniteCanvasCapability,
+  Sub2ApiInfiniteCanvasImport,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
-  Sub2ApiModelPlazaResponse,
-  Sub2ApiPlatformQuotasResponse,
   Sub2ApiProviderBinding,
   Sub2ApiPublicSettings,
   Sub2ApiRedeemCodeRequest,
@@ -19,9 +20,6 @@ import type {
   Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
-  Sub2ApiUsageErrorRequestDetail,
-  Sub2ApiUsageErrorRequestPage,
-  Sub2ApiUsageRecordPage,
   Sub2ApiUser,
 } from './contracts'
 
@@ -35,22 +33,20 @@ export const SUB2API_IPC_CHANNELS = {
   getUsageDashboardStats: 'sub2api:get-usage-dashboard-stats',
   getUsageDashboardTrend: 'sub2api:get-usage-dashboard-trend',
   getUsageDashboardModels: 'sub2api:get-usage-dashboard-models',
-  getUsageRecords: 'sub2api:get-usage-records',
-  getUsageErrors: 'sub2api:get-usage-errors',
-  getUsageErrorDetail: 'sub2api:get-usage-error-detail',
   redeemCode: 'sub2api:redeem-code',
   getRedeemHistory: 'sub2api:get-redeem-history',
   getSubscriptionSummary: 'sub2api:get-subscription-summary',
-  getPlatformQuotas: 'sub2api:get-platform-quotas',
   getChannelMonitors: 'sub2api:get-channel-monitors',
-  getModelPlaza: 'sub2api:get-model-plaza',
   getAnnouncements: 'sub2api:get-announcements',
   markAnnouncementRead: 'sub2api:mark-announcement-read',
+  getAvailableGroups: 'sub2api:get-available-groups',
   listApiKeys: 'sub2api:list-api-keys',
   createApiKey: 'sub2api:create-api-key',
   updateApiKey: 'sub2api:update-api-key',
   deleteApiKey: 'sub2api:delete-api-key',
+  copyApiKey: 'sub2api:copy-api-key',
   prepareProviderBinding: 'sub2api:prepare-provider-binding',
+  prepareInfiniteCanvasImport: 'sub2api:prepare-infinite-canvas-import',
 } as const
 
 export interface Sub2ApiRendererApi {
@@ -63,20 +59,21 @@ export interface Sub2ApiRendererApi {
   getUsageDashboardStats(): Promise<Sub2ApiUsageDashboardStats>
   getUsageDashboardTrend(): Promise<Sub2ApiUsageDashboardTrend>
   getUsageDashboardModels(): Promise<Sub2ApiUsageDashboardModels>
-  getUsageRecords(page: number): Promise<Sub2ApiUsageRecordPage>
-  getUsageErrors(page: number): Promise<Sub2ApiUsageErrorRequestPage>
-  getUsageErrorDetail(id: number): Promise<Sub2ApiUsageErrorRequestDetail>
   redeemCode(request: Sub2ApiRedeemCodeRequest): Promise<Sub2ApiRedeemResult>
   getRedeemHistory(): Promise<Sub2ApiRedeemHistorySummary[]>
   getSubscriptionSummary(): Promise<Sub2ApiSubscriptionSummary>
-  getPlatformQuotas(): Promise<Sub2ApiPlatformQuotasResponse>
   getChannelMonitors(): Promise<Sub2ApiChannelMonitorResponse>
-  getModelPlaza(): Promise<Sub2ApiModelPlazaResponse>
   getAnnouncements(): Promise<Sub2ApiAnnouncement[]>
   markAnnouncementRead(id: number): Promise<void>
+  getAvailableGroups(): Promise<Sub2ApiAvailableGroup[]>
   listApiKeys(): Promise<Sub2ApiApiKeyPageSummary>
   createApiKey(request: Sub2ApiApiKeyCreateRequest): Promise<Sub2ApiApiKeySummary>
   updateApiKey(id: number, request: Sub2ApiApiKeyUpdateRequest): Promise<Sub2ApiApiKeySummary>
   deleteApiKey(id: number): Promise<void>
+  copyApiKey(id: number): Promise<void>
   prepareProviderBinding(id: number): Promise<Sub2ApiProviderBinding>
+  prepareInfiniteCanvasImport(
+    id: number,
+    capability: Sub2ApiInfiniteCanvasCapability
+  ): Promise<Sub2ApiInfiniteCanvasImport>
 }

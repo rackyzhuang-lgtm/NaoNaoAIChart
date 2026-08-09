@@ -15,6 +15,18 @@ export const sub2ApiUserSchema = z
 
 export type Sub2ApiUser = z.infer<typeof sub2ApiUserSchema>
 
+export const sub2ApiAvailableGroupSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string().min(1),
+    platform: z.string().min(1),
+  })
+  .strip()
+
+export const sub2ApiAvailableGroupsSchema = z.array(sub2ApiAvailableGroupSchema)
+
+export type Sub2ApiAvailableGroup = z.infer<typeof sub2ApiAvailableGroupSchema>
+
 export const sub2ApiAuthTokensSchema = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(1).optional(),
@@ -115,6 +127,7 @@ export type Sub2ApiApiKeyPageSummary = z.infer<typeof sub2ApiApiKeyPageSummarySc
 
 export const sub2ApiApiKeyCreateRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
+  group_id: z.number().int().positive().nullable().optional(),
   quota: z.number().nonnegative().optional(),
   expires_in_days: z.number().int().positive().optional(),
 })
@@ -124,9 +137,10 @@ export type Sub2ApiApiKeyCreateRequest = z.infer<typeof sub2ApiApiKeyCreateReque
 export const sub2ApiApiKeyUpdateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(100).optional(),
+    group_id: z.number().int().positive().nullable().optional(),
     status: z.enum(['active', 'inactive']).optional(),
   })
-  .refine((value) => value.name !== undefined || value.status !== undefined, {
+  .refine((value) => value.name !== undefined || value.group_id !== undefined || value.status !== undefined, {
     message: 'At least one API key field must be updated',
   })
 
@@ -160,6 +174,19 @@ export const sub2ApiProviderBindingSchema = z.object({
 })
 
 export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema>
+
+export const sub2ApiInfiniteCanvasCapabilitySchema = z.enum(['text', 'image', 'video'])
+export type Sub2ApiInfiniteCanvasCapability = z.infer<typeof sub2ApiInfiniteCanvasCapabilitySchema>
+
+export const sub2ApiInfiniteCanvasImportSchema = z.object({
+  keyId: z.number().int().positive(),
+  keyName: z.string().min(1).max(100),
+  baseUrl: z.string().url(),
+  apiKey: z.string().min(1),
+  capability: sub2ApiInfiniteCanvasCapabilitySchema,
+  models: z.array(sub2ApiModelSchema).min(1),
+})
+export type Sub2ApiInfiniteCanvasImport = z.infer<typeof sub2ApiInfiniteCanvasImportSchema>
 
 export const sub2ApiPlatformUsageStatsSchema = z
   .object({
@@ -557,6 +584,7 @@ export type Sub2ApiSubscriptionSummary = z.infer<typeof sub2ApiSubscriptionSumma
 export const sub2ApiLoginRequestSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
+  auto_login: z.boolean().optional(),
   turnstile_token: z.string().min(1).optional(),
   tencent_captcha_ticket: z.string().min(1).optional(),
   tencent_captcha_randstr: z.string().min(1).optional(),
@@ -585,6 +613,7 @@ export const SUB2API_ROUTES = {
   logout: 'auth/logout',
   currentUser: 'auth/me',
   apiKeys: 'keys',
+  availableGroups: 'groups/available',
   usageDashboardStats: 'usage/dashboard/stats',
   usageDashboardTrend: 'usage/dashboard/trend?period=week',
   usageDashboardModels: 'usage/dashboard/models?period=week',

@@ -2,7 +2,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Flex, Text, Tooltip } from '@mantine/core'
 import type { SessionMetaRecord } from '@shared/types'
-import { IconArchive, IconArrowsMoveVertical, IconPinned, IconPinnedFilled } from '@tabler/icons-react'
+import { IconArchive, IconArrowsMoveVertical, IconPinned, IconPinnedFilled, IconTrash } from '@tabler/icons-react'
 import clsx from 'clsx'
 import dayjs from 'dayjs'
 import { type MouseEvent, memo, type PointerEvent, useRef, useState } from 'react'
@@ -11,7 +11,13 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { navigateToSettings } from '@/modals/Settings'
 import platform from '@/platform'
 import { router } from '@/router'
-import { archiveSession, countArchivedSessionsMeta, updateSession as updateSessionStore } from '@/stores/chatStore'
+import {
+  archiveSession,
+  confirmSessionDeletion,
+  countArchivedSessionsMeta,
+  deleteSession,
+  updateSession as updateSessionStore,
+} from '@/stores/chatStore'
 import { switchCurrentSession } from '@/stores/sessionActions'
 import * as toastActions from '@/stores/toastActions'
 import { useUIStore } from '@/stores/uiStore'
@@ -77,6 +83,8 @@ function SessionItem(props: Props) {
   // const smallSize = theme.typography.pxToRem(20)
 
   const [archiving, setArchiving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [desktopMenuOpened, setDesktopMenuOpened] = useState(false)
   const [actionTooltipDismissed, setActionTooltipDismissed] = useState(false)
   const [mobileMenuOpened, setMobileMenuOpened] = useState(false)
   const [longPressing, setLongPressing] = useState(false)
@@ -137,6 +145,37 @@ function SessionItem(props: Props) {
     }
   }
 
+  const deleteCurrentSession = async () => {
+    if (deleting) {
+      return
+    }
+
+    const confirmed = await NiceModal.show('confirm', {
+      title: t('Delete this chat?'),
+      message: session.name,
+      confirmText: t('Delete'),
+      danger: true,
+    })
+    if (confirmed !== true) {
+      return
+    }
+    if (!(await confirmSessionDeletion(session.id))) {
+      return
+    }
+
+    setDeleting(true)
+    try {
+      await deleteSession(session.id)
+      if (selected) {
+        await router.navigate({ to: '/', replace: true })
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
@@ -179,10 +218,10 @@ function SessionItem(props: Props) {
   }
 
   const handleContextMenu = (event: MouseEvent) => {
-    if (!isSmallScreen) {
-      return
-    }
     event.preventDefault()
+    if (!isSmallScreen) {
+      setDesktopMenuOpened(true)
+    }
   }
 
   const handleMobileMenuChange = (opened: boolean) => {
@@ -213,6 +252,42 @@ function SessionItem(props: Props) {
       disabled: archiving,
       onClick: () => {
         void archiveCurrentSession()
+      },
+    },
+    {
+      text: t('Delete') || '',
+      icon: IconTrash,
+      color: 'chatbox-error',
+      disabled: deleting,
+      onClick: () => {
+        void deleteCurrentSession()
+      },
+    },
+  ]
+
+  const desktopMenuItems: ActionMenuItemProps[] = [
+    {
+      text: pinActionLabel || '',
+      icon: session.starred ? IconPinnedFilled : IconPinned,
+      onClick: () => {
+        void updateSessionStore(session.id, { starred: !session.starred })
+      },
+    },
+    {
+      text: archiveActionLabel || '',
+      icon: IconArchive,
+      disabled: archiving,
+      onClick: () => {
+        void archiveCurrentSession()
+      },
+    },
+    {
+      text: t('Delete') || '',
+      icon: IconTrash,
+      color: 'chatbox-error',
+      disabled: deleting,
+      onClick: () => {
+        void deleteCurrentSession()
       },
     },
   ]
@@ -317,7 +392,18 @@ function SessionItem(props: Props) {
   )
 
   if (!isSmallScreen) {
-    return content
+    return (
+      <ActionMenu
+        type="contextual"
+        trigger="manual"
+        items={desktopMenuItems}
+        opened={desktopMenuOpened}
+        onChange={setDesktopMenuOpened}
+        position="right-start"
+      >
+        {content}
+      </ActionMenu>
+    )
   }
 
   return (

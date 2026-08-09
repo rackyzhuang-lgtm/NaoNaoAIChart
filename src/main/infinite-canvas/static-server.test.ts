@@ -34,7 +34,13 @@ describe('infinite canvas static server', () => {
     expect((await fetch(`${server.url}_naonao_proxy/www.naonaoai.shop/v1/models`)).status).toBe(403)
     expect((await fetch(`${server.url}_naonao_proxy/eazyai.shop/admin/users`)).status).toBe(403)
     expect((await fetch(`${server.url}_naonao_proxy/other.example/v1/models`, { method: 'OPTIONS' })).status).toBe(403)
-    expect((await fetch(`${server.url}_naonao_proxy/naonaoai.shop/v1/models`, { method: 'OPTIONS' })).status).toBe(204)
+    const preflight = await fetch(`${server.url}_naonao_proxy/naonaoai.shop/v1/models`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:1212' },
+    })
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('http://localhost:1212')
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('Authorization')
     expect((await fetch(`${server.url}_naonao_proxy/naonaoai.shop/v1/models`, { method: 'LINK' })).status).toBe(405)
   })
 

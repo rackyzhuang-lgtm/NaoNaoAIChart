@@ -18,8 +18,8 @@ import './legacy-database-migration'
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 
-import fs from 'node:fs'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
 import electronDebug from 'electron-debug'
@@ -36,8 +36,9 @@ import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
 import { handleDeepLink } from './deeplinks'
 import { parseFile } from './file-parser'
-import { InfiniteCanvasAgentGateway, type CanvasAgentHostTool } from './infinite-canvas/agent-gateway'
+import { type CanvasAgentHostTool, InfiniteCanvasAgentGateway } from './infinite-canvas/agent-gateway'
 import { type InfiniteCanvasServer, startInfiniteCanvasServer } from './infinite-canvas/static-server'
+import { validateInfiniteCanvasStoragePath } from './infinite-canvas/storage-path'
 import { isQuitForInstallRequested } from './installer-command'
 import Locale from './locales'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
@@ -57,7 +58,9 @@ import {
   setStoreBlob,
   store,
 } from './store-node'
+import { sub2ApiClient } from './sub2api/client'
 import { registerSub2ApiHandlers } from './sub2api/ipc-handlers'
+import { Sub2ApiAutoLoginStore } from './sub2api/session-store'
 import * as windowState from './window_state'
 
 function reportMainProcessError(
@@ -85,6 +88,21 @@ function reportMainProcessError(
 }
 
 let handlingFatalMainProcessError = false
+
+function configureInfiniteCanvasStoragePath(): void {
+  const configuredPath = store.get('infiniteCanvasStoragePath', '')
+  if (!configuredPath) return
+  try {
+    const storagePath = validateInfiniteCanvasStoragePath(configuredPath)
+    fs.mkdirSync(storagePath, { recursive: true })
+    app.setPath('sessionData', storagePath)
+    log.info(`[Infinite Canvas] using local storage directory: ${storagePath}`)
+  } catch (error) {
+    log.warn('[Infinite Canvas] ignoring invalid local storage directory', error)
+  }
+}
+
+configureInfiniteCanvasStoragePath()
 
 process.on('uncaughtException', (error) => {
   if (handlingFatalMainProcessError) {
@@ -597,7 +615,8 @@ async function showOrHideWindow() {
 // --------- 应用管理 ---------
 
 const quitForInstallRequested = process.platform === 'win32' && isQuitForInstallRequested(process.argv)
-const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true
+// The renderer and Infinite Canvas share Chromium sessionData, so concurrent app instances would corrupt its databases.
+const gotTheLock = app.requestSingleInstanceLock()
 
 if (quitForInstallRequested) {
   log.info('installer: quit helper instance exiting')
@@ -658,8 +677,13 @@ if (quitForInstallRequested) {
     .whenReady()
     .then(async () => {
       await knowledgeBaseInitPromise
+      sub2ApiClient.configureAutoLogin(new Sub2ApiAutoLoginStore())
+      await sub2ApiClient.restoreAutoLogin()
       try {
-        infiniteCanvasServer = await startInfiniteCanvasServer(getAssetPath('infinite-canvas'), infiniteCanvasAgentGateway)
+        infiniteCanvasServer = await startInfiniteCanvasServer(
+          getAssetPath('infinite-canvas'),
+          infiniteCanvasAgentGateway
+        )
         infiniteCanvasAgentGateway.setUrl(`${infiniteCanvasServer.url}_canvas_agent`)
         log.info(`[Infinite Canvas] loopback server listening on ${infiniteCanvasServer.url}`)
       } catch (error) {
@@ -811,6 +835,26 @@ ipcMain.handle('infinite-canvas:configure-agent', (event, input: unknown) => {
   }
   infiniteCanvasAgentGateway.configure({ baseUrl, apiKey, model })
   return { configured: true, model: model.trim() }
+})
+
+ipcMain.handle('infinite-canvas:get-storage-path', (event) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  return store.get('infiniteCanvasStoragePath', app.getPath('sessionData'))
+})
+
+ipcMain.handle('infinite-canvas:choose-storage-path', async (event) => {
+  if (!isTrustedSub2ApiSender(event)) throw new Error('Untrusted renderer')
+  const targetWindow = mainWindow
+  if (!targetWindow) throw new Error('Main window is unavailable')
+  const result = await dialog.showOpenDialog(targetWindow, {
+    title: '选择无限画布本地存储目录',
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return { canceled: true }
+  const storagePath = validateInfiniteCanvasStoragePath(result.filePaths[0])
+  fs.mkdirSync(storagePath, { recursive: true })
+  store.set('infiniteCanvasStoragePath', storagePath)
+  return { canceled: false, path: storagePath, requiresRestart: true }
 })
 
 ipcMain.handle('infinite-canvas:set-host-tools', (event, tools: unknown) => {
