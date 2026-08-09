@@ -1,6 +1,6 @@
 # 任务 0043：发布 NaoNaoAI Chat v1.22.7
 
-- 状态：本地验证和 Windows 打包完成，待推送标签触发 GitHub Actions Release。
+- 状态：发布提交和标签已推送；GitHub Actions/Release 状态待具备仓库访问权限的页面确认。
 - 日期：2026-08-09
 - 发布版本：`1.22.7`
 - 触发标签：`v1.22.7`
@@ -26,9 +26,9 @@
 - [x] Windows 安装包：`release/build/NaoNaoAI Chat-1.22.7-Setup.exe`，147,393,374 字节，SHA-256 `7AEE310A24A5FFB13B02A0462A42129F7C6490FE5C06E1A56711039EBE33A428`。
 - [x] Windows blockmap：`release/build/NaoNaoAI Chat-1.22.7-Setup.exe.blockmap`，151,885 字节，SHA-256 `400501B7220DB4E9586417D6ACE27157B519CD2B0466F1424CF6B67146841455`。
 - [x] 安装包签名检查：`NotSigned`。当前环境未配置代码签名身份。
-- [ ] `github-release/main` 推送成功：待提交后执行。
-- [ ] `github-release/v1.22.7` 标签推送成功：待提交后执行。
-- [ ] GitHub Actions Windows/macOS 打包和 GitHub Release：待远程工作流完成后确认。
+- [x] `github-release/main` 推送成功：`ca8e4d4c9387582ec7acbec4b800924d3231ce38`。
+- [x] `github-release/v1.22.7` 标签推送成功：带注释标签对象 `551747abc01acdf561a082eba7c758836dc8488e`，签出提交为 `ca8e4d4c9387582ec7acbec4b800924d3231ce38`。
+- [ ] GitHub Actions Windows/macOS 打包和 GitHub Release：标签推送已触发工作流；本机无 `gh`，GitHub API 对该仓库返回 404，未能确认远程状态。
 
 ## 打包过程与限制
 

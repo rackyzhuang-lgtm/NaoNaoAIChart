@@ -606,4 +606,5 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - `pnpm install --frozen-lockfile` 因 `zipfile@0.5.12` 原生模块缺少 VS2015/v140 工具失败；使用 `--ignore-scripts` 恢复依赖，并手动恢复 Electron 二进制后完成上述验证。该安装环境限制已记录，不能将普通安装报告为通过。
 - Windows x64 NSIS 包已生成：`release/build/NaoNaoAI Chat-1.22.7-Setup.exe`，147,393,374 字节，SHA-256 `7AEE310A24A5FFB13B02A0462A42129F7C6490FE5C06E1A56711039EBE33A428`；blockmap SHA-256 为 `400501B7220DB4E9586417D6ACE27157B519CD2B0466F1424CF6B67146841455`。
 - 首次 NSIS 下载 GitHub 资源超时；改用工作流同源 `npmmirror` 后打包成功。安装程序为未签名状态（`NotSigned`）。
-- 待执行：将发布提交和 `v1.22.7` 标签推送至 `github-release`，并确认 GitHub Actions 的 Windows/macOS 产物和 GitHub Release 状态；macOS/Linux 本地打包、桌面端交互 E2E、真实账户/模型请求均未执行。
+- 发布提交 `ca8e4d4c9387582ec7acbec4b800924d3231ce38` 已推送至 `github-release/main`；带注释标签 `v1.22.7`（对象 `551747abc01acdf561a082eba7c758836dc8488e`）已推送并解析至同一提交，远程 ref 已复核。
+- 标签推送已触发 GitHub Actions。当前环境没有 `gh`，对该仓库的未认证 GitHub API 查询返回 404，因此 Windows/macOS 远程打包和 GitHub Release 是否完成尚未确认，不能报告为成功。macOS/Linux 本地打包、桌面端交互 E2E、真实账户/模型请求均未执行。
