@@ -23,11 +23,13 @@ import { parseSub2ApiIpcError, type Sub2ApiErrorDescriptor } from '@shared/sub2a
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
 import {
   IconAlertCircle,
+  IconArrowLeft,
   IconLogin2,
   IconLogout,
   IconRefresh,
   IconShieldLock,
   IconUserCircle,
+  IconUserPlus,
 } from '@tabler/icons-react'
 import type { TFunction } from 'i18next'
 import type { FormEvent } from 'react'
@@ -39,7 +41,7 @@ import Sub2ApiKeySettings from './Sub2ApiKeySettings'
 import Sub2ApiRedeem from './Sub2ApiRedeem'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
 
-type AccountPhase = 'loading' | 'signed_out' | 'two_factor' | 'signed_in' | 'error'
+type AccountPhase = 'loading' | 'signed_out' | 'register' | 'two_factor' | 'signed_in' | 'error'
 
 interface Props {
   api?: Sub2ApiRendererApi
@@ -77,6 +79,9 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   const [user, setUser] = useState<Sub2ApiUser | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [verificationSent, setVerificationSent] = useState(false)
+  const [verificationCooldown, setVerificationCooldown] = useState(0)
   const [autoLogin, setAutoLogin] = useState(false)
   const [totpCode, setTotpCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -121,9 +126,24 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   }, [api, handleApiFailure])
 
   const verificationUnsupported = useMemo(
-    () => Boolean(publicSettings?.turnstile_enabled || publicSettings?.tencent_captcha_enabled),
+    () =>
+      Boolean(
+        publicSettings?.turnstile_enabled ||
+          publicSettings?.tencent_captcha_enabled ||
+          publicSettings?.aliyun_captcha_enabled
+      ),
     [publicSettings]
   )
+
+  useEffect(() => {
+    if (verificationCooldown <= 0) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      setVerificationCooldown((current) => Math.max(0, current - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [verificationCooldown])
 
   const loadAccount = useCallback(async () => {
     if (!accountApi) {
@@ -197,6 +217,103 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       }
     } catch (loginError) {
       setError(getSafeErrorMessage(loginError, t, t('Unable to sign in. Check your email and password.')))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const beginRegistration = () => {
+    setError(null)
+    setNotice(null)
+    setEmail('')
+    setPassword('')
+    setVerificationCode('')
+    setVerificationSent(false)
+    setVerificationCooldown(0)
+    setPhase('register')
+  }
+
+  const returnToSignIn = () => {
+    setError(null)
+    setNotice(null)
+    setVerificationCode('')
+    setVerificationSent(false)
+    setVerificationCooldown(0)
+    setPhase('signed_out')
+  }
+
+  const isRegistrationEmailAllowed = (value: string): boolean => {
+    const allowedSuffixes = publicSettings?.registration_email_suffix_whitelist ?? []
+    if (allowedSuffixes.length === 0) {
+      return true
+    }
+    const normalizedEmail = value.trim().toLowerCase()
+    return allowedSuffixes.some((suffix) => normalizedEmail.endsWith(suffix.trim().toLowerCase()))
+  }
+
+  const handleSendRegistrationCode = async () => {
+    if (!accountApi || verificationUnsupported || busy || verificationCooldown > 0) {
+      return
+    }
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError(t('Please enter a valid email address.'))
+      return
+    }
+    if (!isRegistrationEmailAllowed(normalizedEmail)) {
+      setError(t('This email domain is not allowed for registration.'))
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await accountApi.sendRegistrationCode({ email: normalizedEmail })
+      setVerificationSent(true)
+      setVerificationCooldown(result.countdown ?? 60)
+      setNotice(t('Verification code sent. Check your email.'))
+    } catch (sendCodeError) {
+      setError(getSafeErrorMessage(sendCodeError, t, t('Unable to send the verification code.')))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRegister = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!accountApi || verificationUnsupported || busy) {
+      return
+    }
+    const normalizedEmail = email.trim()
+    if (!isRegistrationEmailAllowed(normalizedEmail)) {
+      setError(t('This email domain is not allowed for registration.'))
+      return
+    }
+    if (password.length < 6) {
+      setError(t('Password must be at least 6 characters.'))
+      return
+    }
+    if (publicSettings?.email_verify_enabled && (!verificationSent || !/^\d{6}$/.test(verificationCode))) {
+      setError(t('Enter the 6-digit email verification code.'))
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await accountApi.register({
+        email: normalizedEmail,
+        password,
+        ...(publicSettings?.email_verify_enabled ? { verify_code: verificationCode } : {}),
+      })
+      if (result.status === 'authenticated') {
+        setPassword('')
+        setVerificationCode('')
+        setUser(result.user)
+        setPhase('signed_in')
+      }
+    } catch (registerError) {
+      setError(getSafeErrorMessage(registerError, t, t('Unable to create the account.')))
     } finally {
       setBusy(false)
     }
@@ -334,15 +451,117 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             checked={autoLogin}
             onChange={(event) => setAutoLogin(event.currentTarget.checked)}
           />
-          <Button
-            type="submit"
-            leftSection={<IconLogin2 size={18} />}
-            loading={busy}
-            disabled={!accountApi || verificationUnsupported || !email.trim() || !password}
-            w="fit-content"
-          >
-            {t('Sign in')}
-          </Button>
+          <Group gap="sm">
+            <Button
+              type="submit"
+              leftSection={<IconLogin2 size={18} />}
+              loading={busy}
+              disabled={!accountApi || verificationUnsupported || !email.trim() || !password}
+              w="fit-content"
+            >
+              {t('Sign in')}
+            </Button>
+            {phase === 'signed_out' && publicSettings?.registration_enabled !== false && (
+              <Button
+                type="button"
+                variant="light"
+                leftSection={<IconUserPlus size={18} />}
+                onClick={beginRegistration}
+                disabled={busy}
+              >
+                {t('Register')}
+              </Button>
+            )}
+          </Group>
+        </Stack>
+      )}
+
+      {phase === 'register' && (
+        <Stack component="form" onSubmit={handleRegister} gap="md" maw={440}>
+          <Group justify="space-between" align="center">
+            <Text fw={600}>{t('Create account')}</Text>
+            <Button
+              type="button"
+              variant="subtle"
+              color="gray"
+              leftSection={<IconArrowLeft size={17} />}
+              onClick={returnToSignIn}
+              disabled={busy}
+            >
+              {t('Back to Login')}
+            </Button>
+          </Group>
+          {verificationUnsupported && (
+            <Alert icon={<IconShieldLock size={18} />} color="yellow" title={t('Verification required')}>
+              {t('This account currently requires browser verification and cannot register from the desktop app.')}
+            </Alert>
+          )}
+          {error && (
+            <Alert icon={<IconAlertCircle size={18} />} color="red">
+              {error}
+            </Alert>
+          )}
+          {notice && (
+            <Alert icon={<IconAlertCircle size={18} />} color="blue">
+              {notice}
+            </Alert>
+          )}
+          <TextInput
+            label={t('Email')}
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.currentTarget.value)}
+          />
+          <PasswordInput
+            label={t('Password')}
+            autoComplete="new-password"
+            description={t('Password must be at least 6 characters.')}
+            required
+            value={password}
+            onChange={(event) => setPassword(event.currentTarget.value)}
+          />
+          {publicSettings?.email_verify_enabled && (
+            <Group align="flex-end" gap="sm" wrap="nowrap">
+              <TextInput
+                label={t('Email verification code')}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.currentTarget.value.replace(/\D/g, '').slice(0, 6))}
+                style={{ flex: 1 }}
+              />
+              <Button
+                type="button"
+                variant="light"
+                onClick={() => void handleSendRegistrationCode()}
+                loading={busy && !verificationSent}
+                disabled={!email.trim() || verificationCooldown > 0 || busy || verificationUnsupported}
+              >
+                {verificationCooldown > 0 ? t('Resend in {{count}}s', { count: verificationCooldown }) : t('Send code')}
+              </Button>
+            </Group>
+          )}
+          {publicSettings?.registration_email_suffix_whitelist?.length ? (
+            <Text c="dimmed" size="xs">
+              {t('Allowed email domains: {{domains}}', {
+                domains: publicSettings.registration_email_suffix_whitelist.join(', '),
+              })}
+            </Text>
+          ) : null}
+          <Group>
+            <Button
+              type="submit"
+              leftSection={<IconUserPlus size={18} />}
+              loading={busy && verificationSent}
+              disabled={!accountApi || verificationUnsupported || !email.trim() || !password}
+            >
+              {t('Create account')}
+            </Button>
+          </Group>
         </Stack>
       )}
 

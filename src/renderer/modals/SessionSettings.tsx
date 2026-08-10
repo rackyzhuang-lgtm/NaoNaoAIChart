@@ -385,6 +385,8 @@ function getReasoningOptionLabel(option: ReasoningControlOption, t: (key: string
       return t('Medium')
     case 'high':
       return t('High')
+    case 'xhigh':
+      return t('Extra High')
   }
 }
 

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { type OpenAIStreamToolCall, readOpenAIChatCompletionStream } from './openai-stream'
+import { type OpenAIStreamToolCall, readOpenAIResponsesStream } from './openai-stream'
 import { isAllowedInfiniteCanvasTargetOrigin } from './policy'
 
 const PROTOCOL_VERSION = 6
@@ -48,6 +48,7 @@ export class InfiniteCanvasAgentGateway {
   #hostTools: CanvasAgentHostTool[] = []
   #turnControllers = new Map<string, AbortController>()
   #url = ''
+  #conversationRevision = 1
 
   constructor(private readonly options: CanvasAgentGatewayOptions = {}) {}
 
@@ -173,7 +174,7 @@ export class InfiniteCanvasAgentGateway {
       protocolVersion: PROTOCOL_VERSION,
       clientId,
       conversation: {
-        revision: 1,
+        revision: this.#conversationRevision,
         conversationId: clientId,
         threadId: latestThread?.id || '',
         status: this.#config ? (latestThread ? 'ready' : 'idle') : 'failed',
@@ -205,15 +206,16 @@ export class InfiniteCanvasAgentGateway {
   async #resetThread(req: IncomingMessage, res: ServerResponse) {
     const body = (await readJson(req)) as { clientId?: string }
     const thread = this.#newThread()
+    const nextConversation = conversation(thread.id, ++this.#conversationRevision)
     this.#emit(body.clientId || '', 'workspace_changed', {
       activeThreadId: thread.id,
       emptyThread: true,
-      conversation: conversation(thread.id),
+      conversation: nextConversation,
     })
     sendJson(res, 200, {
       ok: true,
       workspace: { workspacePath: 'NaoNaoAI Canvas Agent', activeThreadId: thread.id },
-      conversation: conversation(thread.id),
+      conversation: nextConversation,
     })
   }
 
@@ -233,7 +235,7 @@ export class InfiniteCanvasAgentGateway {
       text: prompt,
     }
     thread.messages.push(userMessage)
-    thread.modelMessages.push({ role: 'user', content: prompt })
+    thread.modelMessages.push({ role: 'user', content: [{ type: 'input_text', text: prompt }] })
     thread.updatedAt = Date.now()
     this.#emit(body.clientId || '', 'chat_message', { threadId: thread.id, turnId, message: userMessage })
     this.#emit(body.clientId || '', 'codex_state', { busy: true, threadId: thread.id, turnId })
@@ -256,18 +258,16 @@ export class InfiniteCanvasAgentGateway {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const calls = await this.#streamCompletion(clientId, thread, turnId, controller.signal)
         if (!calls.length) break
-        thread.modelMessages.push({
-          role: 'assistant',
-          content: null,
-          tool_calls: calls.map((call) => ({
-            id: call.id,
-            type: 'function',
-            function: { name: call.name, arguments: call.arguments },
-          })),
-        })
+        for (const call of calls)
+          thread.modelMessages.push({
+            type: 'function_call',
+            call_id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+          })
         for (const call of calls) {
           const result = await this.#executeTool(clientId, call, controller.signal)
-          thread.modelMessages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) })
+          thread.modelMessages.push({ type: 'function_call_output', call_id: call.id, output: JSON.stringify(result) })
         }
       }
     } catch (error) {
@@ -289,7 +289,7 @@ export class InfiniteCanvasAgentGateway {
   async #streamCompletion(clientId: string, thread: Thread, turnId: string, signal: AbortSignal) {
     const config = this.#config
     if (!config) throw new Error('未检测到可用的文本模型，请先在 NaoNaoAI Chat 中配置聊天模型。')
-    const response = await (this.options.fetchImplementation || fetch)(openAIChatCompletionsUrl(config.baseUrl), {
+    const response = await (this.options.fetchImplementation || fetch)(openAIResponsesUrl(config.baseUrl), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
@@ -299,15 +299,10 @@ export class InfiniteCanvasAgentGateway {
       body: JSON.stringify({
         model: config.model,
         stream: true,
-        stream_options: { include_usage: true },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are NaoNaoAI Canvas Agent. Use tools when needed and never claim a tool action succeeded without its result.',
-          },
-          ...thread.modelMessages,
-        ],
+        store: false,
+        instructions:
+          'You are NaoNaoAI Canvas Agent. Use tools when needed and never claim a tool action succeeded without its result.',
+        input: thread.modelMessages,
         tools: this.#tools(),
       }),
       redirect: 'manual',
@@ -317,7 +312,7 @@ export class InfiniteCanvasAgentGateway {
     const messageId = crypto.randomUUID()
     let text = ''
     const calls: OpenAIStreamToolCall[] = []
-    await readOpenAIChatCompletionStream(response.body, (event) => {
+    await readOpenAIResponsesStream(response.body, (event) => {
       if (event.type === 'text') {
         text += event.text
         const message: CanvasAgentMessage = { id: messageId, threadId: thread.id, turnId, role: 'assistant', text }
@@ -335,7 +330,7 @@ export class InfiniteCanvasAgentGateway {
           usage: { input_tokens: event.inputTokens || 0, output_tokens: event.outputTokens || 0 },
         })
     })
-    if (text) thread.modelMessages.push({ role: 'assistant', content: text })
+    if (text) thread.modelMessages.push({ role: 'assistant', content: [{ type: 'output_text', text }] })
     return calls
   }
 
@@ -382,28 +377,26 @@ export class InfiniteCanvasAgentGateway {
     return [
       {
         type: 'function',
-        function: {
-          name: 'canvas_get_state',
-          description: 'Read the current canvas snapshot.',
-          parameters: { type: 'object', properties: {}, additionalProperties: false },
-        },
+        name: 'canvas_get_state',
+        description: 'Read the current canvas snapshot.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
       },
       {
         type: 'function',
-        function: {
-          name: 'canvas_apply_ops',
-          description: 'Propose canvas operations. The user approves canvas writes before they are applied.',
-          parameters: {
-            type: 'object',
-            properties: { ops: { type: 'array', items: { type: 'object' } } },
-            required: ['ops'],
-            additionalProperties: false,
-          },
+        name: 'canvas_apply_ops',
+        description: 'Propose canvas operations. The user approves canvas writes before they are applied.',
+        parameters: {
+          type: 'object',
+          properties: { ops: { type: 'array', items: { type: 'object' } } },
+          required: ['ops'],
+          additionalProperties: false,
         },
       },
       ...this.#hostTools.map((tool) => ({
         type: 'function',
-        function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
       })),
     ]
   }
@@ -464,8 +457,8 @@ function threadSummary(thread: Thread) {
   }
 }
 
-function conversation(threadId: string) {
-  return { revision: 1, conversationId: threadId, threadId, status: 'ready', mcpStatuses: {} }
+function conversation(threadId: string, revision: number) {
+  return { revision, conversationId: threadId, threadId, status: 'ready', mcpStatuses: {} }
 }
 
 function validToken(req: IncomingMessage, url: URL, token: string) {
@@ -485,11 +478,11 @@ function validateOpenAIBaseUrl(value: string) {
   return url.toString().replace(/\/$/, '')
 }
 
-function openAIChatCompletionsUrl(baseUrl: string) {
+function openAIResponsesUrl(baseUrl: string) {
   const url = new URL(baseUrl)
   url.pathname = url.pathname.replace(/\/+$/, '').endsWith('/v1')
-    ? `${url.pathname.replace(/\/+$/, '')}/chat/completions`
-    : `${url.pathname.replace(/\/+$/, '')}/v1/chat/completions`
+    ? `${url.pathname.replace(/\/+$/, '')}/responses`
+    : `${url.pathname.replace(/\/+$/, '')}/v1/responses`
   url.search = ''
   return url
 }

@@ -65,6 +65,8 @@ const electronHandler: ElectronIPC = {
   sub2api: {
     getPublicSettings: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getPublicSettings),
     login: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.login, request),
+    register: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.register, request),
+    sendRegistrationCode: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.sendRegistrationCode, request),
     completeTwoFactor: (code) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.completeTwoFactor, code),
     logout: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.logout),
     getSessionState: () => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.getSessionState),
@@ -87,6 +89,7 @@ const electronHandler: ElectronIPC = {
     prepareProviderBinding: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareProviderBinding, id),
     prepareInfiniteCanvasImport: (id, capability) =>
       ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, id, capability),
+    directGatewayRequest: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.directGatewayRequest, request),
   },
 
   // Auto-updater events

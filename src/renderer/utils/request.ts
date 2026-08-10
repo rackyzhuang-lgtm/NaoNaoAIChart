@@ -11,41 +11,23 @@ interface RequestOptions {
   useProxy?: boolean
 }
 
-const SUB2API_ORIGIN = 'https://naonaoai.shop'
-const SUB2API_PROXY_ALIAS = 'naonaoai.shop'
+/** Number of retries used when a caller does not provide an explicit value. */
+export const DEFAULT_REQUEST_RETRIES = 5
 
-/**
- * Routes the fixed sub2api gateway through the app-owned loopback server.
- * Electron renderer fetches are subject to CORS, while the main process can
- * make the same request directly and stream the response back to the UI.
- */
-export async function resolveDesktopProviderUrl(url: string): Promise<string> {
-  let target: URL
-  try {
-    target = new URL(url)
-  } catch {
-    return url
-  }
-
-  if (target.origin !== SUB2API_ORIGIN || platform.type !== 'desktop' || !platform.getInfiniteCanvasUrl) {
-    return url
-  }
-
-  const loopbackUrl = await platform.getInfiniteCanvasUrl()
-  const proxyBase = new URL(loopbackUrl.endsWith('/') ? loopbackUrl : `${loopbackUrl}/`)
-  const proxyPath = `/_naonao_proxy/${SUB2API_PROXY_ALIAS}${target.pathname}${target.search}`
-  return new URL(proxyPath, proxyBase).toString()
+/** NaoNaoAI provider requests use their configured HTTPS URL without a loopback rewrite. */
+export function resolveDesktopProviderUrl(url: string): string {
+  return url
 }
 
-async function retryRequest<T>(fn: () => Promise<T>, retry: number, url: string): Promise<T> {
+async function retryRequest<T>(fn: () => Promise<T>, retry: number, url: string, signal?: AbortSignal): Promise<T> {
   let requestError: BaseError | null = null
 
   for (let i = 0; i <= retry; i++) {
     try {
       return await fn()
     } catch (e) {
-      // 对 ApiError（通常代表 4xx/业务错误）不重试
-      if (e instanceof ApiError) {
+      // Retry every non-abort failure, including non-2xx API responses.
+      if (signal?.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
         throw e
       }
       let origin = 'unknown'
@@ -71,42 +53,71 @@ function buildHeaders(options: RequestOptions, _url: string): Headers {
 }
 
 async function doRequest(url: string, options: RequestOptions): Promise<Response> {
-  const { signal, retry = 3, useProxy = false, body, method } = options
+  const { signal, retry = DEFAULT_REQUEST_RETRIES, useProxy = false, body, method } = options
   const requestUrl = await resolveDesktopProviderUrl(url)
   const headers = buildHeaders(options, url)
+  const directRequest = typeof window !== 'undefined' ? window.electronAPI?.sub2api?.directGatewayRequest : undefined
+  const directGateway =
+    platform.type === 'desktop' &&
+    typeof window !== 'undefined' &&
+    typeof directRequest === 'function' &&
+    (() => {
+      try {
+        const target = new URL(requestUrl)
+        return target.origin === 'https://naonaoai.shop' && target.pathname.startsWith('/v1/')
+      } catch {
+        return false
+      }
+    })()
 
   const makeRequest = async () => {
     if (platform.type === 'mobile' && useProxy) {
       return handleMobileRequest(requestUrl, method, headers, body, signal)
     }
 
+    if (directGateway) {
+      const result = await directRequest({
+        url: requestUrl,
+        method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+        headers: (() => {
+          const values: Record<string, string> = {}
+          headers.forEach((value, key) => {
+            values[key] = value
+          })
+          return values
+        })(),
+        body: typeof body === 'string' ? body : undefined,
+      })
+      const res = new Response(result.body, { status: result.status, headers: result.headers })
+      if (!res.ok) {
+        const err = await res.text().catch(() => null)
+        throw new ApiError(`Status Code ${res.status}`, err ?? undefined, res.status)
+      }
+      return res
+    }
+
     const res = await fetch(requestUrl, { method, headers, body, signal })
     if (!res.ok) {
       const err = await res.text().catch(() => null)
-      throw new ApiError(`Status Code ${res.status}`, err ?? undefined)
+      throw new ApiError(`Status Code ${res.status}`, err ?? undefined, res.status)
     }
     return res
   }
 
-  return retryRequest(makeRequest, retry, requestUrl)
+  return retryRequest(makeRequest, retry, requestUrl, signal)
 }
 
 export const apiRequest = {
-  async post(
-    url: string,
-    headers: Record<string, string>,
-    body: RequestInit['body'],
-    options?: Partial<RequestOptions>
-  ) {
+  post(url: string, headers: Record<string, string>, body: RequestInit['body'], options?: Partial<RequestOptions>) {
     return doRequest(url, { ...options, method: 'POST', headers, body })
   },
 
-  async get(url: string, headers: Record<string, string>, options?: Partial<RequestOptions>) {
+  get(url: string, headers: Record<string, string>, options?: Partial<RequestOptions>) {
     return doRequest(url, { ...options, method: 'GET', headers })
   },
 }
 
-export async function fetchWithProxy(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export function fetchWithProxy(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return doRequest(input.toString(), {
     method: init?.method || 'GET',
     headers: init?.headers,

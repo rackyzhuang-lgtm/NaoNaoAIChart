@@ -47,9 +47,13 @@ describe('Infinite Canvas Agent gateway', () => {
     await writeFile(path.join(directory, 'index.html'), 'canvas')
     const fetchImplementation = vi.fn<typeof fetch>(
       async (_input, _init) =>
-        new Response('data: {"choices":[{"delta":{"content":"内置 Agent 已回复"}}]}\n\ndata: [DONE]\n\n', {
-          headers: { 'Content-Type': 'text/event-stream' },
-        })
+        new Response(
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"内置 Agent 已回复"}\n\n' +
+            'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":2}}}\n\n',
+          {
+            headers: { 'Content-Type': 'text/event-stream' },
+          }
+        )
     )
     const gateway = new InfiniteCanvasAgentGateway({ fetchImplementation })
     gateway.configure({ baseUrl: 'https://naonaoai.shop/v1', apiKey: 'canvas-test-key', model: 'naonao-text' })
@@ -72,8 +76,13 @@ describe('Infinite Canvas Agent gateway', () => {
 
     await vi.waitFor(() => expect(fetchImplementation).toHaveBeenCalledOnce())
     const [requestUrl, request] = fetchImplementation.mock.calls[0]
-    expect(String(requestUrl)).toBe('https://naonaoai.shop/v1/chat/completions')
-    expect(JSON.parse(String(request?.body))).toMatchObject({ model: 'naonao-text', stream: true })
+    expect(String(requestUrl)).toBe('https://naonaoai.shop/v1/responses')
+    const requestBody = JSON.parse(String(request?.body))
+    expect(requestBody).toMatchObject({ model: 'naonao-text', stream: true, store: false })
+    expect(requestBody.input).toEqual([{ role: 'user', content: [{ type: 'input_text', text: '你好' }] }])
+    expect(requestBody.tools).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'function', name: 'canvas_get_state' })])
+    )
 
     await vi.waitFor(async () => {
       const response = await fetch(`${server.url}_canvas_agent/agent/codex/threads/${threadId}?token=${gateway.token}`)
@@ -82,6 +91,38 @@ describe('Infinite Canvas Agent gateway', () => {
         expect.arrayContaining([expect.objectContaining({ role: 'assistant', text: '内置 Agent 已回复' })])
       )
     })
+  })
+
+  it('increments the conversation revision when the initial idle session becomes ready', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'infinite-canvas-agent-revision-test-'))
+    directories.push(directory)
+    await writeFile(path.join(directory, 'index.html'), 'canvas')
+    const gateway = new InfiniteCanvasAgentGateway()
+    gateway.configure({ baseUrl: 'https://naonaoai.shop/v1', apiKey: 'canvas-test-key', model: 'naonao-text' })
+    const server = await startInfiniteCanvasServer(directory, gateway)
+    servers.push(server)
+    gateway.setUrl(`${server.url}_canvas_agent`)
+
+    const events = await fetch(`${server.url}_canvas_agent/events?token=${gateway.token}&clientId=revision-client`)
+    const reader = events.body?.getReader()
+    if (!reader) throw new Error('Agent event stream is unavailable')
+    const hello = new TextDecoder().decode((await reader.read()).value)
+    expect(hello).toContain('"revision":1')
+    expect(hello).toContain('"status":"idle"')
+
+    const reset = await fetch(`${server.url}_canvas_agent/agent/codex/threads/reset?token=${gateway.token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: 'revision-client' }),
+    })
+    const resetPayload = (await reset.json()) as { conversation: { revision: number; status: string } }
+    expect(resetPayload.conversation).toMatchObject({ revision: 2, status: 'ready' })
+
+    const workspaceChanged = new TextDecoder().decode((await reader.read()).value)
+    expect(workspaceChanged).toContain('event: workspace_changed')
+    expect(workspaceChanged).toContain('"revision":2')
+    expect(workspaceChanged).toContain('"status":"ready"')
+    await reader.cancel()
   })
 
   it('initializes an idle conversation and aborts a running turn without a thread id', async () => {

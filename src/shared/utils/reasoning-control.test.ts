@@ -41,6 +41,37 @@ describe('reasoning-control', () => {
     expect(getReasoningControlCapabilities(ModelProviderEnum.OpenAIResponses, model('gpt-5.1')).supported).toBe(true)
   })
 
+  it('maps Codex xhigh to OpenAI Responses and reads it back', () => {
+    const options = getReasoningProviderOptions(ModelProviderEnum.OpenAIResponses, model('gpt-5.5'), 'xhigh')
+
+    expect(options?.openai).toMatchObject({
+      reasoningEffort: 'xhigh',
+      reasoningSummary: 'auto',
+      forceReasoning: true,
+    })
+    expect(getReasoningControlLevel(ModelProviderEnum.OpenAIResponses, model('gpt-5.5'), options)).toBe('xhigh')
+  })
+
+  it('does not send Codex xhigh to non-OpenAI providers', () => {
+    const claude = getReasoningProviderOptions(ModelProviderEnum.Claude, model('claude-sonnet-4-6'), 'xhigh')
+    const gemini = getReasoningProviderOptions(ModelProviderEnum.Gemini, model('gemini-2.5-flash'), 'xhigh')
+
+    expect(claude).toBeUndefined()
+    expect(gemini).toBeUndefined()
+  })
+
+  it('does not expose or retain xhigh for OpenAI models outside the GPT-5 family', () => {
+    expect(
+      getReasoningControlOptions(ModelProviderEnum.OpenAIResponses, model('gpt-oss-120b')).map((o) => o.level)
+    ).not.toContain('xhigh')
+    expect(
+      getReasoningControlLevel(ModelProviderEnum.OpenAIResponses, model('gpt-oss-120b'), {
+        openai: { reasoningEffort: 'xhigh' },
+      })
+    ).toBe('default')
+    expect(normalizeOpenAIReasoningOptions('gpt-oss-120b', { reasoningEffort: 'xhigh' })).toBeUndefined()
+  })
+
   it('does not offer reasoning controls for non-reasoning GPT-5 chat models', () => {
     const openaiCapabilities = getReasoningControlCapabilities(ModelProviderEnum.OpenAI, model('gpt-5-chat-latest'))
     expect(openaiCapabilities.supported).toBe(false)
@@ -115,6 +146,7 @@ describe('reasoning-control', () => {
       { level: 'low', label: 'low' },
       { level: 'medium', label: 'medium' },
       { level: 'high', label: 'high' },
+      { level: 'xhigh', label: 'xhigh' },
     ])
   })
 
@@ -255,6 +287,8 @@ describe('reasoning-control', () => {
     expect(getReasoningProviderOptions(ModelProviderEnum.OpenAI, model('o3'), 'medium')?.openai?.reasoningEffort).toBe(
       'medium'
     )
+    // Codex xhigh is not offered to o-series models, which only accept low/medium/high.
+    expect(getReasoningProviderOptions(ModelProviderEnum.OpenAI, model('o3'), 'xhigh')).toBeUndefined()
     // A stale minimal effort reads back as default (off is not representable).
     expect(
       getReasoningControlLevel(ModelProviderEnum.OpenAI, model('o3'), { openai: { reasoningEffort: 'minimal' } })
@@ -290,6 +324,8 @@ describe('reasoning-control', () => {
     expect(isOpenAIReasoningEffortSupported('o3', 'high')).toBe(true)
     expect(isOpenAIReasoningEffortSupported('o1-preview', 'high')).toBe(false)
     expect(isOpenAIReasoningEffortSupported('gpt-5.1', 'none')).toBe(true)
+    expect(isOpenAIReasoningEffortSupported('gpt-5.5', 'xhigh')).toBe(true)
+    expect(isOpenAIReasoningEffortSupported('gpt-oss-120b', 'xhigh')).toBe(false)
   })
 
   it('reads legacy session-settings modal budgets back as the originally chosen level', () => {

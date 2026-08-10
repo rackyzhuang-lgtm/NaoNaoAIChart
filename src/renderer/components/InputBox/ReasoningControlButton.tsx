@@ -27,6 +27,7 @@ const LEVEL_COLORS: Record<ReasoningControlLevel, string> = {
   low: 'var(--chatbox-tint-secondary)',
   medium: 'var(--chatbox-tint-brand)',
   high: 'var(--chatbox-tint-brand)',
+  xhigh: 'var(--chatbox-tint-brand)',
 }
 
 export default function ReasoningControlButton({
@@ -124,6 +125,7 @@ const REASONING_LEVEL_DOT_COUNTS: Record<ReasoningEffortLevel, number> = {
   low: 1,
   medium: 2,
   high: 3,
+  xhigh: 4,
 }
 
 function CompactReasoningLevelIcon({ level, size }: { level: ReasoningControlLevel; size: number }) {
@@ -173,7 +175,7 @@ function ReasoningLevelStatusIcon({
       style={{ width: size, height: size }}
       data-reasoning-status={level}
     >
-      {[0, 1, 2].map((index) => {
+      {(level === 'xhigh' ? [0, 1, 2, 3] : [0, 1, 2]).map((index) => {
         const active = index < activeDotCount
         return (
           <span
@@ -227,5 +229,7 @@ function getLevelLabel(level: ReasoningControlLevel, t: (key: string) => string)
       return t('Medium')
     case 'high':
       return t('High')
+    case 'xhigh':
+      return t('Extra High')
   }
 }

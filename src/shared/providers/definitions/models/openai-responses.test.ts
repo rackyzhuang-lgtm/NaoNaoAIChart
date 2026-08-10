@@ -1,3 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai'
+import type { LanguageModelV3CallOptions } from '@ai-sdk/provider'
 import type { CallChatCompletionOptions } from '@shared/models/types'
 import type { ModelDependencies } from '@shared/types/adapters'
 import type { ProviderModelInfo } from '@shared/types/settings'
@@ -99,6 +101,29 @@ describe('OpenAIResponses call settings', () => {
     })
   })
 
+  it('preserves Codex xhigh at the Responses request settings boundary', () => {
+    const openaiResponses = createModel()
+
+    const settings = openaiResponses.exposeCallSettings({
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'xhigh',
+          reasoningSummary: 'auto',
+          forceReasoning: true,
+        },
+      },
+    })
+
+    expect(settings.providerOptions).toEqual({
+      openai: {
+        reasoningEffort: 'xhigh',
+        reasoningSummary: 'auto',
+        forceReasoning: true,
+        store: false,
+      },
+    })
+  })
+
   it('forces store=false even without user-provided OpenAI provider options', () => {
     const openaiResponses = createModel()
 
@@ -109,5 +134,30 @@ describe('OpenAIResponses call settings', () => {
         store: false,
       },
     })
+  })
+
+  it('maps xhigh to reasoning.effort in the final Responses request body', async () => {
+    let requestBody: Record<string, unknown> | undefined
+    const provider = createOpenAI({
+      apiKey: 'test-key',
+      fetch: (_input, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return Promise.resolve(
+          new Response('{"error":{"message":"mock response"}}', {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          })
+        )
+      },
+    })
+
+    await expect(
+      provider.responses('gpt-5.4').doGenerate({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        providerOptions: { openai: { reasoningEffort: 'xhigh' } },
+      } as LanguageModelV3CallOptions)
+    ).rejects.toThrow()
+
+    expect(requestBody?.reasoning).toEqual({ effort: 'xhigh' })
   })
 })

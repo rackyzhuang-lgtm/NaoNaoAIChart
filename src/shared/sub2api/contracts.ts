@@ -66,8 +66,11 @@ export const sub2ApiLogoutResponseSchema = z.object({
 export const sub2ApiPublicSettingsSchema = z
   .object({
     registration_enabled: z.boolean().optional(),
+    email_verify_enabled: z.boolean().optional(),
+    registration_email_suffix_whitelist: z.array(z.string()).optional(),
     turnstile_enabled: z.boolean().optional(),
     tencent_captcha_enabled: z.boolean().optional(),
+    aliyun_captcha_enabled: z.boolean().optional(),
     totp_enabled: z.boolean().optional(),
     backend_mode_enabled: z.boolean().optional(),
     available_channels_enabled: z.boolean().optional(),
@@ -170,7 +173,7 @@ export type Sub2ApiModelsResponse = z.infer<typeof sub2ApiModelsResponseSchema>
 export const sub2ApiProviderBindingSchema = z.object({
   apiKey: z.string().min(1),
   apiHost: z.string().url(),
-  models: z.array(sub2ApiModelSchema),
+  models: z.array(sub2ApiModelSchema).min(1),
 })
 
 export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema>
@@ -592,6 +595,57 @@ export const sub2ApiLoginRequestSchema = z.object({
 
 export type Sub2ApiLoginRequest = z.infer<typeof sub2ApiLoginRequestSchema>
 
+export const sub2ApiRegistrationRequestSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(6),
+  verify_code: z
+    .string()
+    .regex(/^\d{6}$/)
+    .optional(),
+  turnstile_token: z.string().min(1).optional(),
+  tencent_captcha_ticket: z.string().min(1).optional(),
+  tencent_captcha_randstr: z.string().min(1).optional(),
+  promo_code: z.string().trim().min(1).optional(),
+  invitation_code: z.string().trim().min(1).optional(),
+  aff_code: z.string().trim().min(1).optional(),
+})
+
+export type Sub2ApiRegistrationRequest = z.infer<typeof sub2ApiRegistrationRequestSchema>
+
+export const sub2ApiSendRegistrationCodeRequestSchema = z.object({
+  email: z.string().trim().email(),
+  turnstile_token: z.string().min(1).optional(),
+  tencent_captcha_ticket: z.string().min(1).optional(),
+  tencent_captcha_randstr: z.string().min(1).optional(),
+})
+
+export type Sub2ApiSendRegistrationCodeRequest = z.infer<typeof sub2ApiSendRegistrationCodeRequestSchema>
+
+export const sub2ApiSendRegistrationCodeResponseSchema = z
+  .object({
+    countdown: z.number().int().nonnegative().optional(),
+  })
+  .passthrough()
+
+export type Sub2ApiSendRegistrationCodeResponse = z.infer<typeof sub2ApiSendRegistrationCodeResponseSchema>
+
+export const sub2ApiDirectGatewayRequestSchema = z
+  .object({
+    url: z.string().url(),
+    method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+    headers: z.record(z.string(), z.string()).optional(),
+    body: z.string().optional(),
+  })
+  .strict()
+
+export type Sub2ApiDirectGatewayRequest = z.infer<typeof sub2ApiDirectGatewayRequestSchema>
+
+export interface Sub2ApiDirectGatewayResponse {
+  status: number
+  headers: Record<string, string>
+  body: string
+}
+
 export const sub2ApiTotpCodeSchema = z.string().regex(/^\d{6}$/)
 
 export interface Sub2ApiSessionState {
@@ -609,6 +663,8 @@ export const SUB2API_ROUTES = {
   publicSettings: 'settings/public',
   login: 'auth/login',
   login2FA: 'auth/login/2fa',
+  register: 'auth/register',
+  sendRegistrationCode: 'auth/send-verify-code',
   refresh: 'auth/refresh',
   logout: 'auth/logout',
   currentUser: 'auth/me',

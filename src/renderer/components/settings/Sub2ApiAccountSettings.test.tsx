@@ -46,6 +46,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
   return {
     getPublicSettings: vi.fn().mockResolvedValue({ registration_enabled: true }),
     login: vi.fn().mockResolvedValue({ status: 'authenticated', user }),
+    register: vi.fn().mockResolvedValue({ status: 'authenticated', user }),
+    sendRegistrationCode: vi.fn().mockResolvedValue({ countdown: 60 }),
     completeTwoFactor: vi.fn().mockResolvedValue({ status: 'authenticated', user }),
     logout: vi.fn().mockResolvedValue(undefined),
     getSessionState: vi.fn().mockResolvedValue({ authenticated: false, user: null, twoFactorRequired: false }),
@@ -128,6 +130,60 @@ describe('Sub2ApiAccountSettings', () => {
     expect(await screen.findByText('desktop-user')).toBeTruthy()
     expect(api.login).toHaveBeenCalledWith({ email: 'user@example.com', password: 'secret-password', auto_login: true })
     expect(screen.queryByText('secret-password')).toBeNull()
+  })
+
+  test('registers with an email verification code and the server suffix policy', async () => {
+    const api = createApi({
+      getPublicSettings: vi.fn().mockResolvedValue({
+        registration_enabled: true,
+        email_verify_enabled: true,
+        registration_email_suffix_whitelist: ['@qq.com'],
+      }),
+    })
+    renderAccount(api)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Register' }))
+    fireEvent.change(screen.getAllByLabelText(/Email/)[0], {
+      target: { value: 'new-user@qq.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+
+    expect(await screen.findByText('Verification code sent. Check your email.')).toBeTruthy()
+    expect(api.sendRegistrationCode).toHaveBeenCalledWith({ email: 'new-user@qq.com' })
+
+    fireEvent.change(screen.getAllByLabelText(/Email/)[1], {
+      target: { value: '123456' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByText('desktop-user')).toBeTruthy()
+    expect(api.register).toHaveBeenCalledWith({
+      email: 'new-user@qq.com',
+      password: 'new-password',
+      verify_code: '123456',
+    })
+    expect(screen.queryByText('new-password')).toBeNull()
+  })
+
+  test('rejects a registration email outside the server suffix policy', async () => {
+    const api = createApi({
+      getPublicSettings: vi.fn().mockResolvedValue({
+        registration_enabled: true,
+        email_verify_enabled: true,
+        registration_email_suffix_whitelist: ['@qq.com'],
+      }),
+    })
+    renderAccount(api)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Register' }))
+    fireEvent.change(screen.getAllByLabelText(/Email/)[0], {
+      target: { value: 'new-user@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+
+    expect(await screen.findByText('This email domain is not allowed for registration.')).toBeTruthy()
+    expect(api.sendRegistrationCode).not.toHaveBeenCalled()
   })
 
   test('completes a two-factor challenge', async () => {

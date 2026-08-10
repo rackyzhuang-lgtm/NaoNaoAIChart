@@ -31,7 +31,7 @@ vi.mock('react-i18next', () => ({
 
 const model: ProviderModelInfo = { modelId: 'gpt-5.1' }
 
-function renderButton(compact: boolean, reasoningEffort: 'low' | 'medium' | 'high' = 'high') {
+function renderButton(compact: boolean, reasoningEffort: 'low' | 'medium' | 'high' | 'xhigh' = 'high') {
   const providerOptions: ProviderOptions = { openai: { reasoningEffort } }
   return render(
     <MantineProvider>
@@ -60,12 +60,14 @@ describe('ReasoningControlButton', () => {
     ['low', 1],
     ['medium', 2],
     ['high', 3],
+    ['xhigh', 4],
   ] as const)('shows %s effort with %i active dots', (level, activeDotCount) => {
     const view = renderButton(true, level)
     const status = view.container.querySelector(`[data-reasoning-status="${level}"]`)
 
     expect(status?.querySelectorAll('[data-reasoning-dot="active"]')).toHaveLength(activeDotCount)
-    expect(status?.querySelectorAll('[data-reasoning-dot="inactive"]')).toHaveLength(3 - activeDotCount)
+    const totalDotCount = level === 'xhigh' ? 4 : 3
+    expect(status?.querySelectorAll('[data-reasoning-dot="inactive"]')).toHaveLength(totalDotCount - activeDotCount)
   })
 
   test('keeps the level text in regular mode', () => {

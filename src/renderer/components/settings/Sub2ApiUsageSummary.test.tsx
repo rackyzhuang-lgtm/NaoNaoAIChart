@@ -53,6 +53,8 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
   return {
     getPublicSettings: vi.fn(),
     login: vi.fn(),
+    register: vi.fn(),
+    sendRegistrationCode: vi.fn(),
     completeTwoFactor: vi.fn(),
     logout: vi.fn(),
     getSessionState: vi.fn(),

@@ -7,6 +7,8 @@ import {
   type Sub2ApiApiKeyUpdateRequest,
   type Sub2ApiAvailableGroup,
   type Sub2ApiChannelMonitorResponse,
+  type Sub2ApiDirectGatewayRequest,
+  type Sub2ApiDirectGatewayResponse,
   type Sub2ApiInfiniteCanvasCapability,
   type Sub2ApiInfiniteCanvasImport,
   type Sub2ApiLoginRequest,
@@ -16,6 +18,9 @@ import {
   type Sub2ApiRedeemCodeRequest,
   type Sub2ApiRedeemHistoryItem,
   type Sub2ApiRedeemResult,
+  type Sub2ApiRegistrationRequest,
+  type Sub2ApiSendRegistrationCodeRequest,
+  type Sub2ApiSendRegistrationCodeResponse,
   type Sub2ApiSubscriptionSummary,
   type Sub2ApiUsageDashboardModels,
   type Sub2ApiUsageDashboardStats,
@@ -44,6 +49,9 @@ import {
   sub2ApiRedeemHistorySchema,
   sub2ApiRedeemResultSchema,
   sub2ApiRefreshResponseSchema,
+  sub2ApiRegistrationRequestSchema,
+  sub2ApiSendRegistrationCodeRequestSchema,
+  sub2ApiSendRegistrationCodeResponseSchema,
   sub2ApiSubscriptionSummarySchema,
   sub2ApiUsageDashboardModelsSchema,
   sub2ApiUsageDashboardStatsSchema,
@@ -179,6 +187,60 @@ export class Sub2ApiClient {
     this.persistAutoLogin(this.#autoLoginRequested)
     this.#autoLoginRequested = false
     return { status: 'authenticated', user: response.user }
+  }
+
+  sendRegistrationCode(request: Sub2ApiSendRegistrationCodeRequest): Promise<Sub2ApiSendRegistrationCodeResponse> {
+    const parsedRequest = sub2ApiSendRegistrationCodeRequestSchema.parse(request)
+    return this.requestPublic(
+      SUB2API_ROUTES.sendRegistrationCode,
+      { method: 'POST', body: JSON.stringify(parsedRequest) },
+      sub2ApiSendRegistrationCodeResponseSchema
+    )
+  }
+
+  async register(request: Sub2ApiRegistrationRequest): Promise<Sub2ApiLoginResult> {
+    const parsedRequest = sub2ApiRegistrationRequestSchema.parse(request)
+    this.session.clear()
+    this.#autoLoginEnabled = false
+    this.#autoLoginRequested = false
+    this.#autoLoginStore?.clear()
+    const response = await this.requestPublic(
+      SUB2API_ROUTES.register,
+      { method: 'POST', body: JSON.stringify(parsedRequest) },
+      sub2ApiAuthResponseSchema
+    )
+    this.session.setAuthenticated(response)
+    return { status: 'authenticated', user: response.user }
+  }
+
+  async directGatewayRequest(request: Sub2ApiDirectGatewayRequest): Promise<Sub2ApiDirectGatewayResponse> {
+    const target = new URL(request.url)
+    const gateway = new URL(SUB2API_GATEWAY_BASE_URL)
+    if (target.origin !== gateway.origin || !target.pathname.startsWith('/v1/')) {
+      throw new Sub2ApiError('Unsupported sub2api gateway URL', 'GATEWAY_ERROR')
+    }
+    const headers = new Headers()
+    for (const name of ['Accept', 'Authorization', 'Cache-Control', 'Content-Type']) {
+      const value = request.headers?.[name] || request.headers?.[name.toLowerCase()]
+      if (value) headers.set(name, value)
+    }
+    const response = await this.fetchImplementation(target, {
+      method: request.method,
+      headers,
+      body: request.method === 'GET' ? undefined : request.body,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+    if (response.status >= 300 && response.status < 400) {
+      throw new Sub2ApiError('sub2api gateway redirects are not allowed', 'GATEWAY_ERROR', response.status)
+    }
+    return {
+      status: response.status,
+      headers: {
+        'content-type': response.headers.get('content-type') || 'application/octet-stream',
+      },
+      body: await response.text(),
+    }
   }
 
   async completeTwoFactor(code: string): Promise<Sub2ApiLoginResult> {
@@ -537,8 +599,10 @@ export class Sub2ApiClient {
     try {
       const response = await this.fetchImplementation(buildSub2ApiGatewayUrl(SUB2API_ROUTES.models), {
         method: 'GET',
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store, max-age=0',
           Authorization: `Bearer ${apiKey}`,
         },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

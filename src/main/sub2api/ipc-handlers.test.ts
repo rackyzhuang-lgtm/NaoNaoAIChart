@@ -29,6 +29,8 @@ describe('registerSub2ApiHandlers', () => {
     const client = {
       getPublicSettings: vi.fn(async () => ({})),
       login: vi.fn(async () => ({ status: 'authenticated' as const, user })),
+      register: vi.fn(async () => ({ status: 'authenticated' as const, user })),
+      sendRegistrationCode: vi.fn(async () => ({ countdown: 60 })),
       completeTwoFactor: vi.fn(async () => ({ status: 'authenticated' as const, user })),
       logout: vi.fn(async () => undefined),
       getSessionState: vi.fn(() => ({ authenticated: true, user, twoFactorRequired: false })),
@@ -108,6 +110,15 @@ describe('registerSub2ApiHandlers', () => {
     )
     expect(JSON.stringify(loginResult)).not.toMatch(/accessToken|refreshToken|access_token|refresh_token/)
 
+    const registrationResult = await handlers.get(SUB2API_IPC_CHANNELS.register)?.(
+      {},
+      { email: 'new-user@qq.com', password: 'synthetic-password', verify_code: '123456' }
+    )
+    expect(JSON.stringify(registrationResult)).not.toMatch(/accessToken|refreshToken|access_token|refresh_token/)
+    await expect(
+      handlers.get(SUB2API_IPC_CHANNELS.sendRegistrationCode)?.({}, { email: 'new-user@qq.com' })
+    ).resolves.toEqual({ countdown: 60 })
+
     const keyPage = await handlers.get(SUB2API_IPC_CHANNELS.listApiKeys)?.({})
     expect(keyPage).toMatchObject({ items: [{ key_hint: 'synthe...-key' }] })
     expect(JSON.stringify(keyPage)).not.toContain('synthetic-user-api-key')
@@ -119,7 +130,9 @@ describe('registerSub2ApiHandlers', () => {
     const history = await handlers.get(SUB2API_IPC_CHANNELS.getRedeemHistory)?.({})
     expect(history).toMatchObject([{ code_hint: 'secr...code' }])
     expect(JSON.stringify(history)).not.toContain('secret-code')
-    await expect(handlers.get(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport)?.({}, 7, 'text')).resolves.toMatchObject({
+    await expect(
+      handlers.get(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport)?.({}, 7, 'text')
+    ).resolves.toMatchObject({
       capability: 'text',
       models: [{ id: 'gpt-test' }],
     })
@@ -135,6 +148,8 @@ describe('registerSub2ApiHandlers', () => {
     const client = {
       getPublicSettings: vi.fn(),
       login: vi.fn(),
+      register: vi.fn(),
+      sendRegistrationCode: vi.fn(),
       completeTwoFactor: vi.fn(),
       logout: vi.fn(),
       getSessionState: vi.fn(),

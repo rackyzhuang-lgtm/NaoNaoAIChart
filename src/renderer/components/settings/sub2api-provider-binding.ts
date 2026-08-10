@@ -5,11 +5,19 @@ import { mergeProviderSettings } from '@/stores/providerSettings'
 export function buildSub2ApiProviderSettings(
   currentSettings: Pick<Settings, 'providers'>,
   binding: Sub2ApiProviderBinding
-): Pick<Settings, 'providers'> {
-  return mergeProviderSettings(currentSettings, ModelProviderEnum.OpenAI, {
-    apiKey: binding.apiKey,
-    apiHost: binding.apiHost,
-    activeAuthMode: 'apikey',
-    models: binding.models.map((model) => ({ modelId: model.id })),
-  })
+): Pick<Settings, 'providers' | 'defaultChatModel'> {
+  const models = binding.models.map((model) => ({ modelId: model.id }))
+  return {
+    ...mergeProviderSettings(currentSettings, ModelProviderEnum.OpenAIResponses, {
+      apiKey: binding.apiKey,
+      apiHost: binding.apiHost,
+      activeAuthMode: 'apikey',
+      models,
+      useProxy: false,
+    }),
+    defaultChatModel: {
+      provider: ModelProviderEnum.OpenAIResponses,
+      model: models[0].modelId,
+    },
+  }
 }

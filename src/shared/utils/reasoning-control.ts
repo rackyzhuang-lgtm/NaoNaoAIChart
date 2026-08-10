@@ -10,7 +10,7 @@ import {
 
 // 'default' sends no reasoning-related parameters at all (the provider's server-side
 // default applies); 'off' force-sends the provider's explicit disable parameters.
-export type ReasoningControlLevel = 'default' | 'off' | 'low' | 'medium' | 'high'
+export type ReasoningControlLevel = 'default' | 'off' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export type ReasoningControlDisabledReason =
   | 'requires-anthropic-api-style'
@@ -36,7 +36,7 @@ export interface ReasoningControlCapabilities {
 
 export interface ReasoningControlOption {
   level: ReasoningControlLevel
-  label: 'default' | 'off' | 'on' | 'low' | 'medium' | 'high'
+  label: 'default' | 'off' | 'on' | 'low' | 'medium' | 'high' | 'xhigh'
 }
 
 const DEFAULT_CAPABILITIES: ReasoningControlCapabilities = {
@@ -44,15 +44,15 @@ const DEFAULT_CAPABILITIES: ReasoningControlCapabilities = {
   kind: 'toggle',
 }
 
-type ReasoningEffortLevel = Exclude<ReasoningControlLevel, 'default' | 'off'>
+type StandardReasoningEffortLevel = 'low' | 'medium' | 'high'
 
-const CLAUDE_BUDGET_BY_LEVEL: Record<ReasoningEffortLevel, number> = {
+const CLAUDE_BUDGET_BY_LEVEL: Record<StandardReasoningEffortLevel, number> = {
   low: 1024,
   medium: 4096,
   high: 8192,
 }
 
-const GEMINI_BUDGET_BY_LEVEL: Record<ReasoningEffortLevel, number> = {
+const GEMINI_BUDGET_BY_LEVEL: Record<StandardReasoningEffortLevel, number> = {
   low: 1024,
   medium: 8192,
   high: 24576,
@@ -61,18 +61,19 @@ const GEMINI_BUDGET_BY_LEVEL: Record<ReasoningEffortLevel, number> = {
 // Readback boundaries accept both the level budgets above (1024/8192/24576) and the
 // presets written by the legacy session-settings modal (2048/5120/10240), so upgraded
 // sessions keep displaying the level the user originally chose.
-const GEMINI_LEVEL_READBACK_MIN: Record<Exclude<ReasoningEffortLevel, 'low'>, number> = {
+const GEMINI_LEVEL_READBACK_MIN: Record<Exclude<StandardReasoningEffortLevel, 'low'>, number> = {
   medium: 4096,
   high: 10240,
 }
 
-const QWEN_THINKING_BUDGET_BY_LEVEL: Record<ReasoningEffortLevel, number> = {
+const QWEN_THINKING_BUDGET_BY_LEVEL: Record<StandardReasoningEffortLevel, number> = {
   low: 1024,
   medium: 4096,
   high: 8192,
 }
 
 const GPT_EFFORT_MODELS = [/(?:^|\/)gpt-5(?:[.-]|$)/i, /(?:^|\/)gpt-oss(?:[.-]|$)/i, /(?:^|\/)o[1-9](?:[.-]|$)/i]
+const OPENAI_XHIGH_MODELS = [/(?:^|\/)gpt-5(?:[.-]|$)/i]
 // o-series models only accept reasoning_effort low/medium/high — there is no
 // minimal/none, so reasoning cannot be turned off for them.
 const OPENAI_NO_DISABLE_MODELS = [/(?:^|\/)o[1-9](?:[.-]|$)/i]
@@ -179,6 +180,7 @@ export function normalizeClaudeReasoningOptions(
 export function isOpenAIReasoningEffortSupported(modelId: string, effort: string): boolean {
   if (matchesAny(modelId, OPENAI_NO_EFFORT_PARAM_MODELS)) return false
   if (matchesAny(modelId, OPENAI_NO_DISABLE_MODELS) && (effort === 'minimal' || effort === 'none')) return false
+  if (effort === 'xhigh' && !matchesAny(modelId, OPENAI_XHIGH_MODELS)) return false
   return true
 }
 
@@ -397,6 +399,13 @@ export function getReasoningControlLevel(
   providerOptions?: ProviderOptions
 ): ReasoningControlLevel {
   const level = deriveReasoningControlLevel(provider, model, providerOptions)
+  if (
+    level === 'xhigh' &&
+    (!isOpenAIStyleEffectiveProvider(getEffectiveProvider(provider, model)) ||
+      !isOpenAIReasoningEffortSupported(model?.modelId || '', level))
+  ) {
+    return 'default'
+  }
   if (level !== 'off') return level
   // Stale options (written by older versions or under another model) can read back as
   // 'off' on a model that no longer offers an off option; report them as 'default' so
@@ -498,13 +507,21 @@ export function getReasoningControlOptions(
     return [{ level: 'default', label: 'default' }, ...offOption, { level: 'high', label: 'on' }]
   }
 
-  return [
+  const options: ReasoningControlOption[] = [
     { level: 'default', label: 'default' },
     ...offOption,
     { level: 'low', label: 'low' },
     { level: 'medium', label: 'medium' },
     { level: 'high', label: 'high' },
   ]
+
+  // Codex exposes xhigh for OpenAI reasoning models. Keep it scoped to the
+  // OpenAI wire format so other providers never receive an unsupported level.
+  if (capabilities.kind === 'openai-effort' && isOpenAIReasoningEffortSupported(model?.modelId || '', 'xhigh')) {
+    options.push({ level: 'xhigh', label: 'xhigh' })
+  }
+
+  return options
 }
 
 export function getReasoningProviderOptions(
@@ -527,6 +544,16 @@ export function getReasoningProviderOptions(
   ) {
     return stripReasoningProviderOptions(previous)
   }
+
+  if (
+    level === 'xhigh' &&
+    (!isOpenAIStyleEffectiveProvider(effectiveProvider) ||
+      !isOpenAIReasoningEffortSupported(model?.modelId || '', level))
+  ) {
+    return stripReasoningProviderOptions(previous)
+  }
+
+  const standardLevel = isStandardReasoningEffortLevel(level) ? level : 'high'
 
   const next: ProviderOptions = { ...(previous || {}) }
 
@@ -556,9 +583,9 @@ export function getReasoningProviderOptions(
 
   if (effectiveProvider === ModelProviderEnum.Claude) {
     if (capabilities.kind === 'anthropic-adaptive-effort' || capabilities.kind === 'anthropic-effort') {
-      next.claude = { effort: level }
+      next.claude = { effort: standardLevel }
     } else {
-      next.claude = { thinking: { type: 'enabled', budgetTokens: CLAUDE_BUDGET_BY_LEVEL[level] } }
+      next.claude = { thinking: { type: 'enabled', budgetTokens: CLAUDE_BUDGET_BY_LEVEL[standardLevel] } }
     }
   } else if (isOpenAICompatibleApiStyle(provider, model as ProviderModelInfo) && isDeepSeekThinkingModel(model)) {
     next.deepseek = { thinking: { type: 'enabled' } }
@@ -577,29 +604,31 @@ export function getReasoningProviderOptions(
     }
   } else if (effectiveProvider === ModelProviderEnum.XAI) {
     next.openai = {
-      reasoningEffort: level,
+      reasoningEffort: standardLevel,
       include: ['reasoning.encrypted_content'],
       forceReasoning: true,
     }
   } else if (effectiveProvider === ModelProviderEnum.OpenRouter) {
     next.openrouter = {
       reasoning: {
-        effort: level,
+        effort: standardLevel,
         exclude: false,
       },
     }
   } else if (effectiveProvider === ModelProviderEnum.Gemini) {
     if (capabilities.kind === 'level') {
-      next.google = { thinkingConfig: { thinkingLevel: level as GoogleThinkingLevel, includeThoughts: true } }
+      next.google = { thinkingConfig: { thinkingLevel: standardLevel as GoogleThinkingLevel, includeThoughts: true } }
     } else {
-      next.google = { thinkingConfig: { thinkingBudget: GEMINI_BUDGET_BY_LEVEL[level], includeThoughts: true } }
+      next.google = {
+        thinkingConfig: { thinkingBudget: GEMINI_BUDGET_BY_LEVEL[standardLevel], includeThoughts: true },
+      }
     }
   } else if (effectiveProvider === ModelProviderEnum.DeepSeek) {
     next.deepseek = { thinking: { type: 'enabled' } }
   } else if (effectiveProvider === ModelProviderEnum.Qwen || effectiveProvider === ModelProviderEnum.QwenPortal) {
     next.openaiCompatible = {
       enable_thinking: true,
-      thinking_budget: QWEN_THINKING_BUDGET_BY_LEVEL[level],
+      thinking_budget: QWEN_THINKING_BUDGET_BY_LEVEL[standardLevel],
     }
   }
 
@@ -653,7 +682,12 @@ function normalizeEffortToLevel(effort: string | undefined): ReasoningControlLev
   if (!effort) return 'default'
   if (effort === 'none' || effort === 'minimal') return 'off'
   if (effort === 'low' || effort === 'medium' || effort === 'high') return effort
+  if (effort === 'xhigh') return 'xhigh'
   return 'high'
+}
+
+function isStandardReasoningEffortLevel(level: ReasoningControlLevel): level is StandardReasoningEffortLevel {
+  return level === 'low' || level === 'medium' || level === 'high'
 }
 
 function compactProviderOptions(options: ProviderOptions): ProviderOptions | undefined {

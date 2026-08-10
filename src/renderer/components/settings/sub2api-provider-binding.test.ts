@@ -1,3 +1,4 @@
+import { ModelProviderEnum } from '@shared/types'
 import { describe, expect, test } from 'vitest'
 import { buildSub2ApiProviderSettings } from './sub2api-provider-binding'
 
@@ -17,13 +18,14 @@ describe('buildSub2ApiProviderSettings', () => {
       }
     )
 
-    expect(result.providers?.openai).toEqual({
+    expect(result.providers?.['openai-responses']).toEqual({
       apiKey: 'synthetic-sub2api-key',
       apiHost: 'https://naonaoai.shop/v1',
       activeAuthMode: 'apikey',
       models: [{ modelId: 'gpt-test' }, { modelId: 'codex-test' }],
-      useProxy: true,
+      useProxy: false,
     })
     expect(result.providers?.claude?.apiKey).toBe('existing-claude-key')
+    expect(result.defaultChatModel).toEqual({ provider: ModelProviderEnum.OpenAIResponses, model: 'gpt-test' })
   })
 })

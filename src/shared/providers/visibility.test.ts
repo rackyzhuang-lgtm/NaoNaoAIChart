@@ -10,7 +10,8 @@ describe('provider visibility', () => {
     const menuProviderIds = AIModelProviderMenuOptionList.map((option) => option.value)
 
     expect(menuProviderIds).not.toEqual(expect.arrayContaining([...HIDDEN_PROVIDER_IDS]))
-    expect(menuProviderIds).toContain(ModelProviderEnum.OpenAI)
+    expect(menuProviderIds).toContain(ModelProviderEnum.OpenAIResponses)
+    expect(menuProviderIds).not.toContain(ModelProviderEnum.OpenAI)
   })
 
   it('hides the retired providers from featured and system provider choices', () => {

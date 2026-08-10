@@ -608,3 +608,69 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 首次 NSIS 下载 GitHub 资源超时；改用工作流同源 `npmmirror` 后打包成功。安装程序为未签名状态（`NotSigned`）。
 - 发布提交 `ca8e4d4c9387582ec7acbec4b800924d3231ce38` 已推送至 `github-release/main`；带注释标签 `v1.22.7`（对象 `551747abc01acdf561a082eba7c758836dc8488e`）已推送并解析至同一提交，远程 ref 已复核。
 - 标签推送已触发 GitHub Actions。当前环境没有 `gh`，对该仓库的未认证 GitHub API 查询返回 404，因此 Windows/macOS 远程打包和 GitHub Release 是否完成尚未确认，不能报告为成功。macOS/Linux 本地打包、桌面端交互 E2E、真实账户/模型请求均未执行。
+
+## API Key 聊天模型同步修复（2026-08-10）
+
+- 已定位 macOS/Windows 共用的模型同步风险：`/v1/models` GET 请求未显式禁止缓存，且“用于聊天”只更新 Provider 模型列表，没有更新全局默认聊天模型。
+- `/v1/models` 现在使用 `cache: no-store` 和 `Cache-Control: no-cache, no-store, max-age=0`；绑定结果要求至少一个模型。
+- “用于聊天”写入最新模型列表，并将首个模型同步为 `defaultChatModel`，后续新会话不再沿用旧的持久化默认模型。
+- 定向 Vitest：4 个文件、40 项通过；全量测试：255 个文件通过、3 个跳过，2489 项通过、61 项跳过；Node 22 TypeScript 检查、相关 Biome 检查、生产构建和 `git diff --check` 均通过；`pnpm lint` 退出码 0，保留 888 个既有 warning。
+- 真实 macOS/Windows Electron 窗口操作、真实账户和模型请求未执行，仍需手工验收模型列表及新会话默认模型。
+- 任务记录：`docs/tasks/0044-api-key-model-sync-cache.md`。
+
+## 账户注册（2026-08-10）
+
+- 登录入口旁新增“注册”，通过主进程 IPC 调用 `https://naonaoai.shop` 的公开接口发送邮箱验证码并完成注册；注册成功后自动建立当前账户会话。
+- 注册入口受服务端 `registration_enabled` 控制；邮箱验证、邮箱后缀白名单和验证码服务开关会同步到中文界面校验与提示。密码、验证码、access token 和 refresh token 不返回 renderer 或写入持久化存储。
+- 已执行：定向注册测试、全量 Vitest（255 个文件通过、3 个跳过；2492 项通过、61 项跳过）、Node 22 TypeScript、相关 Biome、生产构建和 `git diff --check`；`pnpm lint` 退出码 0，保留既有 warning。
+- 未执行：真实账号注册、macOS/Windows Electron 窗口手工注册验收、打包、Git 推送和 Release 发布。
+- 任务记录：`docs/tasks/0045-account-registration.md`；架构决策：`docs/decisions/0015-sub2api-registration.md`。
+
+## sub2api CORS 主进程直连桥接（2026-08-10）
+
+- 已定位日志中的根因：`https://naonaoai.shop/v1/responses` 未返回 renderer 所需的 `Access-Control-Allow-Origin`，预检请求被浏览器拦截。
+- renderer 现在通过受信任 IPC 交给主进程请求固定 `naonaoai.shop/v1/*`，主进程返回响应元数据和正文；不再发送 `/_naonao_proxy/...`，也未关闭 Electron webSecurity。
+- 已执行：请求层 4 项、账户客户端/IPC 27 项、画布 Agent 5 项定向测试，Node 22 TypeScript、变更文件 Biome 和 `git diff --check`。真实线上模型请求未执行。
+- 任务记录：`docs/tasks/0047-sub2api-cors-main-process-bridge.md`；架构决策：`docs/decisions/0017-sub2api-cors-main-process-bridge.md`。
+
+## OpenAI Responses API 入站请求（2026-08-10）
+
+- API Key“用于聊天”现在绑定内置 `openai-responses` Provider，默认聊天模型随之使用 `/v1/responses`，不再使用 `/v1/chat/completions`。
+- NaoNaoAI renderer 请求现在直连 `https://naonaoai.shop/v1/responses`，不再改写为 `/_naonao_proxy/naonaoai.shop/...`；旧 OpenAI Chat Completions Provider 从用户可见列表隐藏，仅保留一个名为“OpenAI”的入口。
+- 无限画布 Agent 也已改用 `/v1/responses`；请求使用 `input`、Responses 工具定义及 `store: false`，并解析文本、函数调用和用量的 Responses SSE 事件。
+- 已执行：定向 Vitest（3 个文件、6 项通过）、Node 22 TypeScript、变更文件 Biome 和 `git diff --check`。未执行真实 API Key 的线上模型请求、桌面手工对话、打包、推送或发布。
+- 任务记录：`docs/tasks/0046-openai-responses-api.md`；架构决策：`docs/decisions/0016-openai-responses-api.md`。
+
+## 模型请求默认重试（2026-08-10）
+
+- renderer 请求层默认改为 5 次重试；任何非正常响应或网络异常都会继续重试，连续失败后才抛出最后一次 API 错误。
+- 模型 Provider 的 POST 请求不再默认单次执行，切换 API Key 分组后遇到短暂网关异常可以自动恢复；显式 `retry: 0` 的调用仍保持单次行为。
+- 用户主动取消请求时立即结束，不会因重试再次发起请求；API 错误保留 HTTP 状态码。
+- 已执行：定向 Vitest 2 个文件、7 项通过；Node 22 TypeScript 通过；变更文件 Biome 通过；`git diff --check` 通过。
+- 真实线上模型请求、macOS/Windows Electron 手工验收、打包、Git 推送和 Release 发布未执行。
+- 任务记录：`docs/tasks/0048-provider-request-retry.md`。
+
+## React Avatar 控制台警告（2026-08-10）
+
+- 已定位 `SystemAvatar` 将组件专用的 `sessionType` 透传到 Mantine Avatar，最终渲染为原生 `div` 属性并触发 React 警告。
+- 已在 `src/renderer/components/common/Avatar.tsx` 拦截该属性，不改变头像展示和调用方接口。
+- 已执行：Node 22 TypeScript、Avatar 文件 Biome 检查和 `git diff --check`，均通过。
+- 本地开发窗口支持热更新；真实浏览器控制台刷新后的手工复核尚未执行。
+- 任务记录：`docs/tasks/0049-react-session-type-prop-warning.md`。
+
+## Codex 思考强度同步（2026-08-10）
+
+- GPT-5 系列 OpenAI/OpenAI Responses 思考控件新增 `xhigh` 档位，简体中文显示“极高”，繁体中文显示“極高”；紧凑控件使用 4 个状态点区分该档位。
+- 选择“极高”会持久化为 `openai.reasoningEffort: 'xhigh'`；OpenAI Responses SDK 最终映射为请求体 `reasoning.effort: 'xhigh'`。
+- 非 OpenAI Provider、o-series 和 GPT-OSS 不显示或发送 `xhigh`；旧会话切换到不支持模型时回落为“默认”，避免携带无效参数。
+- 已执行：定向 Vitest 4 个文件、62 项通过；Node 22 TypeScript、变更文件 Biome 和 `git diff --check` 通过。Biome 保留 `SessionSettings.tsx` 3 条既有 warning。
+- Codex 官方手册抓取因 HTTP 403 未成功；OpenAI Developer Docs MCP 已注册但当前会话未加载。真实 API Key 线上请求、Electron 手工选择与重启持久化、打包、Git 推送和 Release 发布未执行。
+- 任务记录：`docs/tasks/0050-codex-reasoning-effort-sync.md`。
+
+## 无限画布 Agent 初始化卡死修复（2026-08-10）
+
+- 根因：Agent 网关首次连接返回空会话 `idle` revision `1`，创建新会话仍返回 revision `1`；画布前端按 revision 丢弃 `ready` 状态，导致一直显示“正在初始化 NaoNaoAI Agent 对话”并禁用输入框。
+- 修复：主进程网关为每次新建会话递增 conversation revision，并让 HTTP 响应与 SSE `workspace_changed` 事件使用同一 revision。
+- 已执行：无限画布定向 Vitest 3 个文件、10 项通过；Node 22 TypeScript、变更文件 Biome 和 `git diff --check` 通过。
+- Electron 手工验收：通过。进入无限画布并新建项目后，Agent 显示“工具列表加载完成，可以开始对话”，输入框已解除禁用。真实线上模型发送未执行。
+- 任务记录：`docs/tasks/0051-infinite-canvas-agent-initialization.md`。

@@ -8,7 +8,7 @@ export { getModel, getProviderSettings } from '../providers'
 export const aiProviderNameHash: Record<ModelProviderEnum, string> = {
   [ModelProviderEnum.ChatboxAI]: 'Legacy Provider',
   [ModelProviderEnum.OpenAI]: 'OpenAI API',
-  [ModelProviderEnum.OpenAIResponses]: 'OpenAI Responses API',
+  [ModelProviderEnum.OpenAIResponses]: 'OpenAI',
   [ModelProviderEnum.Azure]: 'Azure OpenAI API',
   [ModelProviderEnum.ChatGLM6B]: 'ChatGLM API',
   [ModelProviderEnum.Claude]: 'Claude API',

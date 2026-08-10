@@ -5,10 +5,13 @@ import {
   sub2ApiApiKeyIdSchema,
   sub2ApiApiKeySummarySchema,
   sub2ApiApiKeyUpdateRequestSchema,
+  sub2ApiDirectGatewayRequestSchema,
   sub2ApiInfiniteCanvasCapabilitySchema,
   sub2ApiLoginRequestSchema,
   sub2ApiRedeemCodeRequestSchema,
   sub2ApiRedeemHistorySummarySchema,
+  sub2ApiRegistrationRequestSchema,
+  sub2ApiSendRegistrationCodeRequestSchema,
   sub2ApiTotpCodeSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiError, serializeSub2ApiError } from '../../shared/sub2api/errors'
@@ -77,6 +80,18 @@ export function registerSub2ApiHandlers(
   registerHandler(SUB2API_IPC_CHANNELS.login, (event, request) => {
     requireTrustedSender(event)
     return client.login(sub2ApiLoginRequestSchema.parse(request))
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.register, (event, request) => {
+    requireTrustedSender(event)
+    return client.register(sub2ApiRegistrationRequestSchema.parse(request))
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.sendRegistrationCode, (event, request) => {
+    requireTrustedSender(event)
+    return client.sendRegistrationCode(sub2ApiSendRegistrationCodeRequestSchema.parse(request))
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.directGatewayRequest, (event, request) => {
+    requireTrustedSender(event)
+    return client.directGatewayRequest(sub2ApiDirectGatewayRequestSchema.parse(request))
   })
   registerHandler(SUB2API_IPC_CHANNELS.completeTwoFactor, (event, code) => {
     requireTrustedSender(event)

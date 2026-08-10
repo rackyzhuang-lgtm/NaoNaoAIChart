@@ -2,6 +2,7 @@ import { ModelProviderEnum } from '../types'
 
 /** Providers retained for compatibility but removed from new user-facing choices. */
 export const HIDDEN_PROVIDER_IDS = [
+  ModelProviderEnum.OpenAI,
   ModelProviderEnum.SiliconFlow,
   ModelProviderEnum.OpenRouter,
   ModelProviderEnum.Ollama,

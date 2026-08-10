@@ -1,11 +1,11 @@
-import { ModelProviderEnum, ModelProviderType } from '../../types'
 import { createOAuthCredentialManager, createOpenAIOAuthFetch } from '../../oauth'
+import { ModelProviderEnum, ModelProviderType } from '../../types'
 import { defineProvider } from '../registry'
 import OpenAIResponses from './models/openai-responses'
 
 export const openaiResponsesProvider = defineProvider({
   id: ModelProviderEnum.OpenAIResponses,
-  name: 'OpenAI (Responses)',
+  name: 'OpenAI',
   type: ModelProviderType.OpenAIResponses,
   modelsDevProviderId: 'openai',
   curatedModelIds: ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.2', 'gpt-5.2-pro', 'o3-pro'],
@@ -69,7 +69,9 @@ export const openaiResponsesProvider = defineProvider({
         apiHost: config.formattedApiHost,
         apiPath:
           config.providerSetting.apiPath ||
-          config.globalSettings.providers?.[config.settings.provider!]?.apiPath ||
+          (config.settings.provider
+            ? config.globalSettings.providers?.[config.settings.provider]?.apiPath
+            : undefined) ||
           '/responses',
         model: config.model,
         temperature: config.settings.temperature,

@@ -92,6 +92,66 @@ describe('Sub2ApiClient', () => {
     expect(client.getSessionState()).toMatchObject({ authenticated: true, user })
   })
 
+  it('sends the registration code and establishes the registered session in the main process', async () => {
+    const fetchImplementation = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/send-verify-code')) {
+        return Promise.resolve(success({ message: 'Verification code sent successfully', countdown: 60 }))
+      }
+      if (url.endsWith('/auth/register')) {
+        return Promise.resolve(authSuccess('registered-access', 'registered-refresh'))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+
+    await expect(client.sendRegistrationCode({ email: 'new-user@qq.com' })).resolves.toEqual({
+      message: 'Verification code sent successfully',
+      countdown: 60,
+    })
+    const result = await client.register({
+      email: 'new-user@qq.com',
+      password: 'synthetic-password',
+      verify_code: '123456',
+    })
+
+    expect(fetchImplementation.mock.calls[0][0].toString()).toMatch(/\/api\/v1\/auth\/send-verify-code$/)
+    expect(fetchImplementation.mock.calls[1][0].toString()).toMatch(/\/api\/v1\/auth\/register$/)
+    expect(fetchImplementation.mock.calls[1][1]?.body).toBe(
+      JSON.stringify({ email: 'new-user@qq.com', password: 'synthetic-password', verify_code: '123456' })
+    )
+    expect(result).toEqual({ status: 'authenticated', user })
+    expect(JSON.stringify(result)).not.toContain('registered-access')
+    expect(JSON.stringify(result)).not.toContain('registered-refresh')
+    expect(client.getSessionState()).toMatchObject({ authenticated: true, user })
+  })
+
+  it('sends direct gateway requests from the main process without opening an arbitrary proxy', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>((input, init) => {
+      expect(String(input)).toBe('https://naonaoai.shop/v1/responses')
+      expect(init?.method).toBe('POST')
+      return Promise.resolve(
+        new Response('data: [DONE]\n\n', {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+
+    await expect(
+      client.directGatewayRequest({
+        url: 'https://naonaoai.shop/v1/responses',
+        method: 'POST',
+        headers: { Authorization: 'Bearer synthetic-key' },
+        body: '{"model":"test-model","stream":true}',
+      })
+    ).resolves.toMatchObject({ status: 200, body: 'data: [DONE]\n\n' })
+    await expect(
+      client.directGatewayRequest({ url: 'https://example.com/v1/responses', method: 'GET' })
+    ).rejects.toMatchObject({ code: 'GATEWAY_ERROR' })
+  })
+
   it('restores an opted-in session without sending the UI preference to sub2api', async () => {
     let persistedRefreshToken: string | null = null
     const autoLoginStore = {
@@ -226,7 +286,14 @@ describe('Sub2ApiClient', () => {
   it('uses panel JWT for API key CRUD and the selected user key for model discovery', async () => {
     const availableGroups = [{ id: 4, name: 'Standard', platform: 'openai' }]
     const copiedKeys: string[] = []
-    const requests: { url: string; method: string; authorization: string | null; body?: unknown }[] = []
+    const requests: {
+      url: string
+      method: string
+      authorization: string | null
+      cache?: RequestCache
+      cacheControl?: string | null
+      body?: unknown
+    }[] = []
     const fetchImplementation = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
       const method = init?.method || 'GET'
@@ -235,6 +302,8 @@ describe('Sub2ApiClient', () => {
         url,
         method,
         authorization,
+        cache: init?.cache,
+        cacheControl: new Headers(init?.headers).get('Cache-Control'),
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       })
 
@@ -294,6 +363,10 @@ describe('Sub2ApiClient', () => {
     expect(panelRequests.every((request) => request.authorization === 'Bearer panel-access')).toBe(true)
     expect(requests.find((request) => request.url.endsWith('/v1/models'))?.authorization).toBe(
       'Bearer synthetic-user-api-key'
+    )
+    expect(requests.find((request) => request.url.endsWith('/v1/models'))?.cache).toBe('no-store')
+    expect(requests.find((request) => request.url.endsWith('/v1/models'))?.cacheControl).toBe(
+      'no-cache, no-store, max-age=0'
     )
     expect(requests.find((request) => request.method === 'POST' && request.url.endsWith('/api/v1/keys'))?.body).toEqual(
       { name: 'desktop-key', group_id: 4 }

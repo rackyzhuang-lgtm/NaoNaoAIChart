@@ -10,8 +10,8 @@ export function createFetchWithProxy(useProxy: boolean | undefined, dependencies
     const headers = (init?.headers as Record<string, string>) || {}
 
     if (method === 'POST') {
-      // POST to AI providers may be billable; a transient network error can occur
-      // after the server already processed the request. Retrying would double-charge.
+      // Provider calls recover from transient non-2xx responses by default.
+      // Callers that must avoid retries can still pass retry: 0 through the adapter.
       const response = await dependencies.request.apiRequest({
         url: url.toString(),
         method: 'POST',
@@ -19,7 +19,7 @@ export function createFetchWithProxy(useProxy: boolean | undefined, dependencies
         body: init?.body,
         signal: init?.signal || undefined,
         useProxy,
-        retry: 0,
+        retry: 5,
       })
       return response
     } else {

@@ -6,6 +6,8 @@ import type {
   Sub2ApiApiKeyUpdateRequest,
   Sub2ApiAvailableGroup,
   Sub2ApiChannelMonitorResponse,
+  Sub2ApiDirectGatewayRequest,
+  Sub2ApiDirectGatewayResponse,
   Sub2ApiInfiniteCanvasCapability,
   Sub2ApiInfiniteCanvasImport,
   Sub2ApiLoginRequest,
@@ -15,6 +17,9 @@ import type {
   Sub2ApiRedeemCodeRequest,
   Sub2ApiRedeemHistorySummary,
   Sub2ApiRedeemResult,
+  Sub2ApiRegistrationRequest,
+  Sub2ApiSendRegistrationCodeRequest,
+  Sub2ApiSendRegistrationCodeResponse,
   Sub2ApiSessionState,
   Sub2ApiSubscriptionSummary,
   Sub2ApiUsageDashboardModels,
@@ -26,6 +31,8 @@ import type {
 export const SUB2API_IPC_CHANNELS = {
   getPublicSettings: 'sub2api:get-public-settings',
   login: 'sub2api:login',
+  register: 'sub2api:register',
+  sendRegistrationCode: 'sub2api:send-registration-code',
   completeTwoFactor: 'sub2api:complete-two-factor',
   logout: 'sub2api:logout',
   getSessionState: 'sub2api:get-session-state',
@@ -47,11 +54,14 @@ export const SUB2API_IPC_CHANNELS = {
   copyApiKey: 'sub2api:copy-api-key',
   prepareProviderBinding: 'sub2api:prepare-provider-binding',
   prepareInfiniteCanvasImport: 'sub2api:prepare-infinite-canvas-import',
+  directGatewayRequest: 'sub2api:direct-gateway-request',
 } as const
 
 export interface Sub2ApiRendererApi {
   getPublicSettings(): Promise<Sub2ApiPublicSettings>
   login(request: Sub2ApiLoginRequest): Promise<Sub2ApiLoginResult>
+  register(request: Sub2ApiRegistrationRequest): Promise<Sub2ApiLoginResult>
+  sendRegistrationCode(request: Sub2ApiSendRegistrationCodeRequest): Promise<Sub2ApiSendRegistrationCodeResponse>
   completeTwoFactor(code: string): Promise<Sub2ApiLoginResult>
   logout(): Promise<void>
   getSessionState(): Promise<Sub2ApiSessionState>
@@ -76,4 +86,5 @@ export interface Sub2ApiRendererApi {
     id: number,
     capability: Sub2ApiInfiniteCanvasCapability
   ): Promise<Sub2ApiInfiniteCanvasImport>
+  directGatewayRequest?(request: Sub2ApiDirectGatewayRequest): Promise<Sub2ApiDirectGatewayResponse>
 }
