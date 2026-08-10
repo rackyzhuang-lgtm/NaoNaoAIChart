@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Sub2ApiError } from '../../shared/sub2api/errors'
 import { Sub2ApiClient } from './client'
 import { Sub2ApiSession } from './session'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 const user = {
   id: 1,
@@ -150,6 +154,95 @@ describe('Sub2ApiClient', () => {
     await expect(
       client.directGatewayRequest({ url: 'https://example.com/v1/responses', method: 'GET' })
     ).rejects.toMatchObject({ code: 'GATEWAY_ERROR' })
+  })
+
+  it('coalesces identical gateway POST requests while the first request is in flight', async () => {
+    let resolveFetch = (_response: Response) => {}
+    const fetchImplementation = vi.fn<typeof fetch>(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        })
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const request = {
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST' as const,
+      headers: { Authorization: 'Bearer synthetic-key' },
+      body: '{"model":"test-model","input":"hi","stream":true}',
+    }
+
+    const first = client.directGatewayRequest(request)
+    const duplicate = client.directGatewayRequest(request)
+
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+    resolveFetch(new Response('data: [DONE]\n\n', { status: 200 }))
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([
+      expect.objectContaining({ status: 200, body: 'data: [DONE]\n\n' }),
+      expect.objectContaining({ status: 200, body: 'data: [DONE]\n\n' }),
+    ])
+  })
+
+  it('replays a recent identical gateway POST response without sending again', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () => new Response('data: [DONE]\n\n', { status: 200 }))
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const request = {
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST' as const,
+      headers: { Authorization: 'Bearer synthetic-key' },
+      body: '{"model":"test-model","input":"hi","stream":true}',
+    }
+
+    const first = await client.directGatewayRequest(request)
+    const duplicate = await client.directGatewayRequest(request)
+
+    expect(duplicate).toEqual(first)
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
+
+  it('sends changed or expired gateway POST requests normally', async () => {
+    vi.useFakeTimers()
+    const fetchImplementation = vi.fn<typeof fetch>(async () => new Response('data: [DONE]\n\n', { status: 200 }))
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const request = {
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST' as const,
+      headers: { Authorization: 'Bearer synthetic-key' },
+      body: '{"model":"test-model","input":"hi","stream":true}',
+    }
+
+    await client.directGatewayRequest(request)
+    await client.directGatewayRequest({ ...request, body: '{"model":"test-model","input":"next","stream":true}' })
+    await vi.advanceTimersByTimeAsync(20_001)
+    await client.directGatewayRequest(request)
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(3)
+  })
+
+  it('allows an established streaming gateway response to finish after the connect timeout', async () => {
+    vi.useFakeTimers()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        setTimeout(() => {
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+          controller.close()
+        }, 30_001)
+      },
+    })
+    const client = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(async () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }))
+    )
+
+    const responsePromise = client.directGatewayRequest({
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST',
+      body: '{"stream":true}',
+    })
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(30_001)
+
+    await expect(responsePromise).resolves.toMatchObject({ status: 200, body: 'data: [DONE]\n\n' })
   })
 
   it('restores an opted-in session without sending the UI preference to sub2api', async () => {

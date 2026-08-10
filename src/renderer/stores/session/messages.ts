@@ -178,7 +178,11 @@ export function submitNewUserMessage(
   sessionId: string,
   params: { newUserMsg: Message; needGenerating: boolean; onUserMessageReady?: () => void }
 ) {
-  return withSessionGenerationLock(sessionId, () => submitNewUserMessageUnlocked(sessionId, params))
+  return withSessionGenerationLock(
+    sessionId,
+    () => submitNewUserMessageUnlocked(sessionId, params),
+    `submit:${params.newUserMsg.id}`
+  )
 }
 
 async function submitNewUserMessageUnlocked(

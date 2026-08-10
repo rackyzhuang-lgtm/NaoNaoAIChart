@@ -61,6 +61,7 @@ import {
 import { sub2ApiClient } from './sub2api/client'
 import { registerSub2ApiHandlers } from './sub2api/ipc-handlers'
 import { Sub2ApiAutoLoginStore } from './sub2api/session-store'
+import { clearStartupTestCaches } from './test-cache'
 import * as windowState from './window_state'
 
 function reportMainProcessError(
@@ -676,6 +677,12 @@ if (quitForInstallRequested) {
   app
     .whenReady()
     .then(async () => {
+      await clearStartupTestCaches({
+        session: session.defaultSession,
+        clearModelRegistryCache: () => delStoreBlob('model-registry-cache-v2'),
+      }).catch((error) => {
+        log.warn('[Test cache] failed to clear startup caches', error)
+      })
       await knowledgeBaseInitPromise
       sub2ApiClient.configureAutoLogin(new Sub2ApiAutoLoginStore())
       await sub2ApiClient.restoreAutoLogin()

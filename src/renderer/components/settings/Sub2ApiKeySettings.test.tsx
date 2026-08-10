@@ -149,7 +149,7 @@ describe('Sub2ApiKeySettings', () => {
       expect(navigationMocks.createSession).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'chat',
-          settings: expect.objectContaining({ provider: 'openai', modelId: 'gpt-test' }),
+          settings: expect.objectContaining({ provider: 'openai-responses', modelId: 'gpt-test' }),
         })
       )
     )

@@ -1,5 +1,6 @@
 import platform from '@/platform'
 import { ApiError, BaseError, NetworkError } from '../../shared/models/errors'
+import { isSub2ApiGatewayUrl } from '../../shared/sub2api/url'
 import { handleMobileRequest } from './mobile-request'
 
 interface RequestOptions {
@@ -63,12 +64,15 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
     typeof directRequest === 'function' &&
     (() => {
       try {
-        const target = new URL(requestUrl)
-        return target.origin === 'https://naonaoai.shop' && target.pathname.startsWith('/v1/')
+        return isSub2ApiGatewayUrl(requestUrl)
       } catch {
         return false
       }
     })()
+
+  if (directGateway) {
+    headers.set('Cache-Control', 'no-cache, no-store, max-age=0')
+  }
 
   const makeRequest = async () => {
     if (platform.type === 'mobile' && useProxy) {
@@ -104,7 +108,10 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
     return res
   }
 
-  return retryRequest(makeRequest, retry, requestUrl, signal)
+  // A model POST may already have been accepted and billed when its response is
+  // delayed or interrupted. Retrying it can submit the same chat message again.
+  const effectiveRetry = directGateway && method.toUpperCase() === 'POST' ? 0 : retry
+  return retryRequest(makeRequest, effectiveRetry, requestUrl, signal)
 }
 
 export const apiRequest = {

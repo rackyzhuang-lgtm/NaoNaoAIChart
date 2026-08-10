@@ -55,4 +55,29 @@ describe('session generation lock', () => {
     releaseFirst()
     await first
   })
+
+  it('reuses an in-flight task with the same operation key', async () => {
+    let releaseTask = () => {}
+    const taskGate = new Promise<string>((resolve) => {
+      releaseTask = () => resolve('done')
+    })
+    const task = vi.fn(() => taskGate)
+
+    const first = withSessionGenerationLock('session-1', task, 'submit:message-1')
+    const duplicate = withSessionGenerationLock('session-1', task, 'submit:message-1')
+
+    await Promise.resolve()
+    expect(task).toHaveBeenCalledOnce()
+    releaseTask()
+    await expect(Promise.all([first, duplicate])).resolves.toEqual(['done', 'done'])
+  })
+
+  it('allows the same operation key again after the previous task settles', async () => {
+    const task = vi.fn().mockResolvedValue('done')
+
+    await withSessionGenerationLock('session-1', task, 'submit:message-1')
+    await withSessionGenerationLock('session-1', task, 'submit:message-1')
+
+    expect(task).toHaveBeenCalledTimes(2)
+  })
 })

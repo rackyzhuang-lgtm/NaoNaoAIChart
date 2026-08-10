@@ -69,8 +69,25 @@ describe('desktop provider request routing', () => {
         url: 'https://naonaoai.shop/v1/responses',
         method: 'POST',
         body: '{"model":"test-model","stream":true}',
+        headers: expect.objectContaining({ 'cache-control': 'no-cache, no-store, max-age=0' }),
       })
     )
+  })
+
+  it('does not retry a direct sub2api POST after the gateway request fails', async () => {
+    const directGatewayRequest = vi.fn().mockRejectedValue(new Error('gateway unavailable'))
+    vi.stubGlobal('window', { electronAPI: { sub2api: { directGatewayRequest } } })
+
+    await expect(
+      apiRequest.post(
+        'https://naonaoai.shop/v1/responses',
+        { Authorization: 'Bearer test-key' },
+        '{"model":"test-model","stream":true}',
+        { retry: 5 }
+      )
+    ).rejects.toThrow('gateway unavailable')
+
+    expect(directGatewayRequest).toHaveBeenCalledTimes(1)
   })
 
   it('retries a non-2xx response before returning a later successful response', async () => {

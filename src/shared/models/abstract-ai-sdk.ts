@@ -23,6 +23,7 @@ import {
   wrapLanguageModel,
 } from 'ai'
 import { createRetryable, isErrorAttempt, type RetryContext } from 'ai-retry'
+import { isSub2ApiGatewayUrl } from '../sub2api/url'
 import type {
   MessageContentParts,
   MessageReasoningPart,
@@ -208,6 +209,16 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
     return {}
   }
 
+  /**
+   * A fixed sub2api POST can be processed even when its HTTP response is delayed
+   * or translated to a 5xx by an intermediary. Do not submit it again.
+   */
+  protected allowsStatusRetry(): boolean {
+    const apiHost =
+      'apiHost' in this.options && typeof this.options.apiHost === 'string' ? this.options.apiHost : undefined
+    return !apiHost || !isSub2ApiGatewayUrl(apiHost)
+  }
+
   // Resolves call settings while ensuring reasoning provider options are never sent
   // to a model that does not support reasoning control. Stale options can linger on a
   // session after switching from a reasoning-capable model, so we strip them at the
@@ -279,6 +290,9 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
     const statusQueue = new StatusQueue()
 
     const retryableStatusAttempt = (context: RetryContext<LanguageModelV3>) => {
+      if (!this.allowsStatusRetry()) {
+        return undefined
+      }
       if (isErrorAttempt(context.current)) {
         const { error } = context.current
         if (isRetryableStatusError(error)) {
@@ -826,6 +840,9 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
     const callSettings = this.resolveCallSettings(options)
 
     const retryableStatusAttempt = (context: RetryContext<LanguageModelV3>) => {
+      if (!this.allowsStatusRetry()) {
+        return undefined
+      }
       if (isErrorAttempt(context.current)) {
         const { error } = context.current
         if (isRetryableStatusError(error)) {

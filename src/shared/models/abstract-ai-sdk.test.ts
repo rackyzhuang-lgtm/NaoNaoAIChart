@@ -1,8 +1,8 @@
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import type { Provider } from 'ai'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ModelDependencies } from '../types/adapters'
 import type { SentryScope } from '../utils/sentry_adapter'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AbstractAISDKModel from './abstract-ai-sdk'
 import type { CallChatCompletionOptions } from './types'
 
@@ -28,6 +28,10 @@ const languageModel: LanguageModelV3 = {
 }
 
 class TestModel extends AbstractAISDKModel {
+  public allowsStatusRetryForTests() {
+    return this.allowsStatusRetry()
+  }
+
   protected getProvider(
     _options: CallChatCompletionOptions
   ): Pick<Provider, 'languageModel'> & Partial<Pick<Provider, 'embeddingModel' | 'imageModel'>> {
@@ -64,17 +68,16 @@ function createDependencies(): ModelDependencies {
   }
 }
 
-function createModel(): TestModel {
-  return new TestModel(
-    {
-      model: {
-        modelId: 'test-model',
-        type: 'chat',
-        capabilities: ['tool_use'],
-      },
+function createModel(apiHost?: string): TestModel {
+  const options = {
+    model: {
+      modelId: 'test-model',
+      type: 'chat' as const,
+      capabilities: ['tool_use' as const],
     },
-    createDependencies()
-  )
+    ...(apiHost ? { apiHost } : {}),
+  }
+  return new TestModel(options, createDependencies())
 }
 
 describe('AbstractAISDKModel tool errors', () => {
@@ -160,5 +163,16 @@ describe('AbstractAISDKModel tool errors', () => {
       providerMetadata: callMetadata,
       resultProviderMetadata: errorMetadata,
     })
+  })
+})
+
+describe('AbstractAISDKModel request retry policy', () => {
+  it('disables status retries for the fixed sub2api gateway', () => {
+    expect(createModel('https://naonaoai.shop/v1').allowsStatusRetryForTests()).toBe(false)
+  })
+
+  it('keeps status retries available for other providers', () => {
+    expect(createModel('https://api.openai.com/v1').allowsStatusRetryForTests()).toBe(true)
+    expect(createModel().allowsStatusRetryForTests()).toBe(true)
   })
 })

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { z } from 'zod'
 import {
   SUB2API_ROUTES,
@@ -60,6 +61,7 @@ import {
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
 import { buildSub2ApiGatewayUrl, buildSub2ApiPanelUrl, SUB2API_GATEWAY_BASE_URL } from '../../shared/sub2api/url'
+import { getLogger } from '../util'
 import { Sub2ApiSession } from './session'
 
 type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -79,6 +81,8 @@ interface PanelEnvelope {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000
+const GATEWAY_POST_REPLAY_WINDOW_MS = 20_000
+const log = getLogger('sub2api:gateway')
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -119,6 +123,8 @@ async function readJson(response: Response): Promise<unknown> {
 
 export class Sub2ApiClient {
   #refreshInFlight: { generation: number; promise: Promise<void> } | null = null
+  #gatewayPostsInFlight = new Map<string, Promise<Sub2ApiDirectGatewayResponse>>()
+  #recentGatewayPostResponses = new Map<string, { expiresAt: number; response: Sub2ApiDirectGatewayResponse }>()
   #autoLoginStore: Sub2ApiAutoLoginStore | undefined
   #autoLoginEnabled = false
   #autoLoginRequested = false
@@ -224,22 +230,99 @@ export class Sub2ApiClient {
       const value = request.headers?.[name] || request.headers?.[name.toLowerCase()]
       if (value) headers.set(name, value)
     }
-    const response = await this.fetchImplementation(target, {
-      method: request.method,
-      headers,
-      body: request.method === 'GET' ? undefined : request.body,
-      redirect: 'manual',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
-    if (response.status >= 300 && response.status < 400) {
-      throw new Sub2ApiError('sub2api gateway redirects are not allowed', 'GATEWAY_ERROR', response.status)
+    headers.set('Cache-Control', 'no-cache, no-store, max-age=0')
+
+    if (request.method !== 'POST') {
+      return this.performDirectGatewayRequest(request, target, headers)
     }
-    return {
-      status: response.status,
-      headers: {
-        'content-type': response.headers.get('content-type') || 'application/octet-stream',
-      },
-      body: await response.text(),
+
+    const requestKey = createHash('sha256')
+      .update(request.method)
+      .update('\0')
+      .update(target.toString())
+      .update('\0')
+      .update(headers.get('Authorization') || '')
+      .update('\0')
+      .update(request.body || '')
+      .digest('hex')
+    const fingerprint = requestKey.slice(0, 12)
+    const now = Date.now()
+    for (const [key, entry] of this.#recentGatewayPostResponses) {
+      if (entry.expiresAt <= now) {
+        this.#recentGatewayPostResponses.delete(key)
+      }
+    }
+    const recent = this.#recentGatewayPostResponses.get(requestKey)
+    if (recent && recent.expiresAt > now) {
+      log.debug(`[gateway-post] replay fingerprint=${fingerprint}`)
+      return recent.response
+    }
+    if (recent) {
+      this.#recentGatewayPostResponses.delete(requestKey)
+    }
+
+    const existing = this.#gatewayPostsInFlight.get(requestKey)
+    if (existing) {
+      log.debug(`[gateway-post] coalesce fingerprint=${fingerprint}`)
+      return existing
+    }
+
+    log.debug(`[gateway-post] send fingerprint=${fingerprint}`)
+    const pending = this.performDirectGatewayRequest(request, target, headers)
+    this.#gatewayPostsInFlight.set(requestKey, pending)
+    try {
+      const response = await pending
+      this.#recentGatewayPostResponses.set(requestKey, {
+        expiresAt: Date.now() + GATEWAY_POST_REPLAY_WINDOW_MS,
+        response,
+      })
+      return response
+    } finally {
+      if (this.#gatewayPostsInFlight.get(requestKey) === pending) {
+        this.#gatewayPostsInFlight.delete(requestKey)
+      }
+    }
+  }
+
+  private async performDirectGatewayRequest(
+    request: Sub2ApiDirectGatewayRequest,
+    target: URL,
+    headers: Headers
+  ): Promise<Sub2ApiDirectGatewayResponse> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+    try {
+      const response = await this.fetchImplementation(target, {
+        method: request.method,
+        headers,
+        body: request.method === 'GET' ? undefined : request.body,
+        redirect: 'manual',
+        signal: controller.signal,
+      })
+      // SSE streams can legitimately remain open for longer than the connect timeout.
+      clearTimeout(timeoutId)
+
+      if (response.status >= 300 && response.status < 400) {
+        throw new Sub2ApiError('sub2api gateway redirects are not allowed', 'GATEWAY_ERROR', response.status)
+      }
+      return {
+        status: response.status,
+        headers: {
+          'content-type': response.headers.get('content-type') || 'application/octet-stream',
+        },
+        body: await response.text(),
+      }
+    } catch (error) {
+      if (error instanceof Sub2ApiError) {
+        throw error
+      }
+      if (isTimeoutError(error)) {
+        throw new Sub2ApiError('sub2api gateway connection timed out', 'TIMEOUT_ERROR')
+      }
+      throw new Sub2ApiError('Unable to read sub2api gateway response', 'NETWORK_ERROR')
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

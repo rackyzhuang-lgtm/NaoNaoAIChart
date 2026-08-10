@@ -1,3 +1,12 @@
+# 固定网关聊天请求单次发送修复（2026-08-10）
+
+- 已定位同一聊天请求可能重复发送的两层原因：renderer 请求工具默认允许 5 次重试，模型层还会对 429/5xx 状态自动重新提交。对于已经被服务端处理、但响应在中间链路延迟或失败的请求，这两层重试都会造成重复生成或重复计费风险。
+- 固定 `https://naonaoai.shop/v1/*` 网关的聊天 POST 现在强制单次发送，即使调用方传入重试次数也不会重新调用主进程桥接；模型层也不再对该固定网关的 429/5xx 自动重新提交。
+- 同一会话、同一用户消息 ID 的在途重复提交会直接复用第一次任务，不会在第一次结束后再次发送；不同消息继续由 `withSessionGenerationLock` 串行等待。模型列表等 GET 请求保留既有重试策略。
+- 二次手工验收中，一条 `hi` 仍在 20:52:20 和 20:52:31 触发两次后台请求。现已在主进程最终出网边界增加相同 POST 指纹合并：在途相同请求共用一次 fetch，完成后 20 秒内相同请求复用第一次结果；请求体变化和窗口过期不受影响。日志只记录 SHA-256 指纹前缀，不记录凭证、提示词或响应内容。
+- 验证：最终定向 Vitest 5 个文件、56 个用例通过；Node 22 TypeScript、共享边界检查、变更范围 Biome（仅既有 warning）和 `git diff --check` 均通过。
+- 真实 Electron 窗口使用真实 API Key 的“后台仅收到一次请求”验收尚未执行；本轮未使用、读取或记录任何真实凭证，也未执行打包、推送或发布。
+
 # 品牌知识库整理与归档（2026-08-10）
 
 - 已更新 `docs/BRAND-INVENTORY.md`，将品牌主数据、Logo/图标资产、桌面/Web/移动端/无限画布消费位置、域名与外链、发布远程、Chatbox 遗留内容及系统标识迁移要求集中归档。
@@ -31,6 +40,17 @@
 - 任务记录：`docs/tasks/0043-release-v1.22.7.md`。
 
 # 项目状态
+
+## 测试启动清缓存与聊天模型获取修复（2026-08-10）
+
+- 已定位并修复“用于聊天”后的新会话 Provider 不一致：绑定设置写入 `openai-responses`，但旧代码把新会话写为 `openai`，会绕过刚刚绑定的 sub2api 模型网关。新会话现在使用 `openai-responses` 和绑定返回的首个模型。
+- 测试专用环境变量 `NAONAOAI_CLEAR_CACHES_ON_STARTUP=1` 会在 Electron ready 后清理 Chromium HTTP/cache storage、shader/service worker cache 及 `model-registry-cache-v2`；`pnpm start:clean` 固化这一开发测试启动方式。不清理配置、登录令牌、API Key、IndexedDB 聊天数据、知识库或附件数据。默认关闭，不影响普通启动。
+- 桌面 renderer 到固定 `/v1/*` 网关的 IPC 请求以及主进程转发均强制 `Cache-Control: no-cache, no-store, max-age=0`，避免模型列表从任一缓存层读取旧数据。
+- 验证：定向 Vitest 4 文件、38 用例通过；Node 22 TypeScript 通过；变更范围 Biome 通过；`git diff --check` 通过；生产构建通过（退出码 0，保留既有 chunk 循环依赖、chunk 体积和依赖 `eval` 警告）；带清缓存开关的开发 Electron 启动完成，renderer `http://localhost:1212/` 可用，测试进程已结束。本机已在启动前清理可重建缓存，并复核配置、IndexedDB、数据库仍保留。
+- 全量 `pnpm test`：256 个测试文件、2481 个用例通过，3 个文件/61 个用例跳过，但 Vitest 报告一个 worker 意外退出的未处理错误并以退出码 1 结束，因此不记为通过。
+- 本轮已使用 `pnpm start:clean` 启动本地测试客户端；renderer `http://localhost:1212/` 返回 HTTP 200，客户端保持运行供手工测试。未发起真实模型请求。
+- 追加排查：手工失败日志显示主进程直连网关在 30 秒后中止已建立的 SSE 响应，导致服务端成功但客户端失败。现已将超时收窄到连接/响应头阶段，已建立流式响应允许完整读取；新增延迟 30 秒 SSE 回归测试通过。修复后客户端已重新启动并返回 HTTP 200，等待项目所有者重新发送消息验收。
+- 真实 Electron 窗口点击“用于聊天”后的模型列表和真实 API Key `/v1/models` 请求未执行；未使用或记录真实凭证。
 
 ## 主聊天 Failed to fetch 修复（2026-08-09）
 

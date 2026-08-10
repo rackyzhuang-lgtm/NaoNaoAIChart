@@ -190,7 +190,7 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
         ...initialSession,
         settings: {
           ...initialSession.settings,
-          provider: ModelProviderEnum.OpenAI,
+          provider: ModelProviderEnum.OpenAIResponses,
           ...(firstModelId ? { modelId: firstModelId } : {}),
         },
       })
