@@ -1,3 +1,11 @@
+# GitHub 分支推送（不触发打包，2026-08-10）
+
+- 项目所有者明确要求推送代码但不触发打包。本轮未推送 `main`、未创建或推送 tag、未执行本地打包或 Release。
+- `.github/workflows/desktop-packages.yml` 只监听 `main` 分支和 `v*` tag；为避开该触发条件，代码提交 `a4d9c2ea` 已推送到 GitHub 仓库 `racky77-coder/NaoNaoAIChart` 的 `codex/fix-single-chat-request` 分支。
+- 原跟踪远程 `github`（`rackyzhuang/NaoNaoAIChart`）返回 `Repository not found`；已改用可访问且历史上用于发布的 `github-release` 远程。远程分支 SHA 已通过 `git ls-remote` 核对。
+- GitHub Actions 在线运行列表未能查询：本机未安装 `gh`，匿名 GitHub API 达到共享 IP 限额；是否存在其他仓库级自动化只能以 GitHub 页面为准。根据仓库内当前工作流触发配置，本次普通功能分支 push 不匹配桌面打包条件。
+- 推送前验证：定向 Vitest 5 个文件、56 个用例通过；Node 22 TypeScript、共享边界检查、变更范围 Biome（仅既有 warning）、`git diff --check` 和待提交秘密模式扫描通过。
+
 # 固定网关聊天请求单次发送修复（2026-08-10）
 
 - 已定位同一聊天请求可能重复发送的两层原因：renderer 请求工具默认允许 5 次重试，模型层还会对 429/5xx 状态自动重新提交。对于已经被服务端处理、但响应在中间链路延迟或失败的请求，这两层重试都会造成重复生成或重复计费风险。
