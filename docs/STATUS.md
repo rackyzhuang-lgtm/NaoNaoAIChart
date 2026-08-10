@@ -1,4 +1,13 @@
-# 品牌资产与标识盘点（2026-08-09）
+# 品牌知识库整理与归档（2026-08-10）
+
+- 已更新 `docs/BRAND-INVENTORY.md`，将品牌主数据、Logo/图标资产、桌面/Web/移动端/无限画布消费位置、域名与外链、发布远程、Chatbox 遗留内容及系统标识迁移要求集中归档。
+- 本轮特别补充了根包、发布包和发布锁文件中仍保留的上游作者、支持邮箱、主页和旧包名元数据，并将其标记为“用户可见或发布元数据待处理”，避免把 NaoNaoAI UI 品牌验收误认为发布包元数据也已完成替换。
+- 当前品牌事实分层为：`NaoNaoAI Chat`（产品）、`NaoNaoAI Account`（账户）、`NaoNaoAI Agent`/`NaoNaoAI Canvas Agent`（无限画布 Agent）；`https://naonaoai.shop` 是固定模型/账户服务地址，`https://pay.ldxp.cn/shop/naonaoai` 是兑换码购买页，`https://eazyai.shop` 是 Canvas 第二可信服务源。
+- 已明确 `xyz.chatboxapp.app`、`chatbox://`、`chatbox-dev://`、`chatbox:*` 本地键和 npm 包名属于安装/升级/数据兼容标识，不能按普通品牌文案直接替换；相关变更必须另立 ADR。
+- 任务记录：`docs/tasks/0052-brand-knowledge-base.md`。
+- 验证：品牌关键位置 `rg` 已执行；主 Logo 两份 PNG 的 SHA-256 一致；本轮 TypeScript、lint、单元测试、构建、打包和桌面 E2E 未执行，因为只更新 Markdown 知识库。
+
+## 历史品牌资产盘点（2026-08-09）
 
 - 已新增 `docs/BRAND-INVENTORY.md`，作为后续统一重品牌的基线，覆盖用户可见名称、Logo/图标资源、业务域名与外链、Chatbox 历史内容、应用 ID、深度链接协议和本地持久化键。
 - 本轮明确区分普通显示文案与运行时标识：`naonaoai.shop` 是模型/面板网关及 Canvas allowlist，`xyz.chatboxapp.app`、`chatbox://` 和 `chatbox:*` 本地键会影响安装升级、协议链接和用户数据，均不能作为普通文本批量替换。
