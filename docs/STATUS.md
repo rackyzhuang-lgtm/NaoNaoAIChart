@@ -770,6 +770,6 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 
 - GitHub Actions 的 Windows/macOS 任务均在测试阶段失败，根因是 `Sub2ApiUsageSummary.test.tsx` 仍断言已移除的订阅摘要请求、`Pro plan` 和订阅失败提示；未进入桌面打包步骤。
 - 已将测试更新为当前无订阅摘要的账户用量契约；定向 Vitest 结果为 1 个文件、2 项测试通过。首次带有 Jest 参数的命令失败属于命令参数错误，随后使用 Vitest 支持的单 worker 参数重跑通过。
-- `release/app/package.json` 版本已更新为 `1.22.12`，准备创建 `v1.22.12` 标签重新触发远程 Release；不移动已有 `v1.22.11` 标签。
+- `release/app/package.json` 版本已更新为 `1.22.12`；修复提交 `db8efdcf` 已推送到 `main`，`v1.22.12` 标签已推送并重新触发远程 Release；未移动已有 `v1.22.11` 标签。
 - 未执行本地生产构建、安装包打包或完整测试；源目录 `D:\project\EazyAI-Chat` 未修改。
 - 任务记录：`docs/tasks/0060-fix-stale-usage-summary-tests.md`、`docs/tasks/0061-release-v1.22.12-after-test-fix.md`。
