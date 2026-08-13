@@ -95,6 +95,9 @@ function visitSessionMessages(session: Session, callback: (message: Message) => 
       for (const message of list.messages) callback(message)
     }
   }
+  for (const scope of Object.values(session.followUpState?.scopes ?? {})) {
+    for (const item of scope.items) callback(item.userMessage)
+  }
 }
 
 export function collectSessionResourceReferences(session: Session): {

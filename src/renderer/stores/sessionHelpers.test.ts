@@ -1,3 +1,4 @@
+import type { Message } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -8,6 +9,7 @@ const {
   sessionRagCapabilityState,
   parserState,
   defaultEmbeddingModelState,
+  followUpBehaviorState,
   mockParseFileLocally,
   mockGetSessionRagConfig,
   mockUploadAndCreateUserFile,
@@ -15,6 +17,7 @@ const {
   mockGetBlob,
   mockSetItem,
   mockGetItem,
+  mockGetMetaStorage,
 } = vi.hoisted(() => {
   const blobs = new Map<string, string>()
   const license = { key: 'licensed-key' as string | undefined }
@@ -25,6 +28,7 @@ const {
   const defaultEmbeddingModel = {
     value: undefined as { provider: string; model: string } | undefined,
   }
+  const followUpBehavior = { value: undefined as 'queue' | 'steer' | undefined }
 
   return {
     blobStore: blobs,
@@ -34,6 +38,7 @@ const {
     sessionRagCapabilityState: sessionRagCapability,
     parserState: parser,
     defaultEmbeddingModelState: defaultEmbeddingModel,
+    followUpBehaviorState: followUpBehavior,
     mockParseFileLocally: vi.fn(),
     mockGetSessionRagConfig: vi.fn(async () => ({
       models: { embedding: 'chatbox-ai:text-embedding-3-small', rerank: 'chatbox-ai:rerank' },
@@ -49,6 +54,7 @@ const {
     mockGetBlob: vi.fn(async (key: string) => blobs.get(key) ?? null),
     mockSetItem: vi.fn(async () => undefined),
     mockGetItem: vi.fn(async <T>(_key: string, initialValue: T) => initialValue),
+    mockGetMetaStorage: vi.fn(),
   }
 })
 
@@ -96,6 +102,13 @@ vi.mock('./settingsStore', () => ({
       extension: {
         documentParser: { type: parserState.type },
       },
+      getSettings: () => ({
+        defaultChatModel: undefined,
+        maxContextMessageCount: undefined,
+        temperature: undefined,
+        topP: undefined,
+        followUpBehavior: followUpBehaviorState.value,
+      }),
     }),
   },
   getPlatformDefaultDocumentParser: () => ({ type: 'local' }),
@@ -129,22 +142,54 @@ vi.mock('@/lib/format-chat', () => ({
   formatChatAsTxt: vi.fn(),
 }))
 
+vi.mock('@shared/services/native-session-search', () => ({
+  searchSessionMessages: (session: { messages?: unknown[] }) => session.messages ?? [],
+}))
+
 vi.mock('@/i18n', () => ({
   default: {},
 }))
 
 vi.mock('@/stores/chatStore', () => ({
-  getMetaStorage: vi.fn(),
+  getMetaStorage: mockGetMetaStorage,
 }))
 
 import {
+  getCurrentThreadHistoryHash,
+  initEmptyChatSession,
   isSessionAttachmentRagAuthError,
   isSessionAttachmentRagIndexingError,
   prepareFileAttachment,
   SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING,
   SESSION_ATTACHMENT_RAG_MAX_PARSED_BYTE_LENGTH,
   SESSION_ATTACHMENT_RAG_REQUIRES_CHATBOX_AI_ERROR,
+  searchSessions,
 } from './sessionHelpers'
+
+describe('new chat follow-up defaults', () => {
+  it('persists the selected global follow-up behavior into the new session snapshot', () => {
+    followUpBehaviorState.value = 'steer'
+    expect(initEmptyChatSession().settings?.followUpBehavior).toBe('steer')
+
+    followUpBehaviorState.value = undefined
+    expect(initEmptyChatSession().settings?.followUpBehavior).toBe('queue')
+  })
+})
+
+describe('thread follow-up identity', () => {
+  it('uses the stable active thread id in the thread history UI', () => {
+    const firstMessage = { id: 'message-1', role: 'user', contentParts: [] } as Message
+    const history = getCurrentThreadHistoryHash({
+      id: 'session-1',
+      name: 'Test',
+      activeThreadId: 'active-thread-1',
+      messages: [firstMessage],
+      threads: [],
+    })
+
+    expect(history[firstMessage.id]?.id).toBe('active-thread-1')
+  })
+})
 
 function createFile(name: string, content = 'binary-content'): File {
   const file = new File([content], name, { type: 'application/pdf', lastModified: 1700000000000 })
@@ -457,5 +502,66 @@ describe('preprocessFile local parser fallback', () => {
     expect(result.rawStorageKey).toBe(rawStorageKey)
     expect(result.parserType).toBe('sandbox-raw')
     expect(blobStore.get(rawStorageKey)).toMatch(/^data:application\/pdf;base64,/)
+  })
+})
+
+describe('searchSessions archived chat filtering', () => {
+  const sessions = {
+    active: {
+      id: 'active',
+      name: 'Active chat',
+      type: 'chat',
+      createdAt: 1,
+      messages: [{ id: 'active-message', role: 'user', content: 'needle' }],
+      settings: {},
+    },
+    archived: {
+      id: 'archived',
+      name: 'Archived chat',
+      type: 'chat',
+      createdAt: 2,
+      hidden: true,
+      archivedAt: 3,
+      messages: [{ id: 'archived-message', role: 'user', content: 'needle' }],
+      settings: {},
+    },
+  }
+
+  const getPage = vi.fn(async () => ({ items: [{ id: 'active' }], nextCursor: null, total: 1 }))
+  const getArchivedPage = vi.fn(async () => ({
+    items: [{ id: 'active' }, { id: 'archived' }],
+    nextCursor: null,
+    total: 2,
+  }))
+
+  beforeEach(() => {
+    getPage.mockClear()
+    getArchivedPage.mockClear()
+    mockGetMetaStorage.mockResolvedValue({ getPage, getArchivedPage })
+    mockGetItem.mockImplementation(<T>(key: string, initialValue: T) => {
+      if (key.endsWith('active')) return Promise.resolve(sessions.active as T)
+      if (key.endsWith('archived')) return Promise.resolve(sessions.archived as T)
+      return Promise.resolve(initialValue)
+    })
+  })
+
+  it('keeps global search active-only by default', async () => {
+    const results: string[] = []
+
+    await searchSessions('needle', undefined, (batch) => results.push(...batch.map((session) => session.id)))
+
+    expect(results).toEqual(['active'])
+    expect(getArchivedPage).not.toHaveBeenCalled()
+  })
+
+  it('includes archived chats without emitting duplicate sessions', async () => {
+    const results: string[] = []
+
+    await searchSessions('needle', undefined, (batch) => results.push(...batch.map((session) => session.id)), {
+      includeArchived: true,
+    })
+
+    expect(results).toEqual(['active', 'archived'])
+    expect(getArchivedPage).toHaveBeenCalledTimes(1)
   })
 })

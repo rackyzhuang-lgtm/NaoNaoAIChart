@@ -1,3 +1,4 @@
+import type { AgentApprovalPolicy } from '@shared/agent-approval-policy'
 import type { AgentModeEntry, KnowledgeBase, MessagePicture, Toast } from '@shared/types'
 import type { RefObject } from 'react'
 import type { VirtuosoHandle } from 'react-virtuoso'
@@ -44,6 +45,7 @@ export const uiStore = createStore(
           // created session's settings on first submit (see routes/index.tsx).
           workingDirectories?: string[]
           agentFullAccess?: boolean
+          agentApprovalPolicy?: AgentApprovalPolicy
         },
         pictureShow: null as {
           picture: MessagePicture
@@ -181,7 +183,7 @@ export const uiStore = createStore(
           const currentValue =
             currentWebBrowsingDisplay.sessionId === sessionId
               ? currentWebBrowsingDisplay.value
-              : (get().sessionWebBrowsingMap[sessionId] ?? false)
+              : (get().sessionWebBrowsingMap[sessionId] ?? sessionId === 'new')
           const newValue = !currentValue
           set((state) => ({
             sessionWebBrowsingMap: {

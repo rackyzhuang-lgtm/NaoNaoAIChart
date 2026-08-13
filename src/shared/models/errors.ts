@@ -13,10 +13,20 @@ export class ApiError extends BaseError {
   public code = 10001
   public responseBody: string | undefined
   public statusCode: number | undefined
-  constructor(message: string, responseBody?: string, statusCode?: number, requestId?: string) {
-    super('API Error: ' + message, { requestId })
+  /** Safe response metadata retained for callers that need protocol hints such as Retry-After. */
+  public responseHeaders: Record<string, string> | undefined
+  constructor(
+    message: string,
+    responseBody?: string,
+    statusCode?: number,
+    requestId?: string,
+    responseHeaders?: Record<string, string>
+  ) {
+    super(`API Error: ${message}`, { requestId })
     this.responseBody = responseBody
     this.statusCode = statusCode
+    const retryAfter = responseHeaders?.['retry-after'] ?? responseHeaders?.['Retry-After']
+    this.responseHeaders = retryAfter ? { 'retry-after': retryAfter } : undefined
   }
 }
 

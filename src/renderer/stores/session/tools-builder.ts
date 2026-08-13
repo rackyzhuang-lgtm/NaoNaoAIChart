@@ -1,3 +1,4 @@
+import { isFullAccessPolicy, resolveAgentApprovalPolicy } from '@shared/agent-approval-policy'
 import type { ModelInterface } from '@shared/models/types'
 import type { SandboxProvider } from '@shared/sandbox-provider'
 import type { KnowledgeBase, Message, SessionSettings } from '@shared/types'
@@ -5,6 +6,7 @@ import type { UserExecApprovalSource } from '@shared/types/user-exec'
 import { getMessageText } from '@shared/utils/message'
 import { jsonSchema, type ToolSet } from 'ai'
 import { trackAgentModeFullAccessBypass } from '@/analytics/agent-mode'
+import { requestAppActionApproval } from '@/packages/app-action-approval'
 import { mcpController } from '@/packages/mcp/controller'
 import { generateCommandExplanation } from '@/packages/model-calls/command-explanation'
 import { buildChatboxCliToolSet } from '@/packages/model-calls/toolsets/chatbox-cli'
@@ -66,6 +68,26 @@ export interface BuildToolsResult {
   instructions: string
 }
 
+function withInternetApproval(toolValue: ToolSet[string], action: string, title: string): ToolSet[string] {
+  if (!toolValue.execute) return toolValue
+  const execute = toolValue.execute
+  return {
+    ...toolValue,
+    execute: async (input, toolOptions) => {
+      const approved = (toolOptions as typeof toolOptions & { approved?: boolean }).approved
+      if (!approved) {
+        await requestAppActionApproval(
+          toolOptions.toolCallId,
+          action,
+          title,
+          JSON.stringify(input, null, 2).slice(0, 4000)
+        )
+      }
+      return await execute(input, toolOptions)
+    },
+  }
+}
+
 /**
  * Tell the model where its sandbox working directory is and how to address files there.
  * Without this, models default to phantom home paths like /home/user (a training-prior
@@ -111,7 +133,7 @@ When you are about to call one or more tools, first include one short visible se
 
 function buildSkillToolsInstruction(
   enabledSkills: Array<{ name: string; description: string }>,
-  agentFullAccess: boolean,
+  approvalPolicy: 'ask' | 'risk' | 'full',
   userExecWorkingDirectory?: string
 ): string {
   let instruction = `
@@ -141,7 +163,7 @@ Prefer code_execution (sandbox) for file processing, data analysis, downloading 
 Unless Full Access is enabled, every command is still subject to the host approval policy and may pause for user confirmation.
 On Windows, user_exec runs PowerShell commands; on macOS/Linux, it runs Bash commands. Write PowerShell syntax directly on Windows, and use newlines or semicolons instead of Bash-only operators such as && so the command also works with Windows PowerShell 5.1. Do not invoke PowerShell from Bash or paste a Windows path into Bash.
 ${userExecWorkingDirectory ? `user_exec already starts in the first user-granted working directory: ${userExecWorkingDirectory.replace(/\\/g, '/')}. Use relative paths there and do not prepend cd or Set-Location.\n` : 'Without a user-granted working directory, user_exec starts in the user home directory.\n'}
-${agentFullAccess ? 'Full Access is enabled, so user_exec commands run without per-command approval.\n' : ''}
+${approvalPolicy === 'full' ? 'Full Access is enabled, so user_exec commands run without per-command approval.\n' : ''}
 
 ### Installing Skills
 You can install skills from any source:
@@ -297,11 +319,18 @@ In long conversations, earlier tool call results may be automatically compressed
 
   // Web search: works independently of agent mode
   if (webBrowsing && webSupported) {
-    tools.web_search = webSearchTool
+    const approvalPolicy = resolveAgentApprovalPolicy(options.sessionSettings)
+    tools.web_search =
+      approvalPolicy === 'ask'
+        ? withInternetApproval(webSearchTool, 'internet.web_search', 'Approval required before using the internet.')
+        : webSearchTool
     // Inject parse_link based on the selected provider's declared capability.
     // Validation (Pro for build-in, API key for third parties) happens at execution time.
     if (includeParseLinkTool) {
-      tools.parse_link = parseLinkTool
+      tools.parse_link =
+        approvalPolicy === 'ask'
+          ? withInternetApproval(parseLinkTool, 'internet.parse_link', 'Approval required before using the internet.')
+          : parseLinkTool
     }
   }
 
@@ -326,7 +355,7 @@ In long conversations, earlier tool call results may be automatically compressed
       sessionId: codeExecution?.sessionId,
       provider: codeExecution?.provider,
       userWorkingDirectories: options.sessionSettings?.workingDirectories?.filter((dir) => dir.trim().length > 0),
-      fullAccess: options.sessionSettings?.agentFullAccess === true,
+      fullAccess: isFullAccessPolicy(options.sessionSettings),
     })
     instructions += filesystemToolSet.description
     tools = { ...tools, ...filesystemToolSet.tools }
@@ -340,7 +369,7 @@ In long conversations, earlier tool call results may be automatically compressed
     const userExecWorkingDirectory = options.sessionSettings?.workingDirectories?.find((dir) => dir.trim().length > 0)
     instructions += buildSkillToolsInstruction(
       enabledSkills,
-      options.sessionSettings?.agentFullAccess === true,
+      resolveAgentApprovalPolicy(options.sessionSettings),
       userExecWorkingDirectory
     )
     tools.load_skill = buildLoadSkillTool(options)
@@ -483,7 +512,8 @@ function buildInstallSkillTool(options: BuildToolsOptions): ToolSet[string] {
 }
 
 function buildUserExecTool(options: BuildToolsOptions): ToolSet[string] {
-  const agentFullAccess = options.sessionSettings?.agentFullAccess === true
+  const approvalPolicy = resolveAgentApprovalPolicy(options.sessionSettings)
+  const agentFullAccess = isFullAccessPolicy(options.sessionSettings)
   const userExecWorkingDirectory = options.sessionSettings?.workingDirectories?.find((dir) => dir.trim().length > 0)
   type UserExecResult = { success: boolean; exitCode: number | null; stdout: string; stderr: string }
   const executionCache = new Map<string, { command: string; promise: Promise<UserExecResult> }>()
@@ -546,7 +576,8 @@ function buildUserExecTool(options: BuildToolsOptions): ToolSet[string] {
             toolOptions.toolCallId,
             execInput.command,
             explanationCtx,
-            toolOptions.abortSignal
+            toolOptions.abortSignal,
+            approvalPolicy
           )
         }
 

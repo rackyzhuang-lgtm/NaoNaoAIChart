@@ -3,7 +3,6 @@ import type { AgentModeValue, KnowledgeBase } from '@shared/types'
 import {
   IconCheck,
   IconChevronRight,
-  IconCode,
   IconFile,
   IconFolderCog,
   IconHammer,
@@ -17,12 +16,7 @@ import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { type FC, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  trackAgentModeSelect,
-  trackCodeExecutionClick,
-  trackSmartSwitchingClick,
-  trackWebSearchClick,
-} from '@/analytics/agent-mode'
+import { trackAgentModeSelect, trackSmartSwitchingClick, trackWebSearchClick } from '@/analytics/agent-mode'
 import { useKnowledgeBases } from '@/hooks/knowledge-base'
 import { useMCPServerStatus, useToggleMCPServer } from '@/hooks/mcp'
 import { navigateToSettings } from '@/modals/Settings'
@@ -40,7 +34,7 @@ import { ScalableIcon } from '../common/ScalableIcon'
 import MCPStatus from '../mcp/MCPStatus'
 import { getAgentModeUIState } from './agentModeState'
 
-type PanelPage = 'main' | 'web-search' | 'code-execution' | 'skills' | 'mcp' | 'knowledge-base' | 'working-directory'
+type PanelPage = 'main' | 'web-search' | 'skills' | 'mcp' | 'knowledge-base' | 'working-directory'
 
 // The working-directory feature needs the desktop filesystem and directory picker. Windows
 // uses the native execution backend; bound directory writes are validated in the main process.
@@ -201,12 +195,7 @@ interface SubPanelHeaderProps {
   onSettingsNavigate: (settingsPath: string) => void
 }
 
-const SubPanelHeader: FC<SubPanelHeaderProps> = ({
-  title,
-  settingsPath,
-  disabled = false,
-  onSettingsNavigate,
-}) => (
+const SubPanelHeader: FC<SubPanelHeaderProps> = ({ title, settingsPath, disabled = false, onSettingsNavigate }) => (
   <Flex justify="space-between" align="center" px="sm" py="xs">
     <Text fw={600} size="sm">
       {title}
@@ -364,9 +353,6 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
     () => (isNewSession ? (newSessionState.workingDirectories ?? []) : (sessionSettings.workingDirectories ?? [])),
     [isNewSession, newSessionState.workingDirectories, sessionSettings]
   )
-  const agentFullAccess = isNewSession
-    ? (newSessionState.agentFullAccess ?? false)
-    : (sessionSettings.agentFullAccess ?? false)
 
   const updateWorkingDirectories = useCallback(
     async (next: string[]) => {
@@ -401,37 +387,6 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
       await updateWorkingDirectories(workingDirectories.filter((item) => item !== dir))
     },
     [workingDirectories, updateWorkingDirectories]
-  )
-
-  const updateAgentFullAccess = useCallback(
-    async (enabled: boolean) => {
-      if (enabled === agentFullAccess) return
-      trackCodeExecutionClick(
-        {
-          sessionId,
-          mode: 'work_mode',
-          provider: providerId,
-          model: modelId,
-        },
-        enabled ? 'full_access' : 'approval'
-      )
-      const value = enabled || undefined
-      if (isNewSession) {
-        setNewSessionState((prev) => ({ ...prev, agentFullAccess: value }))
-        return
-      }
-      try {
-        await chatStore.updateSession(sessionId, (session) => {
-          if (!session) {
-            throw new Error('Session not found')
-          }
-          return { ...session, settings: { ...session.settings, agentFullAccess: value } }
-        })
-      } catch (err) {
-        console.error('Failed to update agent full access:', err)
-      }
-    },
-    [agentFullAccess, isNewSession, modelId, providerId, sessionId, setNewSessionState]
   )
 
   const selectedKB = useMemo(
@@ -613,71 +568,6 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
               </Tooltip>
             )
           })}
-        </>
-      )
-    }
-
-    if (page === 'code-execution') {
-      return (
-        <>
-          <SubPanelHeader
-            title={t('Code Execution')}
-            disabled={capabilitiesDisabled}
-            onSettingsNavigate={handleSettingsNavigation}
-          />
-          <Divider my={4} />
-          <Flex
-            justify="space-between"
-            align="center"
-            px="sm"
-            py={6}
-            gap="sm"
-            className={`rounded ${
-              capabilitiesDisabled
-                ? 'cursor-default opacity-50'
-                : 'cursor-pointer hover:bg-[var(--mantine-color-gray-0)] dark:hover:bg-[var(--mantine-color-dark-5)]'
-            }`}
-            onClick={() => {
-              if (capabilitiesDisabled) return
-              void updateAgentFullAccess(false)
-            }}
-          >
-            <Stack gap={0} className="min-w-0">
-              <Text size="sm" c={!agentFullAccess ? 'chatbox-brand' : undefined}>
-                {t('Approve')}
-              </Text>
-              <Text size="xs" c="chatbox-secondary" className="leading-snug">
-                {t('Ask before running commands or changing files.')}
-              </Text>
-            </Stack>
-            {!agentFullAccess && <IconCheck size={14} className="text-[var(--chatbox-tint-brand)] shrink-0" />}
-          </Flex>
-          <Flex
-            justify="space-between"
-            align="center"
-            px="sm"
-            py={6}
-            gap="sm"
-            className={`rounded ${
-              capabilitiesDisabled
-                ? 'cursor-default opacity-50'
-                : 'cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30'
-            }`}
-            onClick={() => {
-              if (capabilitiesDisabled) return
-              void updateAgentFullAccess(true)
-            }}
-          >
-            <Stack gap={0} className="min-w-0">
-              <Text size="sm" c="red" fw={500}>
-                {t('Full Access')}
-              </Text>
-              <Text size="xs" c="red" className="leading-snug">
-                {t('Skip approval prompts for commands and file changes.')}
-              </Text>
-            </Stack>
-            {agentFullAccess && <IconCheck size={14} className="text-red-600 shrink-0" />}
-          </Flex>
         </>
       )
     }
@@ -956,7 +846,9 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
               label={t('Chat Mode')}
               isActive={agentModeUIState.displayValue === 'off'}
               isDisabled={entry.locked}
-              tooltipLabel={t('Locked after the chat starts to keep tools and context consistent — start a new chat to change')}
+              tooltipLabel={t(
+                'Locked after the chat starts to keep tools and context consistent — start a new chat to change'
+              )}
               onModeSelect={handleModeChange}
             />
             <ModeButton
@@ -1036,30 +928,6 @@ const AgentModePanel: FC<AgentModePanelProps> = ({
                     onWebBrowsingChange(enabled)
                   }}
                 />
-                <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)]" />
-              </Flex>
-            }
-          />
-
-          <ExtensionRow
-            {...extensionRowHandlers}
-            icon={<IconCode size={16} className="text-[var(--chatbox-tint-secondary)]" />}
-            label={t('Code Execution')}
-            active={page === 'code-execution'}
-            page="code-execution"
-            disabled={capabilitiesDisabled}
-            subPanelAlign="top"
-            rightContent={
-              <Flex gap="xs" align="center" className="shrink-0">
-                {agentFullAccess ? (
-                  <Badge size="xs" variant="light" color="red">
-                    {t('Full Access')}
-                  </Badge>
-                ) : (
-                  <Badge size="xs" variant="light">
-                    {t('Approve')}
-                  </Badge>
-                )}
                 <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)]" />
               </Flex>
             }

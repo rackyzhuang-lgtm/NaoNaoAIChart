@@ -1,12 +1,13 @@
 import { clipboard, ipcMain } from 'electron'
 import {
+  type Sub2ApiDirectGatewayStreamEvent,
   sub2ApiAnnouncementIdSchema,
   sub2ApiApiKeyCreateRequestSchema,
   sub2ApiApiKeyIdSchema,
   sub2ApiApiKeySummarySchema,
   sub2ApiApiKeyUpdateRequestSchema,
-  sub2ApiDirectGatewayRequestSchema,
-  sub2ApiInfiniteCanvasCapabilitySchema,
+  sub2ApiDirectGatewayRequestIdSchema,
+  sub2ApiDirectGatewayStreamStartSchema,
   sub2ApiLoginRequestSchema,
   sub2ApiRedeemCodeRequestSchema,
   sub2ApiRedeemHistorySummarySchema,
@@ -15,14 +16,36 @@ import {
   sub2ApiTotpCodeSchema,
 } from '../../shared/sub2api/contracts'
 import { Sub2ApiError, serializeSub2ApiError } from '../../shared/sub2api/errors'
-import { SUB2API_IPC_CHANNELS } from '../../shared/sub2api/ipc'
+import { SUB2API_IPC_CHANNELS, SUB2API_IPC_EVENTS } from '../../shared/sub2api/ipc'
+import { getLogger } from '../util'
 import { type Sub2ApiClient, sub2ApiClient } from './client'
 
 type IpcMainHandler = Parameters<typeof ipcMain.handle>[1]
 type IpcSenderGuard = (event: Electron.IpcMainInvokeEvent) => boolean
 
+const log = getLogger('sub2api:ipc')
+
+function logGatewayStreamError(requestId: string, error: Sub2ApiError): void {
+  log.warn(`[gateway-stream] error requestId=${requestId} code=${String(error.code)} status=${error.status ?? 'none'}`)
+}
+
 interface IpcMainRegistrar {
   handle(channel: string, listener: IpcMainHandler): void
+}
+
+type NavigationEvent = Electron.Event & {
+  isMainFrame?: boolean
+  isSameDocument?: boolean
+}
+
+function shouldCancelForNavigation(
+  navigationEvent: NavigationEvent,
+  legacyIsInPlace: boolean,
+  legacyIsMainFrame: boolean
+): boolean {
+  const isMainFrame = navigationEvent.isMainFrame ?? legacyIsMainFrame
+  const isSameDocument = navigationEvent.isSameDocument ?? legacyIsInPlace
+  return isMainFrame && !isSameDocument
 }
 
 function toApiKeySummary(apiKey: Awaited<ReturnType<Sub2ApiClient['listApiKeys']>>['items'][number]) {
@@ -54,6 +77,8 @@ export function registerSub2ApiHandlers(
   registrar: IpcMainRegistrar = ipcMain,
   isTrustedSender: IpcSenderGuard = () => false
 ): void {
+  const directGatewayOwners = new Map<string, number>()
+
   const requireTrustedSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (!isTrustedSender(event)) {
       throw new Error('Sub2api IPC request rejected from an untrusted renderer')
@@ -89,9 +114,76 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.sendRegistrationCode(sub2ApiSendRegistrationCodeRequestSchema.parse(request))
   })
-  registerHandler(SUB2API_IPC_CHANNELS.directGatewayRequest, (event, request) => {
+  registerHandler(SUB2API_IPC_CHANNELS.startDirectGatewayStream, (event, input) => {
     requireTrustedSender(event)
-    return client.directGatewayRequest(sub2ApiDirectGatewayRequestSchema.parse(request))
+    const { requestId, request } = sub2ApiDirectGatewayStreamStartSchema.parse(input)
+    const sender = event.sender
+    const existingOwner = directGatewayOwners.get(requestId)
+    if (existingOwner !== undefined && existingOwner !== sender.id) {
+      throw new Sub2ApiError('sub2api gateway request ID belongs to another renderer', 'REQUEST_ID_CONFLICT')
+    }
+    directGatewayOwners.set(requestId, sender.id)
+
+    const emit = (streamEvent: Sub2ApiDirectGatewayStreamEvent) => {
+      try {
+        if (!sender.isDestroyed()) {
+          sender.send(SUB2API_IPC_EVENTS.directGatewayStream, streamEvent)
+        }
+      } catch {
+        // The renderer may close between isDestroyed() and send().
+      }
+    }
+
+    const cancelForRendererExit = () => client.cancelDirectGatewayRequest(requestId)
+    const cancelForMainFrameNavigation = (
+      navigationEvent: NavigationEvent,
+      _url: string,
+      isInPlace: boolean,
+      isMainFrame: boolean
+    ) => {
+      if (shouldCancelForNavigation(navigationEvent, isInPlace, isMainFrame)) {
+        cancelForRendererExit()
+      }
+    }
+    const cleanupRendererLifecycle = () => {
+      sender.removeListener('destroyed', cancelForRendererExit)
+      sender.removeListener('render-process-gone', cancelForRendererExit)
+      sender.removeListener('did-start-navigation', cancelForMainFrameNavigation)
+      if (directGatewayOwners.get(requestId) === sender.id) {
+        directGatewayOwners.delete(requestId)
+      }
+    }
+    sender.once('destroyed', cancelForRendererExit)
+    sender.once('render-process-gone', cancelForRendererExit)
+    sender.on('did-start-navigation', cancelForMainFrameNavigation)
+
+    let streamPromise: Promise<void>
+    try {
+      streamPromise = client.streamDirectGatewayRequest(requestId, request, emit)
+    } catch (error) {
+      cleanupRendererLifecycle()
+      throw error
+    }
+
+    void streamPromise
+      .catch((error: unknown) => {
+        const safeError =
+          error instanceof Sub2ApiError
+            ? error
+            : new Sub2ApiError('Unable to complete sub2api gateway request', 'GATEWAY_ERROR')
+        logGatewayStreamError(requestId, safeError)
+        emit({ requestId, type: 'error', error: serializeSub2ApiError(safeError) })
+      })
+      .finally(cleanupRendererLifecycle)
+    return { requestId }
+  })
+  registerHandler(SUB2API_IPC_CHANNELS.cancelDirectGatewayStream, (event, requestId) => {
+    requireTrustedSender(event)
+    const parsedRequestId = sub2ApiDirectGatewayRequestIdSchema.parse(requestId)
+    if (directGatewayOwners.get(parsedRequestId) !== event.sender.id) {
+      throw new Sub2ApiError('sub2api gateway request belongs to another renderer', 'REQUEST_ID_CONFLICT')
+    }
+    client.cancelDirectGatewayRequest(parsedRequestId)
   })
   registerHandler(SUB2API_IPC_CHANNELS.completeTwoFactor, (event, code) => {
     requireTrustedSender(event)
@@ -183,11 +275,8 @@ export function registerSub2ApiHandlers(
     requireTrustedSender(event)
     return client.prepareProviderBinding(sub2ApiApiKeyIdSchema.parse(id))
   })
-  registerHandler(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, (event, id, capability) => {
+  registerHandler(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, (event, id) => {
     requireTrustedSender(event)
-    return client.prepareInfiniteCanvasImport(
-      sub2ApiApiKeyIdSchema.parse(id),
-      sub2ApiInfiniteCanvasCapabilitySchema.parse(capability)
-    )
+    return client.prepareInfiniteCanvasImport(sub2ApiApiKeyIdSchema.parse(id))
   })
 }

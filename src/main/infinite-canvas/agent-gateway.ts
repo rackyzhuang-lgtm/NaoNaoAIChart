@@ -1,7 +1,8 @@
 import crypto from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type OpenAIStreamToolCall, readOpenAIResponsesStream } from './openai-stream'
-import { isAllowedInfiniteCanvasTargetOrigin } from './policy'
+
+const ALLOWED_AGENT_API_ORIGINS = new Set(['https://naonaoai.shop', 'https://eazyai.shop'])
 
 const PROTOCOL_VERSION = 6
 const TURN_TIMEOUT_MS = 90_000
@@ -469,7 +470,7 @@ function validateOpenAIBaseUrl(value: string) {
   const url = new URL(value.trim())
   if (
     url.protocol !== 'https:' ||
-    !isAllowedInfiniteCanvasTargetOrigin(url.origin) ||
+    !ALLOWED_AGENT_API_ORIGINS.has(url.origin) ||
     url.username ||
     url.password ||
     url.hash

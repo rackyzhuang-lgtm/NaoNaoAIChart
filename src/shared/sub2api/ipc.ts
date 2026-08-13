@@ -7,8 +7,8 @@ import type {
   Sub2ApiAvailableGroup,
   Sub2ApiChannelMonitorResponse,
   Sub2ApiDirectGatewayRequest,
-  Sub2ApiDirectGatewayResponse,
-  Sub2ApiInfiniteCanvasCapability,
+  Sub2ApiDirectGatewayStreamAck,
+  Sub2ApiDirectGatewayStreamEvent,
   Sub2ApiInfiniteCanvasImport,
   Sub2ApiLoginRequest,
   Sub2ApiLoginResult,
@@ -54,7 +54,12 @@ export const SUB2API_IPC_CHANNELS = {
   copyApiKey: 'sub2api:copy-api-key',
   prepareProviderBinding: 'sub2api:prepare-provider-binding',
   prepareInfiniteCanvasImport: 'sub2api:prepare-infinite-canvas-import',
-  directGatewayRequest: 'sub2api:direct-gateway-request',
+  startDirectGatewayStream: 'sub2api:direct-gateway-stream-start',
+  cancelDirectGatewayStream: 'sub2api:direct-gateway-stream-cancel',
+} as const
+
+export const SUB2API_IPC_EVENTS = {
+  directGatewayStream: 'sub2api:direct-gateway-stream-event',
 } as const
 
 export interface Sub2ApiRendererApi {
@@ -82,9 +87,12 @@ export interface Sub2ApiRendererApi {
   deleteApiKey(id: number): Promise<void>
   copyApiKey(id: number): Promise<void>
   prepareProviderBinding(id: number): Promise<Sub2ApiProviderBinding>
-  prepareInfiniteCanvasImport(
-    id: number,
-    capability: Sub2ApiInfiniteCanvasCapability
-  ): Promise<Sub2ApiInfiniteCanvasImport>
-  directGatewayRequest?(request: Sub2ApiDirectGatewayRequest): Promise<Sub2ApiDirectGatewayResponse>
+  prepareInfiniteCanvasImport(id: number): Promise<Sub2ApiInfiniteCanvasImport>
+  openDirectGatewayStream?(
+    requestId: string,
+    request: Sub2ApiDirectGatewayRequest,
+    onEvent: (event: Sub2ApiDirectGatewayStreamEvent) => void
+  ): Promise<Sub2ApiDirectGatewayStreamAck>
+  cancelDirectGatewayStream?(requestId: string): Promise<void>
+  releaseDirectGatewayStream?(requestId: string): void
 }

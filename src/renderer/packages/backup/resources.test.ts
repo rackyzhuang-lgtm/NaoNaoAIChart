@@ -61,6 +61,42 @@ function createSession(): Session {
         ],
       },
     ],
+    followUpState: {
+      version: 1,
+      scopes: {
+        'thread-active': {
+          threadId: 'thread-active',
+          status: 'paused',
+          items: [
+            {
+              id: 'follow-up-1',
+              threadId: 'thread-active',
+              userMessage: {
+                id: 'queued-message',
+                role: 'user',
+                contentParts: [{ type: 'image', storageKey: 'picture:queued' }],
+                files: [
+                  {
+                    id: 'queued-file',
+                    name: 'queued.txt',
+                    fileType: 'text/plain',
+                    storageKey: 'file:queued',
+                    ragMode: 'session-retrieval',
+                    sessionAttachmentId: 88,
+                    localPath: '/Users/example/queued.txt',
+                  },
+                ],
+              },
+              reservedAssistantMessageId: 'queued-assistant',
+              intent: 'queue',
+              status: 'paused',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+      },
+    },
     assistantAvatarKey: 'picture:avatar',
     backgroundImage: { type: 'storage-key', storageKey: 'picture:background' },
   }
@@ -76,6 +112,8 @@ describe('backup resource graph', () => {
         'file:raw',
         'link:parsed',
         'tool:result',
+        'picture:queued',
+        'file:queued',
         'picture:avatar',
         'picture:background',
       ])
@@ -144,6 +182,8 @@ describe('backup resource graph', () => {
         ['file:raw', 'file:raw:restored'],
         ['link:parsed', 'link:restored'],
         ['tool:result', 'tool:restored'],
+        ['picture:queued', 'picture:queued:restored'],
+        ['file:queued', 'file:queued:restored'],
         ['picture:avatar', 'picture:avatar:restored'],
         ['picture:background', 'picture:background:restored'],
       ])
@@ -155,6 +195,10 @@ describe('backup resource graph', () => {
     })
     expect(remapped.messages[0].files?.[0].sessionAttachmentId).toBeUndefined()
     expect(remapped.threads?.[0].messages[0].contentParts[0]).toMatchObject({ resultStorageKey: 'tool:restored' })
+    const queuedMessage = remapped.followUpState?.scopes['thread-active']?.items[0]?.userMessage
+    expect(queuedMessage?.contentParts[0]).toMatchObject({ storageKey: 'picture:queued:restored' })
+    expect(queuedMessage?.files?.[0]).toMatchObject({ storageKey: 'file:queued:restored' })
+    expect(queuedMessage?.files?.[0].sessionAttachmentId).toBeUndefined()
     expect(remapped.assistantAvatarKey).toBe('picture:avatar:restored')
     expect(source.messages[0].contentParts[1]).toMatchObject({ storageKey: 'picture:shared' })
     expect(source.messages[0].files?.[0].sessionAttachmentId).toBe(42)
@@ -236,11 +280,14 @@ describe('backup resource graph', () => {
   it('removes local paths and derived RAG state from serialized sessions', () => {
     const prepared = prepareSessionForBackup(createSession())
     const file = prepared.messages[0].files?.[0]
+    const queuedFile = prepared.followUpState?.scopes['thread-active']?.items[0]?.userMessage.files?.[0]
     expect(file).toMatchObject({ ragMode: 'session-retrieval' })
     expect(file?.localPath).toBeUndefined()
     expect(file?.sessionAttachmentId).toBeUndefined()
     expect(file?.sessionAttachmentAvailability).toBeUndefined()
     expect(file?.sessionAttachmentIndexStatus).toBeUndefined()
     expect(file?.sessionAttachmentChunkCount).toBeUndefined()
+    expect(queuedFile?.localPath).toBeUndefined()
+    expect(queuedFile?.sessionAttachmentId).toBeUndefined()
   })
 })

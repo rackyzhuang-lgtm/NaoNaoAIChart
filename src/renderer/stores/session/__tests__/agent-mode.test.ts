@@ -187,12 +187,12 @@ describe('getSessionAgentModeEntry', () => {
     expect(entry).toEqual(defaultEntry)
   })
 
-  test('uses smart switching preference for unknown sessions', () => {
+  test('defaults a new session to Work Mode independently of the legacy smart-switching preference', () => {
     uiStore.getState().setAgentModeSmartSwitchingDefault(false)
-    expect(getSessionAgentModeEntry('new')).toEqual({ value: 'off', locked: false, lockReason: null })
+    expect(getSessionAgentModeEntry('new')).toEqual({ value: 'on', locked: false, lockReason: null })
 
     uiStore.getState().setAgentModeSmartSwitchingDefault(true)
-    expect(getSessionAgentModeEntry('new')).toEqual(defaultEntry)
+    expect(getSessionAgentModeEntry('new')).toEqual({ value: 'on', locked: false, lockReason: null })
   })
 
   test('prefers session settings over legacy uiStore map', () => {

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it } from 'vitest'
 import type { SessionMetaRecord } from '@shared/types'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { IndexedDBSessionMetaStorage } from '../SessionMetaStorage'
 
 function makeRecord(overrides: Partial<SessionMetaRecord> & { id: string }): SessionMetaRecord {
@@ -178,6 +178,19 @@ describe('IndexedDBSessionMetaStorage', () => {
 
     const archived = await storage.getArchived()
     expect(archived.map((record) => record.id)).toEqual(['hidden-new', 'hidden-old'])
+  })
+
+  it('treats explicit archived status as archived without classifying hidden-only records', async () => {
+    await storage.create(makeRecord({ id: 'active', sortOrder: 300, status: 'active' }))
+    await storage.create(makeRecord({ id: 'hidden-only', sortOrder: 200, hidden: true }))
+    await storage.create(
+      makeRecord({ id: 'archived', sortOrder: 100, status: 'archived', archivedAt: 2000, archiveSource: 'manual' })
+    )
+
+    expect((await storage.getAll()).map((record) => record.id)).toEqual(['active'])
+    expect((await storage.getArchived()).map((record) => record.id)).toEqual(['archived'])
+    expect(await storage.getTotal()).toBe(1)
+    expect(await storage.getArchivedTotal()).toBe(1)
   })
 
   it('getAllIncludingHidden returns visible and hidden records', async () => {

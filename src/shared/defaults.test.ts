@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { chatSessionSettings, getDefaultPrompt, newConfigs, pictureSessionSettings, settings } from './defaults'
-import { ModelProviderEnum, type SessionSettings, type Settings, Theme } from './types'
+import { ModelProviderEnum, type SessionSettings, SessionSettingsSchema, type Settings, Theme } from './types'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -16,6 +16,7 @@ describe('defaults', () => {
     expect(result.showTokenCount).toBe(false)
     expect(result.showTokenUsed).toBe(true)
     expect(result.messageLayout).toBe('bubble')
+    expect(result.followUpBehavior).toBe('queue')
   })
 
   it('settings() returns allowReportingAndTracking as true', () => {
@@ -63,11 +64,18 @@ describe('defaults', () => {
     expect(getDefaultPrompt()).toBe('You are a helpful assistant.')
   })
 
-  it('chatSessionSettings() returns provider and modelId', () => {
+  it('chatSessionSettings() returns the GPT-5.6 Sol Responses default with high reasoning', () => {
     const result: SessionSettings = chatSessionSettings()
 
-    expect(result.provider).toBe(ModelProviderEnum.OpenAI)
-    expect(result.modelId).toBe('gpt-4o-mini')
+    expect(result.provider).toBe(ModelProviderEnum.OpenAIResponses)
+    expect(result.modelId).toBe('gpt-5.6-sol')
+    expect(result.providerOptions?.openai?.reasoningEffort).toBe('high')
+    expect(result.stream).toBe(true)
+    expect(result.followUpBehavior).toBe('queue')
+  })
+
+  it('normalizes historical non-streaming session settings to streaming', () => {
+    expect(SessionSettingsSchema.parse({ stream: false }).stream).toBe(true)
   })
 
   it('pictureSessionSettings() returns provider, modelId, dalleStyle, imageGenerateNum', () => {

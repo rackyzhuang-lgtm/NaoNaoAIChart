@@ -199,3 +199,11 @@ tmp_*.*
 
 # Local upstream source copies used only for read-only reference.
 /参考原项目源码/
+
+# Local Codex knowledge-base evidence is read-only and must never enter source,
+# runtime discovery, or release artifacts.
+/codex_knowledge_base/
+
+# Local agent configuration is not part of the application source or release.
+/.claude/
+/.codex/

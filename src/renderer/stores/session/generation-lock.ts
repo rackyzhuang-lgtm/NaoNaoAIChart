@@ -36,6 +36,10 @@ export function withSessionGenerationLock<T>(
   return queuedTask
 }
 
+export function isSessionGenerationActive(sessionId: string): boolean {
+  return sessionGenerationTails.has(sessionId)
+}
+
 function clearInFlightGenerationTask(sessionId: string, operationKey: string, task: Promise<unknown>): void {
   const sessionTasks = inFlightGenerationTasks.get(sessionId)
   if (sessionTasks?.get(operationKey) !== task) return

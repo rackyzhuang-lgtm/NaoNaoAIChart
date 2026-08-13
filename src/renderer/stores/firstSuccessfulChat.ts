@@ -1,7 +1,7 @@
-import { getMessageText, isEmptyMessage } from '@shared/utils/message'
-import { defaultSessionsForCN, defaultSessionsForEN } from '@/packages/initial_data'
-import * as chatStore from './chatStore'
 import type { Message, Session, SessionThread } from '@shared/types'
+import { getMessageText, isEmptyMessage } from '@shared/utils/message'
+import { historicalDefaultSessionIds } from '@/packages/initial_data'
+import * as chatStore from './chatStore'
 
 export const FIRST_SUCCESSFUL_CHAT_KEY = 'chatbox:first-successful-chat:v1'
 
@@ -9,9 +9,7 @@ type FirstSuccessfulChatStorageValue = '0' | '1'
 
 type BrowserStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
-const builtInTemplateSessionIds = new Set(
-  [...defaultSessionsForEN, ...defaultSessionsForCN].map((session) => session.id)
-)
+const builtInTemplateSessionIds = historicalDefaultSessionIds
 
 function getBrowserLocalStorage(): BrowserStorage | null {
   try {

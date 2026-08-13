@@ -35,6 +35,7 @@
     "**/*.stories.ts",
     ".storybook",
     ".pnpm-store",
+    "codex_knowledge_base",
     "参考原项目源码",
   ]
 }

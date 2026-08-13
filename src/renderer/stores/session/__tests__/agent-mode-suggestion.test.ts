@@ -5,6 +5,7 @@ import {
   getLastUserMessage,
   isFirstUserTurn,
   parseAgentModeSuggestionDecision,
+  shouldRequestAgentModeSuggestion,
 } from '../agent-mode-suggestion'
 
 function userMessage(text: string, extra?: Partial<Message>): Message {
@@ -94,6 +95,28 @@ describe('getLastUserMessage', () => {
   test('returns undefined when there is no preceding user message', () => {
     const messages = [assistantMessage('only assistant')]
     expect(getLastUserMessage(messages, 1)).toBeUndefined()
+  })
+})
+
+describe('shouldRequestAgentModeSuggestion', () => {
+  const eligible = {
+    operationType: 'send_message' as const,
+    appendToMessage: false,
+    skipSuggestion: false,
+    agentModeSupported: true,
+    agentModeValue: 'auto' as const,
+    conversationMode: 'default' as const,
+    hasUserMessage: true,
+    isFirstUserTurn: true,
+    usesFixedGateway: false,
+  }
+
+  test('allows the existing classifier for non-fixed providers', () => {
+    expect(shouldRequestAgentModeSuggestion(eligible)).toBe(true)
+  })
+
+  test('skips the remote classifier for the fixed NaoNaoAI gateway', () => {
+    expect(shouldRequestAgentModeSuggestion({ ...eligible, usesFixedGateway: true })).toBe(false)
   })
 })
 

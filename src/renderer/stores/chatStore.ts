@@ -7,6 +7,7 @@ import NiceModal from '@ebay/nice-modal-react'
 import {
   type Message,
   type Session,
+  type SessionArchiveSource,
   type SessionMeta,
   type SessionMetaPage,
   type SessionMetaRecord,
@@ -16,6 +17,7 @@ import {
   type UpdaterFn,
 } from '@shared/types'
 import { type InfiniteData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { getDefaultStore } from 'jotai'
 import compact from 'lodash/compact'
 import isEmpty from 'lodash/isEmpty'
 import { useMemo } from 'react'
@@ -28,12 +30,14 @@ import { sortSessionRecords } from '@/storage/SessionMetaStorage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import * as defaults from '../../shared/defaults'
 import { getLogger } from '../lib/utils'
+import { deleteSessionStorageRecords } from '../services/session-deletion'
 import { migrateSession } from '../utils/session-utils'
 import { uiStore } from './uiStore'
 
 const log = getLogger('chat-store')
 
 import { clearScrollPositionCache } from '@/components/chat/MessageList'
+import { currentSessionIdAtom } from './atoms'
 import { cleanupSessionAtomCache } from './atoms/throttleWriteSessionAtom'
 import {
   assertNoMessageDataUpdate,
@@ -43,6 +47,7 @@ import {
 } from './chatStore-cache'
 import { lastUsedModelStore } from './lastUsedModelStore'
 import queryClient from './queryClient'
+import { isSessionGenerationActive } from './session/generation-lock'
 import { getSessionMeta } from './sessionHelpers'
 import { settingsStore, useSettingsStore } from './settingsStore'
 import { UpdateQueue } from './updateQueue'
@@ -273,6 +278,7 @@ const getSessionQueryOptions = (sessionId: string) => ({
 })
 
 export async function getSession(sessionId: string) {
+  if (deletedSessionIds.has(sessionId)) return null
   return await queryClient.fetchQuery(getSessionQueryOptions(sessionId))
 }
 
@@ -305,13 +311,40 @@ async function runInChunks<T>(items: T[], chunkSize: number, worker: (item: T) =
   }
 }
 
+function getSessionMetaForStorage(session: Session): SessionMeta {
+  return {
+    ...getSessionMeta(session),
+    status: session.status,
+    lastActivityAt: session.lastActivityAt,
+    archiveSource: session.archiveSource,
+  }
+}
+
+function hasGeneratingMessages(session: Session): boolean {
+  if (session.messages.some((message) => message.generating === true)) return true
+  if (session.threads?.some((thread) => thread.messages.some((message) => message.generating === true))) return true
+  return Object.values(session.messageForksHash ?? {}).some((fork) =>
+    fork.lists.some((list) => list.messages.some((message) => message.generating === true))
+  )
+}
+
+function isArchivedSession(session: Pick<Session, 'status' | 'archivedAt'>): boolean {
+  return session.status === 'archived' || session.archivedAt !== undefined
+}
+
 // create session
 export async function createSession(newSession: Omit<Session, 'id'>, previousId?: string) {
   console.debug('chatStore', 'createSession', newSession)
   const { chat: lastUsedChatModel, picture: lastUsedPictureModel } = lastUsedModelStore.getState()
-  const session = {
+  const now = Date.now()
+  const session: Session = {
     ...newSession,
     id: uuidv4(),
+    status: 'active',
+    lastActivityAt: newSession.lastActivityAt ?? now,
+    archivedAt: undefined,
+    archiveSource: undefined,
+    activeThreadId: newSession.activeThreadId,
     settings: {
       ...(newSession.type === 'picture' ? lastUsedPictureModel : lastUsedChatModel),
       ...newSession.settings,
@@ -333,55 +366,113 @@ export async function createSession(newSession: Omit<Session, 'id'>, previousId?
   }
 
   const record: SessionMetaRecord = {
-    ...getSessionMeta(session),
+    ...getSessionMetaForStorage(session),
     sortOrder,
-    createdAt: Date.now(),
+    createdAt: now,
   }
   await metaStorage.create(record)
   _setSessionCache(session.id, session)
 
-  updateSessionListData((items) => sortSessionRecords([...items, record]))
+  if (!record.hidden) {
+    updateSessionListData((items) => sortSessionRecords([...items, record]))
+  }
 
   return session
 }
 
 const sessionUpdateQueues: Record<string, UpdateQueue<Session>> = {}
+const sessionRetentionLocks = new Map<string, Promise<void>>()
+// Prevent delayed streaming writes from recreating a session after permanent deletion starts.
+const deletedSessionIds = new Set<string>()
+
+async function withSessionRetentionLock<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = sessionRetentionLocks.get(sessionId) ?? Promise.resolve()
+  let release = () => {}
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const current = previous.then(() => pending)
+  sessionRetentionLocks.set(sessionId, current)
+  await previous
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (sessionRetentionLocks.get(sessionId) === current) {
+      sessionRetentionLocks.delete(sessionId)
+    }
+  }
+}
 
 export async function updateSessionWithMessages(
   sessionId: string,
   updater: Updater<Session>,
   options?: { preserveCachedGeneratingMessages?: boolean }
 ) {
+  if (deletedSessionIds.has(sessionId)) {
+    throw new Error(`Session ${sessionId} has been deleted`)
+  }
   if (!sessionUpdateQueues[sessionId]) {
     // do not use await here to avoid data race
     sessionUpdateQueues[sessionId] = new UpdateQueue<Session>(
       () => getSession(sessionId),
       async (session) => {
         if (session) {
+          if (deletedSessionIds.has(sessionId)) {
+            await storage.removeItem(StorageKeyGenerator.session(sessionId))
+            return
+          }
           console.debug('chatStore', 'persist session', sessionId)
           await storage.setItemNow(StorageKeyGenerator.session(sessionId), session)
+          if (deletedSessionIds.has(sessionId)) {
+            await storage.removeItem(StorageKeyGenerator.session(sessionId))
+          }
         }
       }
     )
   }
   let needUpdateSessionList = true
   const updated = await sessionUpdateQueues[sessionId].set((prev) => {
+    if (deletedSessionIds.has(sessionId)) {
+      throw new Error(`Session ${sessionId} has been deleted`)
+    }
     if (!prev) {
       throw new Error(`Session ${sessionId} not found`)
     }
+    let next: Session
     if (typeof updater === 'function') {
-      return updater(prev)
+      next = updater(prev)
     } else {
       if (isEmpty(getSessionMeta(updater as SessionMeta))) {
         needUpdateSessionList = false
       }
-      return { ...prev, ...updater }
+      next = { ...prev, ...updater }
     }
+    const messageDataChanged =
+      next.messages !== prev.messages ||
+      next.threads !== prev.threads ||
+      next.messageForksHash !== prev.messageForksHash ||
+      next.compactionPoints !== prev.compactionPoints
+    return messageDataChanged ? { ...next, lastActivityAt: Date.now() } : next
   })
+  if (deletedSessionIds.has(sessionId)) {
+    await storage.removeItem(StorageKeyGenerator.session(sessionId))
+    throw new Error(`Session ${sessionId} has been deleted`)
+  }
   if (needUpdateSessionList) {
-    const newMeta = getSessionMeta(updated)
+    const newMeta = getSessionMetaForStorage(updated)
     const metaStorage = await getMetaStorage()
+    if (deletedSessionIds.has(sessionId)) {
+      await storage.removeItem(StorageKeyGenerator.session(sessionId))
+      await metaStorage.delete(sessionId)
+      throw new Error(`Session ${sessionId} has been deleted`)
+    }
     await metaStorage.update(sessionId, newMeta)
+    if (deletedSessionIds.has(sessionId)) {
+      await storage.removeItem(StorageKeyGenerator.session(sessionId))
+      await metaStorage.delete(sessionId)
+      throw new Error(`Session ${sessionId} has been deleted`)
+    }
     updateSessionListData((items) =>
       sortSessionRecords(items.map((s) => (s.id === sessionId ? { ...s, ...newMeta } : s)))
     )
@@ -481,20 +572,221 @@ function cleanupDeletedSessionRuntimeState(id: string) {
   platform.sandboxRemoveArtifacts?.({ sessionId: id }).catch(() => {})
 }
 
-export async function deleteSession(id: string) {
+async function deleteSessionUnsafe(id: string) {
   console.debug('chatStore', 'deleteSession', id)
   await cleanupSessionAttachmentRagEntries([id], 'session deletion')
-  await storage.removeItem(StorageKeyGenerator.session(id))
+  const storageKey = StorageKeyGenerator.session(id)
   const metaStorage = await getMetaStorage()
-  await metaStorage.delete(id)
+  await deleteSessionStorageRecords({
+    readSession: () => storage.getItem<Session | null>(storageKey, null),
+    readMeta: () => metaStorage.getById(id),
+    removeSession: () => storage.removeItem(storageKey),
+    removeMeta: () => metaStorage.delete(id),
+    restoreSession: (session) => storage.setItemNow(storageKey, session),
+    restoreMeta: async (meta) => {
+      if (!(await metaStorage.getById(id))) await metaStorage.create(meta)
+    },
+    onRollbackFailure: (rollbackError) => {
+      log.error(`Failed to compensate session deletion (sessionId: ${id}):`, rollbackError)
+    },
+  })
   updateSessionListData((items) => items.filter((session) => session.id !== id))
   updateArchivedSessionListData((items) => items.filter((session) => session.id !== id))
   cleanupDeletedSessionRuntimeState(id)
 }
 
+type DeleteSessionOptions = {
+  cascadeOwnedSideChats?: boolean
+}
+
+type OwnedSideChatLink = {
+  queueItemId: string
+  sessionId: string
+  threadId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+function getOwnedSideChatLinks(session: Session, threadId?: string): Array<[string, OwnedSideChatLink]> {
+  const state = session.followUpState
+  if (!state?.sideChats) return []
+  if (!threadId) return Object.entries(state.sideChats)
+
+  const scopedQueueItemIds = new Set(state.scopes[threadId]?.items.map((item) => item.id) ?? [])
+  return Object.entries(state.sideChats).filter(
+    ([queueItemId, link]) => link.threadId === threadId || scopedQueueItemIds.has(queueItemId)
+  )
+}
+
+async function getValidOwnedSideChatSessionIds(session: Session, threadId?: string): Promise<string[]> {
+  const ids = [...new Set(getOwnedSideChatLinks(session, threadId).map(([, link]) => link.sessionId))]
+  const valid: string[] = []
+  for (const id of ids) {
+    if (!id || id === session.id) continue
+    const target = await getSession(id)
+    if (target?.hidden === true && target.type === 'chat') valid.push(id)
+  }
+  return valid
+}
+
+async function updateOwnedSideChatLinks(
+  sourceSessionId: string,
+  updater: (links: Record<string, OwnedSideChatLink>) => Record<string, OwnedSideChatLink>
+) {
+  await updateSession(sourceSessionId, (source) => {
+    if (!source) throw new Error(`Session ${sourceSessionId} not found`)
+    const state = source.followUpState
+    if (!state) return source
+    const sideChats = updater(state.sideChats ?? {})
+    return {
+      ...source,
+      followUpState: {
+        ...state,
+        sideChats: Object.keys(sideChats).length > 0 ? sideChats : undefined,
+      },
+    }
+  })
+}
+
+/**
+ * Permanently removes direct hidden Side Chats owned by a source session or one of its threads.
+ * The source link is removed before deletion and restored if deletion fails, so a partial failure
+ * remains visible to the next cleanup attempt instead of reporting success with a stale link.
+ */
+export async function deleteOwnedSideChatSessions(sourceSessionId: string, threadId?: string): Promise<string[]> {
+  const source = await getSession(sourceSessionId)
+  if (!source) return []
+
+  const selectedLinks = getOwnedSideChatLinks(source, threadId)
+  if (selectedLinks.length === 0) return []
+
+  const selectedKeys = new Set(selectedLinks.map(([queueItemId]) => queueItemId))
+  const allLinks = Object.entries(source.followUpState?.sideChats ?? {})
+  const candidateSessionIds = [
+    ...new Set(
+      selectedLinks
+        .map(([, link]) => link.sessionId)
+        .filter((sideChatSessionId) => sideChatSessionId && sideChatSessionId !== sourceSessionId)
+    ),
+  ]
+  const deletedIds: string[] = []
+
+  for (const sideChatSessionId of candidateSessionIds) {
+    const selectedForTarget = selectedLinks.filter(([, link]) => link.sessionId === sideChatSessionId)
+    const targetHasUnselectedOwner = allLinks.some(
+      ([queueItemId, link]) => link.sessionId === sideChatSessionId && !selectedKeys.has(queueItemId)
+    )
+    if (targetHasUnselectedOwner) continue
+
+    const target = await getSession(sideChatSessionId)
+    if (!target || target.hidden !== true || target.type !== 'chat') continue
+
+    const removedLinks = Object.fromEntries(selectedForTarget)
+    await updateOwnedSideChatLinks(sourceSessionId, (links) =>
+      Object.fromEntries(Object.entries(links).filter(([queueItemId]) => !(queueItemId in removedLinks)))
+    )
+    try {
+      await deleteSession(sideChatSessionId, { cascadeOwnedSideChats: false })
+      deletedIds.push(sideChatSessionId)
+    } catch (error) {
+      try {
+        await updateOwnedSideChatLinks(sourceSessionId, (links) => ({ ...removedLinks, ...links }))
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `Failed to delete Side Chat ${sideChatSessionId} and restore its source link`
+        )
+      }
+      throw error
+    }
+  }
+
+  return deletedIds
+}
+
+export async function deleteSession(id: string, options: DeleteSessionOptions = {}) {
+  const ownedSideChatIds = await withSessionRetentionLock(id, async () => {
+    if (deletedSessionIds.has(id)) return
+    const source = options.cascadeOwnedSideChats === false ? undefined : await getSession(id)
+    const childIds = source ? await getValidOwnedSideChatSessionIds(source) : []
+    deletedSessionIds.add(id)
+    try {
+      await deleteSessionUnsafe(id)
+    } catch (error) {
+      deletedSessionIds.delete(id)
+      throw error
+    }
+    return childIds
+  })
+  for (const sideChatId of ownedSideChatIds ?? []) {
+    await deleteSession(sideChatId, { cascadeOwnedSideChats: false })
+  }
+  // Keep the tombstone for the remainder of this renderer lifetime. A deleted id is never reused.
+}
+
+export class SessionArchiveBlockedError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'generating' | 'starred' | 'current'
+  ) {
+    super(message)
+    this.name = 'SessionArchiveBlockedError'
+  }
+}
+
+type AutomaticArchiveOptions = {
+  currentSessionId?: string | null
+  now?: number
+  signal?: AbortSignal
+}
+
+async function archiveSessionBySource(
+  id: string,
+  source: SessionArchiveSource,
+  options: AutomaticArchiveOptions = {}
+): Promise<boolean> {
+  return await withSessionRetentionLock(id, async () => {
+    if (options.signal?.aborted) return false
+    let changed = false
+    await updateSessionWithMessages(id, (session) => {
+      if (!session) throw new Error(`Session ${id} not found`)
+      if (isArchivedSession(session)) return session
+      if (hasGeneratingMessages(session)) {
+        if (source === 'manual') {
+          throw new SessionArchiveBlockedError(
+            'A session cannot be archived while it is generating a response.',
+            'generating'
+          )
+        }
+        return session
+      }
+      if (source === 'automatic' && session.starred) return session
+      if (
+        source === 'automatic' &&
+        (options.currentSessionId === id ||
+          getDefaultStore().get(currentSessionIdAtom) === id ||
+          isSessionGenerationActive(id))
+      ) {
+        return session
+      }
+      changed = true
+      return {
+        ...session,
+        status: 'archived',
+        hidden: true,
+        archivedAt: options.now ?? Date.now(),
+        archiveSource: source,
+      }
+    })
+    return changed
+  })
+}
+
 export async function archiveSession(id: string) {
-  await updateSession(id, { hidden: true, archivedAt: Date.now() })
-  await refreshArchivedSessionListCache()
+  const changed = await archiveSessionBySource(id, 'manual')
+  if (changed) {
+    await refreshArchivedSessionListCache()
+  }
 }
 
 // 这里刻意逐个走 updateSession，保证完整 session 存储和 meta 存储一致。
@@ -503,11 +795,10 @@ export async function archiveSessions(ids: string[]) {
   const uniqueIds = [...new Set(ids)]
   if (uniqueIds.length === 0) return
 
-  const archivedAt = Date.now()
   const missingSessionIds: string[] = []
   await runInChunks(uniqueIds, 20, async (id) => {
     try {
-      await updateSession(id, { hidden: true, archivedAt })
+      await archiveSessionBySource(id, 'manual')
     } catch (error) {
       if (error instanceof Error && error.message === `Session ${id} not found`) {
         missingSessionIds.push(id)
@@ -530,29 +821,124 @@ export async function archiveSessions(ids: string[]) {
   await refreshArchivedSessionListCache()
 }
 
+export async function archiveSessionsAutomatically(
+  ids: string[],
+  options: AutomaticArchiveOptions = {}
+): Promise<string[]> {
+  const archivedIds: string[] = []
+  for (const id of [...new Set(ids)]) {
+    if (options.signal?.aborted) break
+    try {
+      if (await archiveSessionBySource(id, 'automatic', options)) {
+        archivedIds.push(id)
+      }
+    } catch (error) {
+      if (!(error instanceof Error && error.message === `Session ${id} not found`)) {
+        throw error
+      }
+    }
+  }
+  if (archivedIds.length > 0) {
+    await refreshSessionListCache()
+    await refreshArchivedSessionListCache()
+  }
+  return archivedIds
+}
+
 export async function restoreSession(id: string) {
-  await updateSession(id, { hidden: false, archivedAt: undefined })
+  await withSessionRetentionLock(id, async () => {
+    await updateSession(id, {
+      status: 'active',
+      hidden: false,
+      archivedAt: undefined,
+      archiveSource: undefined,
+    })
+  })
   await refreshSessionListCache()
   updateArchivedSessionListData((items) => items.filter((session) => session.id !== id))
+}
+
+export async function deleteArchivedSessions(ids: string[], signal?: AbortSignal): Promise<string[]> {
+  const deletedIds: string[] = []
+  for (const id of [...new Set(ids)]) {
+    if (signal?.aborted) break
+    const ownedSideChatIds = await withSessionRetentionLock(id, async () => {
+      if (deletedSessionIds.has(id)) {
+        deletedIds.push(id)
+        return
+      }
+      try {
+        const session = await getSession(id)
+        if (!session) {
+          deletedSessionIds.add(id)
+          await deleteSessionUnsafe(id)
+          deletedIds.push(id)
+          return []
+        }
+        if (
+          !isArchivedSession(session) ||
+          session.starred ||
+          getDefaultStore().get(currentSessionIdAtom) === id ||
+          hasGeneratingMessages(session) ||
+          isSessionGenerationActive(id)
+        ) {
+          return []
+        }
+        const childIds = await getValidOwnedSideChatSessionIds(session)
+        deletedSessionIds.add(id)
+        await deleteSessionUnsafe(id)
+        deletedIds.push(id)
+        return childIds
+      } catch (error) {
+        deletedSessionIds.delete(id)
+        throw error
+      }
+    })
+    for (const sideChatId of ownedSideChatIds ?? []) {
+      await deleteSession(sideChatId, { cascadeOwnedSideChats: false })
+    }
+  }
+  return deletedIds
 }
 
 export async function deleteSessions(ids: string[]) {
   const uniqueIds = [...new Set(ids)]
   if (uniqueIds.length === 0) return
 
-  await cleanupSessionAttachmentRagEntries(uniqueIds, 'session deletion')
-
-  await runInChunks(uniqueIds, 20, async (id) => {
-    await storage.removeItem(StorageKeyGenerator.session(id))
-  })
-
-  const metaStorage = await getMetaStorage()
-  await metaStorage.deleteMany(uniqueIds)
-  await refreshSessionListCache()
-  updateArchivedSessionListData((items) => items.filter((session) => !uniqueIds.includes(session.id)))
-
+  const ownedSideChatIds = new Set<string>()
   for (const id of uniqueIds) {
-    cleanupDeletedSessionRuntimeState(id)
+    const source = await getSession(id)
+    for (const sideChatId of source ? await getValidOwnedSideChatSessionIds(source) : []) {
+      ownedSideChatIds.add(sideChatId)
+    }
+  }
+  const directIds = uniqueIds.filter((id) => !deletedSessionIds.has(id))
+  if (directIds.length === 0) return
+
+  for (const id of directIds) deletedSessionIds.add(id)
+  try {
+    await cleanupSessionAttachmentRagEntries(directIds, 'session deletion')
+
+    await runInChunks(directIds, 20, async (id) => {
+      await storage.removeItem(StorageKeyGenerator.session(id))
+    })
+
+    const metaStorage = await getMetaStorage()
+    await metaStorage.deleteMany(directIds)
+    await refreshSessionListCache()
+    updateArchivedSessionListData((items) => items.filter((session) => !directIds.includes(session.id)))
+
+    for (const id of directIds) {
+      cleanupDeletedSessionRuntimeState(id)
+    }
+  } catch (error) {
+    for (const id of directIds) deletedSessionIds.delete(id)
+    throw error
+  }
+  for (const sideChatId of ownedSideChatIds) {
+    if (!directIds.includes(sideChatId)) {
+      await deleteSession(sideChatId, { cascadeOwnedSideChats: false })
+    }
   }
 }
 
@@ -610,7 +996,7 @@ export async function listMessages(sessionId?: string | null): Promise<Message[]
   return session.messages
 }
 
-export async function insertMessage(sessionId: string, message: Message, previousId?: string) {
+export async function insertMessage(sessionId: string, message: Message, previousId?: string, threadId?: string) {
   await updateSessionWithMessages(sessionId, (session) => {
     if (!session) {
       throw new Error(`session ${sessionId} not found`)
@@ -654,6 +1040,17 @@ export async function insertMessage(sessionId: string, message: Message, previou
             } satisfies Session
           }
         }
+      }
+    }
+    if (threadId) {
+      const threadExists = session.threads?.some((thread) => thread.id === threadId)
+      if (threadExists) {
+        return {
+          ...session,
+          threads: session.threads?.map((thread) =>
+            thread.id === threadId ? { ...thread, messages: [...thread.messages, message] } : thread
+          ),
+        } satisfies Session
       }
     }
     // no previous message, insert to tail of current thread
@@ -899,7 +1296,7 @@ export async function recoverSessionList() {
         const migratedSession = migrateSession(session)
         const firstMessageTimestamp = migratedSession.messages[0]?.timestamp || 0
         sessionsWithTimestamp.push({
-          meta: getSessionMeta(migratedSession),
+          meta: getSessionMetaForStorage(migratedSession),
           timestamp: firstMessageTimestamp,
         })
       }

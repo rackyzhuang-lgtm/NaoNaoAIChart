@@ -17,7 +17,7 @@ describe('sub2api URL builders', () => {
 
   it.each([
     'https://naonaoai.shop/api/v1/models',
-    'https://www.naonaoai.shop/v1/models',
+    'https://www.eazyai.shop/v1/models',
     'https://api.openai.com/v1/models',
   ])('rejects non-gateway URL %s', (url) => {
     expect(isSub2ApiGatewayUrl(url)).toBe(false)

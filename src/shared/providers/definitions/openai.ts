@@ -10,6 +10,7 @@ export const openaiProvider = defineProvider({
   type: ModelProviderType.OpenAI,
   modelsDevProviderId: 'openai',
   curatedModelIds: [
+    'gpt-5.6-sol',
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.4-nano',
@@ -29,6 +30,13 @@ export const openaiProvider = defineProvider({
     apiHost: 'https://api.openai.com',
     // https://platform.openai.com/docs/models
     models: [
+      {
+        modelId: 'gpt-5.6-sol',
+        nickname: 'GPT-5.6 Sol',
+        capabilities: ['vision', 'tool_use', 'reasoning'],
+        contextWindow: 1_050_000,
+        maxOutput: 128_000,
+      },
       {
         modelId: 'gpt-5.4',
         capabilities: ['vision', 'tool_use', 'reasoning'],

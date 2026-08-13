@@ -72,6 +72,7 @@ describe('OpenAIResponses call settings', () => {
       openai: {
         reasoningEffort: 'high',
         store: false,
+        systemMessageMode: 'developer',
       },
     })
   })
@@ -97,6 +98,7 @@ describe('OpenAIResponses call settings', () => {
         include: ['reasoning.encrypted_content'],
         forceReasoning: true,
         store: false,
+        systemMessageMode: 'developer',
       },
     })
   })
@@ -120,6 +122,7 @@ describe('OpenAIResponses call settings', () => {
         reasoningSummary: 'auto',
         forceReasoning: true,
         store: false,
+        systemMessageMode: 'developer',
       },
     })
   })
@@ -132,6 +135,7 @@ describe('OpenAIResponses call settings', () => {
     expect(settings.providerOptions).toEqual({
       openai: {
         store: false,
+        systemMessageMode: 'developer',
       },
     })
   })
@@ -159,5 +163,33 @@ describe('OpenAIResponses call settings', () => {
     ).rejects.toThrow()
 
     expect(requestBody?.reasoning).toEqual({ effort: 'xhigh' })
+  })
+
+  it('sends the exact GPT-5.6 Sol model ID with high reasoning in the final Responses request body', async () => {
+    let requestBody: Record<string, unknown> | undefined
+    const provider = createOpenAI({
+      apiKey: 'test-key',
+      fetch: (_input, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return Promise.resolve(
+          new Response('{"error":{"message":"mock response"}}', {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          })
+        )
+      },
+    })
+
+    await expect(
+      provider.responses('gpt-5.6-sol').doGenerate({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        providerOptions: { openai: { reasoningEffort: 'high' } },
+      } as LanguageModelV3CallOptions)
+    ).rejects.toThrow()
+
+    expect(requestBody).toMatchObject({
+      model: 'gpt-5.6-sol',
+      reasoning: { effort: 'high' },
+    })
   })
 })

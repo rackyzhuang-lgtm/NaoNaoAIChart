@@ -474,7 +474,6 @@ export function ChatConfig({
   onSettingsChange: (data: Session['settings']) => void
 }) {
   const { t } = useTranslation()
-  const globalSettingsStream = useSettingsStore((s) => s.stream)
 
   return (
     <Stack gap="md">
@@ -556,20 +555,6 @@ export function ChatConfig({
           placeholder={t('Not set') || ''}
         />
       </Flex>
-
-      {settings?.provider !== ModelProviderEnum.ChatboxAI && (
-        <Stack gap="xs" py="xs">
-          <Flex align="center" justify="space-between" gap="xs">
-            <Text size="sm" fw="600">
-              {t('Stream output')}
-            </Text>
-            <Switch
-              checked={settings?.stream ?? globalSettingsStream ?? true}
-              onChange={(v) => onSettingsChange({ stream: v.target.checked })}
-            />
-          </Flex>
-        </Stack>
-      )}
 
       <ReasoningControlConfig settings={settings} onSettingsChange={onSettingsChange} />
     </Stack>

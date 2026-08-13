@@ -3,7 +3,7 @@
 import { MantineProvider } from '@mantine/core'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import Sub2ApiAccountSettings from './Sub2ApiAccountSettings'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -24,12 +24,23 @@ Object.defineProperty(window, 'matchMedia', {
 
 const mocks = vi.hoisted(() => ({
   t: (key: string) => key,
+  hasUsableProvider: vi.fn(() => false),
 }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: mocks.t }),
   initReactI18next: { type: '3rdParty', init: vi.fn() },
 }))
+vi.mock('./sub2api-provider-binding', () => ({
+  hasUsableSub2ApiChatProvider: mocks.hasUsableProvider,
+  applySub2ApiProviderBinding: vi.fn().mockResolvedValue({ modelId: 'gpt-5.6-sol', sessionId: 'default-chat' }),
+}))
+
+globalThis.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 const user = {
   id: 7,
@@ -108,6 +119,11 @@ function renderAccount(api: Sub2ApiRendererApi) {
 }
 
 describe('Sub2ApiAccountSettings', () => {
+  beforeEach(() => {
+    mocks.hasUsableProvider.mockReset()
+    mocks.hasUsableProvider.mockReturnValue(false)
+  })
+
   test('loads through a frozen context bridge API', async () => {
     const api = Object.freeze(createApi())
     renderAccount(api)
@@ -130,6 +146,32 @@ describe('Sub2ApiAccountSettings', () => {
     expect(await screen.findByText('desktop-user')).toBeTruthy()
     expect(api.login).toHaveBeenCalledWith({ email: 'user@example.com', password: 'secret-password', auto_login: true })
     expect(screen.queryByText('secret-password')).toBeNull()
+    expect(await screen.findByRole('dialog', { name: 'Set up an API key for chat' })).toBeTruthy()
+  })
+
+  test('does not open onboarding when an existing desktop session is restored', async () => {
+    const api = createApi({
+      getSessionState: vi.fn().mockResolvedValue({ authenticated: true, user, twoFactorRequired: false }),
+    })
+    renderAccount(api)
+
+    expect(await screen.findByText('desktop-user')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Set up an API key for chat' })).toBeNull()
+    expect(mocks.hasUsableProvider).not.toHaveBeenCalled()
+  })
+
+  test('does not open onboarding after explicit login when the NaoNaoAI provider is already usable', async () => {
+    mocks.hasUsableProvider.mockReturnValue(true)
+    const api = createApi()
+    renderAccount(api)
+
+    fireEvent.change(await screen.findByLabelText(/Email/), { target: { value: 'user@example.com' } })
+    fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'secret-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText('desktop-user')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Set up an API key for chat' })).toBeNull()
+    expect(mocks.hasUsableProvider).toHaveBeenCalledOnce()
   })
 
   test('registers with an email verification code and the server suffix policy', async () => {
@@ -233,7 +275,7 @@ describe('Sub2ApiAccountSettings', () => {
 
   test('keeps the signed-in user visible when an account request is rate limited', async () => {
     const rateLimitError = new Error(
-      '__NAONAO_SUB2API_ERROR__{"kind":"rate_limited","status":429,"retryAfterSeconds":4}'
+      '__NAONAOAI_SUB2API_ERROR__{"kind":"rate_limited","status":429,"retryAfterSeconds":4}'
     )
     const api = createApi({
       getSessionState: vi.fn().mockResolvedValue({ authenticated: true, user, twoFactorRequired: false }),

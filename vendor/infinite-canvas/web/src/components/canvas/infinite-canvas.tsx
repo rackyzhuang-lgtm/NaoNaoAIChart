@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
+import { panViewport, resolveCanvasPointerGesture } from "@/lib/canvas/canvas-pointer-gesture";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ViewportTransform } from "@/types/canvas";
 
@@ -113,9 +114,9 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id]");
         const temporaryTool = event.ctrlKey || isSpacePressed;
         const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
-        const shouldPan = event.button === 1 || (event.button === 0 && activeTool === "pan");
+        const gesture = resolveCanvasPointerGesture({ button: event.button, isBackground: isBackgroundClick, activeTool, shiftKey: event.shiftKey });
 
-        if (shouldPan) {
+        if (gesture === "pan") {
             event.preventDefault();
             event.currentTarget.setPointerCapture(event.pointerId);
             panState.current = {
@@ -132,7 +133,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             return;
         }
 
-        if (event.button === 0 && isBackgroundClick) {
+        if (gesture === "select") {
             event.preventDefault();
             event.currentTarget.setPointerCapture(event.pointerId);
             onCanvasMouseDown?.(event);
@@ -155,11 +156,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
                 panState.current.hasMoved = true;
             }
 
-            nextViewportRef.current = {
-                x: panState.current.initialX + dx,
-                y: panState.current.initialY + dy,
-                k: scaleRef.current,
-            };
+            nextViewportRef.current = panViewport({ x: panState.current.initialX, y: panState.current.initialY, k: scaleRef.current }, { x: dx, y: dy });
             if (frameRef.current) return;
             frameRef.current = requestAnimationFrame(() => {
                 frameRef.current = null;

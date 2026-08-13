@@ -16,6 +16,7 @@ import {
   confirmSessionDeletion,
   countArchivedSessionsMeta,
   deleteSession,
+  SessionArchiveBlockedError,
   updateSession as updateSessionStore,
 } from '@/stores/chatStore'
 import { switchCurrentSession } from '@/stores/sessionActions'
@@ -141,6 +142,11 @@ function SessionItem(props: Props) {
       }
     } catch (error) {
       console.error('Failed to archive session:', error)
+      toastActions.add(
+        error instanceof SessionArchiveBlockedError && error.reason === 'generating'
+          ? t('This chat could not be archived. Stop the response and try again.')
+          : t('This chat could not be archived. Please try again.')
+      )
       setArchiving(false)
     }
   }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Sub2ApiDirectGatewayStreamEvent } from '../../shared/sub2api/contracts'
 import { Sub2ApiError } from '../../shared/sub2api/errors'
 import { Sub2ApiClient } from './client'
 import { Sub2ApiSession } from './session'
@@ -130,7 +131,7 @@ describe('Sub2ApiClient', () => {
     expect(client.getSessionState()).toMatchObject({ authenticated: true, user })
   })
 
-  it('sends direct gateway requests from the main process without opening an arbitrary proxy', async () => {
+  it('streams gateway bytes from the main process without opening an arbitrary proxy', async () => {
     const fetchImplementation = vi.fn<typeof fetch>((input, init) => {
       expect(String(input)).toBe('https://naonaoai.shop/v1/responses')
       expect(init?.method).toBe('POST')
@@ -142,21 +143,111 @@ describe('Sub2ApiClient', () => {
       )
     })
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const events: Sub2ApiDirectGatewayStreamEvent[] = []
 
     await expect(
-      client.directGatewayRequest({
-        url: 'https://naonaoai.shop/v1/responses',
-        method: 'POST',
-        headers: { Authorization: 'Bearer synthetic-key' },
-        body: '{"model":"test-model","stream":true}',
-      })
-    ).resolves.toMatchObject({ status: 200, body: 'data: [DONE]\n\n' })
+      client.streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000001',
+        {
+          url: 'https://naonaoai.shop/v1/responses',
+          method: 'POST',
+          headers: { Authorization: 'Bearer synthetic-key' },
+          body: '{"model":"test-model","stream":true}',
+        },
+        (event) => events.push(event)
+      )
+    ).resolves.toBeUndefined()
+    expect(events).toEqual([
+      expect.objectContaining({ type: 'response', status: 200 }),
+      expect.objectContaining({ type: 'data', data: 'data: [DONE]\n\n' }),
+      expect.objectContaining({ type: 'complete' }),
+    ])
     await expect(
-      client.directGatewayRequest({ url: 'https://example.com/v1/responses', method: 'GET' })
+      client.streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000002',
+        { url: 'https://example.com/v1/responses', method: 'GET' },
+        () => undefined
+      )
     ).rejects.toMatchObject({ code: 'GATEWAY_ERROR' })
   })
 
-  it('coalesces identical gateway POST requests while the first request is in flight', async () => {
+  it('emits the first stream chunk before the request completes', async () => {
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+      },
+    })
+    const client = new Sub2ApiClient(
+      new Sub2ApiSession(),
+      vi.fn(async () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }))
+    )
+    const events: Sub2ApiDirectGatewayStreamEvent[] = []
+    let completed = false
+    const pending = client
+      .streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000003',
+        { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+        (event) => events.push(event)
+      )
+      .then(() => {
+        completed = true
+      })
+
+    await vi.waitFor(() => expect(events[0]).toMatchObject({ type: 'response' }))
+    streamController?.enqueue(new TextEncoder().encode('data: {"type":"response.output_text.delta"}\n\n'))
+    await vi.waitFor(() => expect(events.some((event) => event.type === 'data')).toBe(true))
+    expect(completed).toBe(false)
+
+    streamController?.enqueue(new TextEncoder().encode('data: {"type":"response.completed"}\n\n'))
+    await expect(pending).resolves.toBeUndefined()
+    expect(events.at(-1)).toMatchObject({ type: 'complete' })
+  })
+
+  it('treats an SSE disconnect without a terminal provider event as one failure', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response('data: {"type":"response.output_text.delta"}\n\n', {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const events: Sub2ApiDirectGatewayStreamEvent[] = []
+
+    await expect(
+      client.streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000011',
+        { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+        (event) => events.push(event)
+      )
+    ).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
+
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+    expect(events.some((event) => event.type === 'complete')).toBe(false)
+  })
+
+  it('rejects a request ID replay after a transport failure without another fetch', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(() => Promise.reject(new Error('connection failed')))
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const requestId = '00000000-0000-4000-8000-000000000019'
+    const request = {
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST' as const,
+      body: '{"stream":true}',
+    }
+
+    await expect(client.streamDirectGatewayRequest(requestId, request, () => undefined)).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+    })
+    await expect(client.streamDirectGatewayRequest(requestId, request, () => undefined)).rejects.toMatchObject({
+      code: 'REQUEST_ID_REPLAY',
+    })
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
+
+  it('reuses the promise for the same request ID without a second fetch', async () => {
     let resolveFetch = (_response: Response) => {}
     const fetchImplementation = vi.fn<typeof fetch>(
       () =>
@@ -172,77 +263,274 @@ describe('Sub2ApiClient', () => {
       body: '{"model":"test-model","input":"hi","stream":true}',
     }
 
-    const first = client.directGatewayRequest(request)
-    const duplicate = client.directGatewayRequest(request)
+    const requestId = '00000000-0000-4000-8000-000000000004'
+    const first = client.streamDirectGatewayRequest(requestId, request, () => undefined)
+    const duplicate = client.streamDirectGatewayRequest(requestId, request, () => undefined)
 
+    await Promise.resolve()
+    expect(duplicate).toBe(first)
     expect(fetchImplementation).toHaveBeenCalledOnce()
     resolveFetch(new Response('data: [DONE]\n\n', { status: 200 }))
-    await expect(Promise.all([first, duplicate])).resolves.toEqual([
-      expect.objectContaining({ status: 200, body: 'data: [DONE]\n\n' }),
-      expect.objectContaining({ status: 200, body: 'data: [DONE]\n\n' }),
-    ])
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined])
   })
 
-  it('replays a recent identical gateway POST response without sending again', async () => {
-    const fetchImplementation = vi.fn<typeof fetch>(async () => new Response('data: [DONE]\n\n', { status: 200 }))
+  it('rejects a conflicting body for an active request ID without another fetch', async () => {
+    let resolveFetch = (_response: Response) => {}
+    const fetchImplementation = vi.fn<typeof fetch>(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        })
+    )
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
-    const request = {
-      url: 'https://naonaoai.shop/v1/responses',
-      method: 'POST' as const,
-      headers: { Authorization: 'Bearer synthetic-key' },
-      body: '{"model":"test-model","input":"hi","stream":true}',
-    }
+    const requestId = '00000000-0000-4000-8000-000000000016'
+    const first = client.streamDirectGatewayRequest(
+      requestId,
+      {
+        url: 'https://naonaoai.shop/v1/responses',
+        method: 'POST',
+        body: '{"model":"test-model","input":"first","stream":true}',
+      },
+      () => undefined
+    )
 
-    const first = await client.directGatewayRequest(request)
-    const duplicate = await client.directGatewayRequest(request)
-
-    expect(duplicate).toEqual(first)
+    await expect(
+      client.streamDirectGatewayRequest(
+        requestId,
+        {
+          url: 'https://naonaoai.shop/v1/responses',
+          method: 'POST',
+          body: '{"model":"test-model","input":"different","stream":true}',
+        },
+        () => undefined
+      )
+    ).rejects.toMatchObject({ code: 'REQUEST_ID_CONFLICT' })
     expect(fetchImplementation).toHaveBeenCalledOnce()
+
+    resolveFetch(new Response('data: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+    await expect(first).resolves.toBeUndefined()
   })
 
-  it('sends changed or expired gateway POST requests normally', async () => {
-    vi.useFakeTimers()
-    const fetchImplementation = vi.fn<typeof fetch>(async () => new Response('data: [DONE]\n\n', { status: 200 }))
+  it('streams independent request IDs concurrently without queuing either request', async () => {
+    let firstStreamController: ReadableStreamDefaultController<Uint8Array> | undefined
+    const firstStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        firstStreamController = controller
+      },
+    })
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(firstStream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      )
+      .mockResolvedValueOnce(
+        new Response('data: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      )
     const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
     const request = {
       url: 'https://naonaoai.shop/v1/responses',
       method: 'POST' as const,
-      headers: { Authorization: 'Bearer synthetic-key' },
-      body: '{"model":"test-model","input":"hi","stream":true}',
+      body: '{"model":"test-model","input":"first","stream":true}',
     }
 
-    await client.directGatewayRequest(request)
-    await client.directGatewayRequest({ ...request, body: '{"model":"test-model","input":"next","stream":true}' })
-    await vi.advanceTimersByTimeAsync(20_001)
-    await client.directGatewayRequest(request)
+    const first = client.streamDirectGatewayRequest('00000000-0000-4000-8000-000000000005', request, () => undefined)
+    const secondRequestId = '00000000-0000-4000-8000-000000000006'
+    const second = client.streamDirectGatewayRequest(
+      secondRequestId,
+      { ...request, body: '{"model":"test-model","input":"second","stream":true}' },
+      () => undefined
+    )
 
+    await expect(second).resolves.toBeUndefined()
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    firstStreamController?.enqueue(new TextEncoder().encode('data: {"type":"response.output_text.delta"}\n\n'))
+    await Promise.resolve()
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+
+    firstStreamController?.enqueue(new TextEncoder().encode('data: {"type":"response.completed"}\n\n'))
+    await expect(first).resolves.toBeUndefined()
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+
+    await expect(client.streamDirectGatewayRequest(secondRequestId, request, () => undefined)).rejects.toMatchObject({
+      code: 'REQUEST_ID_REPLAY',
+    })
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a concurrent request independent from another request transport failure', async () => {
+    let rejectFirst = (_error: Error) => {}
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFirst = reject
+          })
+      )
+      .mockResolvedValueOnce(
+        new Response('data: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      )
+      .mockResolvedValueOnce(
+        new Response('data: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const request = {
+      url: 'https://naonaoai.shop/v1/responses',
+      method: 'POST' as const,
+      body: '{"model":"test-model","input":"first","stream":true}',
+    }
+
+    const first = client.streamDirectGatewayRequest('00000000-0000-4000-8000-000000000007', request, () => undefined)
+    const second = client.streamDirectGatewayRequest(
+      '00000000-0000-4000-8000-000000000008',
+      { ...request, body: '{"model":"test-model","input":"second","stream":true}' },
+      () => undefined
+    )
+
+    await expect(second).resolves.toBeUndefined()
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    rejectFirst(new Error('connection failed'))
+    await expect(first).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+
+    await expect(
+      client.streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000013',
+        { ...request, body: '{"model":"test-model","input":"explicit-retry","stream":true}' },
+        () => undefined
+      )
+    ).resolves.toBeUndefined()
     expect(fetchImplementation).toHaveBeenCalledTimes(3)
   })
 
-  it('allows an established streaming gateway response to finish after the connect timeout', async () => {
-    vi.useFakeTimers()
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        setTimeout(() => {
-          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
-          controller.close()
-        }, 30_001)
-      },
-    })
-    const client = new Sub2ApiClient(
-      new Sub2ApiSession(),
-      vi.fn(async () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }))
+  it('cancels only the matching request while another request remains active', async () => {
+    const signals: AbortSignal[] = []
+    const resolvers: Array<(response: Response) => void> = []
+    const fetchImplementation = vi.fn<typeof fetch>(
+      (_input, init) =>
+        new Promise<Response>((resolve, reject) => {
+          if (init?.signal) signals.push(init.signal)
+          resolvers.push(resolve)
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')))
+        })
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const firstId = '00000000-0000-4000-8000-000000000017'
+    const secondId = '00000000-0000-4000-8000-000000000018'
+    const first = client.streamDirectGatewayRequest(
+      firstId,
+      { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"input":"first","stream":true}' },
+      () => undefined
+    )
+    const second = client.streamDirectGatewayRequest(
+      secondId,
+      { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"input":"second","stream":true}' },
+      () => undefined
     )
 
-    const responsePromise = client.directGatewayRequest({
-      url: 'https://naonaoai.shop/v1/responses',
-      method: 'POST',
-      body: '{"stream":true}',
-    })
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(30_001)
+    await vi.waitFor(() => expect(signals).toHaveLength(2))
+    client.cancelDirectGatewayRequest(firstId)
 
-    await expect(responsePromise).resolves.toMatchObject({ status: 200, body: 'data: [DONE]\n\n' })
+    await expect(first).rejects.toMatchObject({ code: 'REQUEST_CANCELLED' })
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+    resolvers[1](new Response('data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }))
+    await expect(second).resolves.toBeUndefined()
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects the same request ID after completion without a second fetch', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response('data: [DONE]\n\n', {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const requestId = '00000000-0000-4000-8000-000000000014'
+    const request = { url: 'https://naonaoai.shop/v1/responses', method: 'POST' as const, body: '{"stream":true}' }
+
+    await expect(client.streamDirectGatewayRequest(requestId, request, () => undefined)).resolves.toBeUndefined()
+    await expect(client.streamDirectGatewayRequest(requestId, request, () => undefined)).rejects.toMatchObject({
+      code: 'REQUEST_ID_REPLAY',
+    })
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
+
+  it('rejects an empty SSE response without a provider terminal event', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response(null, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+
+    await expect(
+      client.streamDirectGatewayRequest(
+        '00000000-0000-4000-8000-000000000015',
+        { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+        () => undefined
+      )
+    ).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
+
+  it('does not abort or resend a gateway request while waiting for response headers', async () => {
+    vi.useFakeTimers()
+    let resolveResponse: ((response: Response) => void) | undefined
+    let requestSignal: AbortSignal | null | undefined
+    const fetchImplementation = vi.fn<typeof fetch>((_input, init) => {
+      requestSignal = init?.signal
+      return new Promise<Response>((resolve) => {
+        resolveResponse = resolve
+      })
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+
+    const responsePromise = client.streamDirectGatewayRequest(
+      '00000000-0000-4000-8000-000000000009',
+      { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+      () => undefined
+    )
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(180_001)
+
+    expect(requestSignal?.aborted).toBe(false)
+    resolveResponse?.(new Response('data: [DONE]\n\n', { status: 200 }))
+    await expect(responsePromise).resolves.toBeUndefined()
+    expect(fetchImplementation).toHaveBeenCalledOnce()
+  })
+
+  it('cancels the matching main-process fetch without sending another request', async () => {
+    let requestSignal: AbortSignal | null | undefined
+    const fetchImplementation = vi.fn<typeof fetch>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          requestSignal = init?.signal
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')))
+        })
+    )
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    const requestId = '00000000-0000-4000-8000-000000000010'
+    const pending = client.streamDirectGatewayRequest(
+      requestId,
+      { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+      () => undefined
+    )
+
+    await vi.waitFor(() => expect(requestSignal).toBeDefined())
+    client.cancelDirectGatewayRequest(requestId)
+
+    await expect(pending).rejects.toMatchObject({ code: 'REQUEST_CANCELLED' })
+    expect(requestSignal?.aborted).toBe(true)
+    await expect(
+      client.streamDirectGatewayRequest(
+        requestId,
+        { url: 'https://naonaoai.shop/v1/responses', method: 'POST', body: '{"stream":true}' },
+        () => undefined
+      )
+    ).rejects.toMatchObject({ code: 'REQUEST_ID_REPLAY' })
+    expect(fetchImplementation).toHaveBeenCalledOnce()
   })
 
   it('restores an opted-in session without sending the UI preference to sub2api', async () => {
@@ -442,13 +730,15 @@ describe('Sub2ApiClient', () => {
       apiHost: 'https://naonaoai.shop/v1',
       models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
     })
-    await expect(client.prepareInfiniteCanvasImport(7, 'image')).resolves.toEqual({
+    await expect(client.prepareInfiniteCanvasImport(7)).resolves.toEqual({
       keyId: 7,
       keyName: 'desktop-key',
       baseUrl: 'https://naonaoai.shop',
       apiKey: 'synthetic-user-api-key',
-      capability: 'image',
-      models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
+      models: [
+        { id: 'gpt-test', capability: 'text' },
+        { id: 'codex-test', capability: 'text' },
+      ],
     })
     await expect(client.deleteApiKey(7)).resolves.toBeUndefined()
 
@@ -467,6 +757,22 @@ describe('Sub2ApiClient', () => {
     expect(
       requests.find((request) => request.method === 'PUT' && request.url.endsWith('/api/v1/keys/7'))?.body
     ).toEqual({ name: 'renamed-key', group_id: 4 })
+  })
+
+  it('rejects a Canvas import when the selected key returns no models', async () => {
+    const fetchImplementation = vi.fn((input: string | URL | Request) => {
+      const url = input.toString()
+      if (url.endsWith('/auth/login')) return Promise.resolve(authSuccess('panel-access', 'panel-refresh'))
+      if (url.endsWith('/api/v1/keys/7')) return Promise.resolve(success(apiKeyRecord))
+      if (url.endsWith('/v1/models')) return Promise.resolve(jsonResponse({ object: 'list', data: [] }))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const client = new Sub2ApiClient(new Sub2ApiSession(), fetchImplementation)
+    await client.login({ email: 'user@example.test', password: 'synthetic-password' })
+
+    await expect(client.prepareInfiniteCanvasImport(7)).rejects.toThrow(
+      'The selected API key did not return any importable models'
+    )
   })
 
   it('uses panel JWT for read-only usage and subscription summaries', async () => {

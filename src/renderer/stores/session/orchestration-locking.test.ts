@@ -55,7 +55,11 @@ describe('paused tool-call generation entry-point locking', () => {
     await run('session-1', 'message-1', 'tool-1')
 
     expect(withSessionGenerationLockMock).toHaveBeenCalledOnce()
-    expect(withSessionGenerationLockMock).toHaveBeenCalledWith('session-1', expect.any(Function))
+    expect(withSessionGenerationLockMock).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Function),
+      expect.stringContaining('message-1:tool-1')
+    )
   })
 
   it.each([

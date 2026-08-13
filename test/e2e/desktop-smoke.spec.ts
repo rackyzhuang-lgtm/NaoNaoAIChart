@@ -4,7 +4,7 @@ import path from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
 
 test('launches the branded desktop shell and opens the account setup entry', async () => {
-  const userDataDir = mkdtempSync(path.join(tmpdir(), 'naonao-e2e-'))
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'naonaoai-e2e-'))
   const mainEntry = path.resolve(__dirname, '../../release/app/dist/main/main.js')
   let electronApp: Awaited<ReturnType<typeof electron.launch>> | undefined
 

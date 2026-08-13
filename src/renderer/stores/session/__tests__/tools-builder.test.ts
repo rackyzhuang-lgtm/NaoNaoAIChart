@@ -13,8 +13,11 @@ const {
   buildCodeExecutionToolsMock,
   getSessionAttachmentRagToolSetMock,
   skillsChangedListeners,
+  requestAppActionApprovalMock,
   requestUserExecApprovalMock,
   userExecMock,
+  webSearchExecuteMock,
+  parseLinkExecuteMock,
 } = vi.hoisted(() => ({
   discoverSkillsMock: vi.fn(),
   installFromSandboxMock: vi.fn(),
@@ -32,8 +35,11 @@ const {
   buildCodeExecutionToolsMock: vi.fn(),
   getSessionAttachmentRagToolSetMock: vi.fn(),
   skillsChangedListeners: new Set<() => void>(),
+  requestAppActionApprovalMock: vi.fn(),
   requestUserExecApprovalMock: vi.fn(),
   userExecMock: vi.fn(),
+  webSearchExecuteMock: vi.fn(),
+  parseLinkExecuteMock: vi.fn(),
 }))
 
 vi.hoisted(() => {
@@ -84,6 +90,10 @@ vi.mock('@/packages/user-exec-approval', () => ({
   requestUserExecApproval: requestUserExecApprovalMock,
 }))
 
+vi.mock('@/packages/app-action-approval', () => ({
+  requestAppActionApproval: requestAppActionApprovalMock,
+}))
+
 vi.mock('@/stores/settingsStore', () => ({
   settingsStore: {
     getState: () => ({
@@ -120,8 +130,16 @@ vi.mock('@/packages/model-calls/toolsets/web-search', () => {
     default: { description: 'web search toolset' },
     getToolSetDescription: ({ includeParseLink }: { includeParseLink: boolean }) =>
       includeParseLink ? 'web search toolset\n## parse_link' : 'web search toolset',
-    webSearchTool: tool({ description: 'web_search', inputSchema: z.object({}), execute: async () => ({}) }),
-    parseLinkTool: tool({ description: 'parse_link', inputSchema: z.object({}), execute: async () => ({}) }),
+    webSearchTool: tool({
+      description: 'web_search',
+      inputSchema: z.object({}),
+      execute: webSearchExecuteMock,
+    }),
+    parseLinkTool: tool({
+      description: 'parse_link',
+      inputSchema: z.object({}),
+      execute: parseLinkExecuteMock,
+    }),
   }
 })
 
@@ -227,7 +245,10 @@ beforeEach(() => {
     tools: { query_session_attachment: { execute: async () => ({}) } },
   })
   requestUserExecApprovalMock.mockResolvedValue('ai')
+  requestAppActionApprovalMock.mockResolvedValue(true)
   userExecMock.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' })
+  webSearchExecuteMock.mockResolvedValue({ results: [] })
+  parseLinkExecuteMock.mockResolvedValue({ content: '' })
   installFromSandboxMock.mockResolvedValue({ success: true, skillName: 'new-skill' })
   discoverSkillsMock.mockResolvedValue([
     { name: 'test-skill', description: 'A test skill' },
@@ -360,6 +381,102 @@ describe('buildToolsForSession', () => {
     expect(result.instructions).not.toContain('## parse_link')
   })
 
+  test('ask policy pauses before web_search and does not start the internet request', async () => {
+    const pause = Object.assign(new Error('approval required'), { name: 'AppActionApprovalPausedError' })
+    requestAppActionApprovalMock.mockRejectedValueOnce(pause)
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+      sessionSettings: { agentApprovalPolicy: 'ask' },
+    })
+    if (!result.tools.web_search.execute) throw new Error('web_search execute missing')
+
+    await expect(
+      result.tools.web_search.execute({ query: 'current weather' }, {
+        toolCallId: 'tool-call-web-ask',
+        messages: [],
+      } as never)
+    ).rejects.toBe(pause)
+
+    expect(requestAppActionApprovalMock).toHaveBeenCalledWith(
+      'tool-call-web-ask',
+      'internet.web_search',
+      'Approval required before using the internet.',
+      expect.stringContaining('current weather')
+    )
+    expect(webSearchExecuteMock).not.toHaveBeenCalled()
+  })
+
+  test('resumed ask policy executes web_search without requesting approval again', async () => {
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+      sessionSettings: { agentApprovalPolicy: 'ask' },
+    })
+    if (!result.tools.web_search.execute) throw new Error('web_search execute missing')
+    const toolOptions = {
+      toolCallId: 'tool-call-web-approved',
+      messages: [],
+      approved: true,
+    } as never
+
+    await expect(result.tools.web_search.execute({ query: 'approved query' }, toolOptions)).resolves.toEqual({
+      results: [],
+    })
+
+    expect(requestAppActionApprovalMock).not.toHaveBeenCalled()
+    expect(webSearchExecuteMock).toHaveBeenCalledWith({ query: 'approved query' }, toolOptions)
+  })
+
+  test.each(['risk', 'full'] as const)(
+    '%s policy executes enabled web_search without per-call approval',
+    async (agentApprovalPolicy) => {
+      const result = await buildToolsForSession(createMockModel(), {
+        webBrowsing: true,
+        messages: [],
+        agentMode: 'off',
+        sessionSettings: { agentApprovalPolicy },
+      })
+      if (!result.tools.web_search.execute) throw new Error('web_search execute missing')
+      const toolOptions = { toolCallId: `tool-call-web-${agentApprovalPolicy}`, messages: [] } as never
+
+      await result.tools.web_search.execute({ query: `${agentApprovalPolicy} query` }, toolOptions)
+
+      expect(requestAppActionApprovalMock).not.toHaveBeenCalled()
+      expect(webSearchExecuteMock).toHaveBeenCalledWith({ query: `${agentApprovalPolicy} query` }, toolOptions)
+    }
+  )
+
+  test('ask policy also pauses before parse_link', async () => {
+    webSearchProvider.current = 'tavily'
+    const pause = Object.assign(new Error('approval required'), { name: 'AppActionApprovalPausedError' })
+    requestAppActionApprovalMock.mockRejectedValueOnce(pause)
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+      sessionSettings: { agentApprovalPolicy: 'ask' },
+    })
+    if (!result.tools.parse_link.execute) throw new Error('parse_link execute missing')
+
+    await expect(
+      result.tools.parse_link.execute({ url: 'https://example.com' }, {
+        toolCallId: 'tool-call-link-ask',
+        messages: [],
+      } as never)
+    ).rejects.toBe(pause)
+
+    expect(requestAppActionApprovalMock).toHaveBeenCalledWith(
+      'tool-call-link-ask',
+      'internet.parse_link',
+      'Approval required before using the internet.',
+      expect.stringContaining('https://example.com')
+    )
+    expect(parseLinkExecuteMock).not.toHaveBeenCalled()
+  })
+
   test('agentMode="on" without codeExecution — load_skill only, no code-exec tools', async () => {
     const model = createMockModel()
     const options: BuildToolsOptions = {
@@ -460,7 +577,8 @@ describe('buildToolsForSession', () => {
       'tool-call-2',
       'touch /tmp/needs-approval',
       expect.any(Object),
-      undefined
+      undefined,
+      'ask'
     )
     expect(userExecMock).toHaveBeenCalledWith('touch /tmp/needs-approval', {
       sessionId: undefined,
@@ -468,6 +586,55 @@ describe('buildToolsForSession', () => {
       approvalSource: 'ai',
     })
     expect(trackAgentModeFullAccessBypassMock).not.toHaveBeenCalled()
+  })
+
+  test('ask policy always requests user_exec approval, including safe commands', async () => {
+    const model = createMockModel()
+    const result = await buildToolsForSession(model, {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'on',
+      sessionSettings: { agentApprovalPolicy: 'ask' },
+    })
+    if (!result.tools.user_exec.execute) throw new Error('user_exec execute missing')
+
+    await result.tools.user_exec.execute({ command: 'pwd' }, {
+      toolCallId: 'tool-call-ask',
+      messages: [],
+    } as never)
+
+    expect(requestUserExecApprovalMock).toHaveBeenCalledWith(
+      'tool-call-ask',
+      'pwd',
+      expect.any(Object),
+      undefined,
+      'ask'
+    )
+  })
+
+  test('risk policy preserves automatic approval for safe commands', async () => {
+    const model = createMockModel()
+    requestUserExecApprovalMock.mockResolvedValueOnce('whitelist')
+    const result = await buildToolsForSession(model, {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'on',
+      sessionSettings: { agentApprovalPolicy: 'risk' },
+    })
+    if (!result.tools.user_exec.execute) throw new Error('user_exec execute missing')
+
+    await result.tools.user_exec.execute({ command: 'pwd' }, {
+      toolCallId: 'tool-call-risk',
+      messages: [],
+    } as never)
+
+    expect(requestUserExecApprovalMock).toHaveBeenCalledWith(
+      'tool-call-risk',
+      'pwd',
+      expect.any(Object),
+      undefined,
+      'risk'
+    )
   })
 
   test('records whitelist auto-approval as the execution source', async () => {

@@ -73,8 +73,17 @@ describe('initData', () => {
 
     await initData()
 
-    expect(storageMock.setItemNow).toHaveBeenCalled()
-    expect(metaStorage.createMany).toHaveBeenCalled()
+    expect(storageMock.setItemNow).toHaveBeenCalledTimes(1)
+    expect(storageMock.setItemNow).toHaveBeenCalledWith('session:default-session', {
+      id: 'default-session',
+      name: 'Default Session',
+      messages: [],
+      type: 'chat',
+    })
+    expect(metaStorage.createMany).toHaveBeenCalledTimes(1)
+    const [records] = metaStorage.createMany.mock.calls[0]
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ id: 'default-session', name: 'Default Session', type: 'chat' })
   })
 })
 

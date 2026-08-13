@@ -1,5 +1,5 @@
-import type { SentryAdapter } from '../utils/sentry_adapter'
 import type { OAuthCredentials } from '../oauth/types'
+import type { SentryAdapter } from '../utils/sentry_adapter'
 
 export interface ApiRequestOptions {
   url: string
@@ -9,6 +9,8 @@ export interface ApiRequestOptions {
   useProxy?: boolean
   signal?: AbortSignal
   retry?: number
+  /** Stable ID assigned by the logical generation for a fixed-gateway POST. */
+  requestId?: string
 }
 
 export interface StorageAdapter {

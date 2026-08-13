@@ -1214,7 +1214,7 @@ const PausedToolCallDetails: FC<{ part: MessageToolCallPart } & ToolCallActionCo
         : pauseReason?.type === 'file_mutation_approval'
           ? t('Approval required before modifying files.')
           : pauseReason?.type === 'app_action_approval'
-            ? pauseReason.title
+            ? t(pauseReason.title)
             : t('Tool execution is paused.')
   const payload =
     pauseReason?.type === 'user_exec_approval'

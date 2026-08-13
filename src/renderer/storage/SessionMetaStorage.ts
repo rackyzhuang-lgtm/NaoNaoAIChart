@@ -29,9 +29,11 @@ export interface SessionMetaStorage extends SessionMetaRepositoryPort {
 export { sortSessionRecords }
 
 function sortArchivedSessionRecords(records: SessionMetaRecord[]): SessionMetaRecord[] {
-  return records
-    .filter((record) => record.archivedAt !== undefined)
-    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+  return records.filter(isArchivedSessionRecord).sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+}
+
+function isArchivedSessionRecord(record: SessionMetaRecord): boolean {
+  return record.status === 'archived' || record.archivedAt !== undefined
 }
 
 export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
@@ -169,7 +171,7 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
   async getAll(): Promise<SessionMetaRecord[]> {
     await this.initialize()
     const records = await this.getAllRecords()
-    return sortSessionRecords(records)
+    return sortSessionRecords(records.filter((record) => !isArchivedSessionRecord(record)))
   }
 
   async getAllIncludingHidden(): Promise<SessionMetaRecord[]> {
@@ -186,23 +188,11 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
 
   async getArchivedPage(cursor: number = 0, limit: number = DEFAULT_PAGE_SIZE): Promise<SessionMetaPage> {
     await this.initialize()
-    if (!this.hasIndex('archivedAt')) {
-      const all = await this.getArchived()
-      const items = all.slice(cursor, cursor + limit)
-      const nextCursor = cursor + items.length < all.length ? cursor + items.length : null
-      return { items, nextCursor, total: all.length }
-    }
-
-    const [items, total] = await Promise.all([
-      this.getRecordsPage({
-        cursor,
-        limit,
-        indexName: 'archivedAt',
-        direction: 'prev',
-        filter: (record) => record.archivedAt !== undefined,
-      }),
-      this.getArchivedTotal(),
-    ])
+    // Scan and filter records instead of relying solely on the archivedAt index.
+    // This keeps status-only records (from interrupted/legacy migrations) visible.
+    const all = await this.getArchived()
+    const items = all.slice(cursor, cursor + limit)
+    const total = all.length
     const nextCursor = cursor + items.length < total ? cursor + items.length : null
     return { items, nextCursor, total }
   }
@@ -233,7 +223,7 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
 
   async getTotal(): Promise<number> {
     await this.initialize()
-    return await this.countRecords((record) => !record.hidden)
+    return await this.countRecords((record) => !record.hidden && !isArchivedSessionRecord(record))
   }
 
   async getAllTotal(): Promise<number> {
@@ -248,7 +238,7 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
 
   async getArchivedTotal(): Promise<number> {
     await this.initialize()
-    return await this.countRecords((record) => record.archivedAt !== undefined)
+    return await this.countRecords(isArchivedSessionRecord)
   }
 
   private async getVisibleRecordsPage(cursor: number, limit: number): Promise<SessionMetaRecord[]> {
@@ -262,7 +252,7 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
       limit,
       indexName: 'sortOrder',
       direction: 'prev',
-      filter: (record) => !record.hidden && record.starred === true,
+      filter: (record) => !record.hidden && !isArchivedSessionRecord(record) && record.starred === true,
     })
 
     if (items.length < limit) {
@@ -273,7 +263,7 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
         limit,
         indexName: 'sortOrder',
         direction: 'prev',
-        filter: (record) => !record.hidden && record.starred !== true,
+        filter: (record) => !record.hidden && !isArchivedSessionRecord(record) && record.starred !== true,
       })
     }
 

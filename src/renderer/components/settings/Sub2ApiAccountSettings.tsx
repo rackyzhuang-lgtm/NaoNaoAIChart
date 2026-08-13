@@ -35,11 +35,14 @@ import type { TFunction } from 'i18next'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { settingsStore } from '@/stores/settingsStore'
 import Sub2ApiAnnouncements from './Sub2ApiAnnouncements'
 import Sub2ApiChannelMonitors from './Sub2ApiChannelMonitors'
+import Sub2ApiKeyOnboardingModal from './Sub2ApiKeyOnboardingModal'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
 import Sub2ApiRedeem from './Sub2ApiRedeem'
 import Sub2ApiUsageSummary from './Sub2ApiUsageSummary'
+import { hasUsableSub2ApiChatProvider } from './sub2api-provider-binding'
 
 type AccountPhase = 'loading' | 'signed_out' | 'register' | 'two_factor' | 'signed_in' | 'error'
 
@@ -87,6 +90,15 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [keyOnboardingOpened, setKeyOnboardingOpened] = useState(false)
+
+  const completeExplicitAuthentication = useCallback((authenticatedUser: Sub2ApiUser) => {
+    setUser(authenticatedUser)
+    setPhase('signed_in')
+    if (!hasUsableSub2ApiChatProvider(settingsStore.getState())) {
+      setKeyOnboardingOpened(true)
+    }
+  }, [])
 
   const handleApiFailure = useCallback(
     (caught: unknown) => {
@@ -96,6 +108,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       }
       if (descriptor.kind === 'session_expired') {
         setUser(null)
+        setKeyOnboardingOpened(false)
         setError(null)
         setNotice(t('Your session expired. Please sign in again.'))
         setPhase('signed_out')
@@ -212,8 +225,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       if (result.status === 'two_factor_required') {
         setPhase('two_factor')
       } else {
-        setUser(result.user)
-        setPhase('signed_in')
+        completeExplicitAuthentication(result.user)
       }
     } catch (loginError) {
       setError(getSafeErrorMessage(loginError, t, t('Unable to sign in. Check your email and password.')))
@@ -309,8 +321,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       if (result.status === 'authenticated') {
         setPassword('')
         setVerificationCode('')
-        setUser(result.user)
-        setPhase('signed_in')
+        completeExplicitAuthentication(result.user)
       }
     } catch (registerError) {
       setError(getSafeErrorMessage(registerError, t, t('Unable to create the account.')))
@@ -330,8 +341,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       const result = await accountApi.completeTwoFactor(totpCode)
       if (result.status === 'authenticated') {
         setTotpCode('')
-        setUser(result.user)
-        setPhase('signed_in')
+        completeExplicitAuthentication(result.user)
       }
     } catch (twoFactorError) {
       setError(getSafeErrorMessage(twoFactorError, t, t('Unable to verify the code right now. Please try again.')))
@@ -349,6 +359,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       await accountApi.logout()
       setTotpCode('')
       setError(null)
+      setKeyOnboardingOpened(false)
       setPhase('signed_out')
     } finally {
       setBusy(false)
@@ -364,6 +375,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
     try {
       await accountApi.logout()
       setUser(null)
+      setKeyOnboardingOpened(false)
       setPhase('signed_out')
     } catch (logoutError) {
       setError(getSafeErrorMessage(logoutError, t, t('Unable to sign out. Please try again.')))
@@ -374,6 +386,13 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
 
   return (
     <Stack p={{ base: 'md', sm: 'xl' }} gap="lg" maw={720}>
+      {accountApi && (
+        <Sub2ApiKeyOnboardingModal
+          api={accountApi}
+          opened={keyOnboardingOpened}
+          onClose={() => setKeyOnboardingOpened(false)}
+        />
+      )}
       <Group justify="space-between" align="center" wrap="nowrap">
         <div>
           <Title order={3}>{t('NaoNaoAI Account')}</Title>

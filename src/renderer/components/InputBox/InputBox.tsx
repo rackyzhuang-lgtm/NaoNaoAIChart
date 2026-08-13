@@ -18,8 +18,10 @@ import {
   IconArrowUp,
   IconChevronRight,
   IconCirclePlus,
+  IconCornerDownRight,
   IconFilePencil,
   IconFolder,
+  IconMessage2Plus,
   IconPhoto,
   IconPlayerStopFilled,
   IconPlus,
@@ -28,7 +30,6 @@ import {
   IconWorldWww,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { useAtom, useAtomValue } from 'jotai'
 import { pick } from 'lodash'
 import type React from 'react'
@@ -65,11 +66,16 @@ import { compactionUIStateMapAtom } from '@/stores/atoms/compactionAtoms'
 import * as chatStore from '@/stores/chatStore'
 import { useSession, useSessionSettings } from '@/stores/chatStore'
 import { useSessionAgentMode } from '@/stores/session/agent-mode'
+import * as goalActions from '@/stores/session/goal'
 import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import { delay } from '@/utils'
 import { trackEvent } from '@/utils/track'
 import {
+  type ConversationMode,
+  type FollowUpIntent,
+  type FollowUpQueueItem,
+  type FollowUpQueueScopeStatus,
   type KnowledgeBase,
   type Message,
   ModelProviderEnum,
@@ -95,11 +101,15 @@ import ModelSelectorV2 from '../ModelSelectorV2'
 import AgentModeButton from './AgentModeButton'
 import { FileMiniCard, getParserTypeLabel, ImageMiniCard } from './Attachments'
 import { getAgentModeUIState } from './agentModeState'
+import ConversationModeButton from './ConversationModeButton'
+import ExecutionPermissionButton from './ExecutionPermissionButton'
+import FollowUpQueueBar from './FollowUpQueueBar'
 import { ImageUploadInput } from './ImageUploadInput'
 import { MessageInputField, type MessageInputFieldRef } from './MessageInputField'
 import { cleanupFile, markFileProcessing, onFileProcessed, storeFilePromise } from './preprocessState'
 import ReasoningControlButton from './ReasoningControlButton'
 import { getTrailingSkillCommand, hasPendingApprovalToolCall, insertSkillCommandText } from './skillCommand'
+import { acquireSubmissionLock, releaseSubmissionLock } from './submissionLock'
 import TokenCountMenu from './TokenCountMenu'
 import { useReasoningControlState } from './useReasoningControlState'
 
@@ -108,10 +118,16 @@ export type InputBoxPayload = {
   needGenerating?: boolean
   onUserMessageReady?: () => void
   settingsPatch?: Partial<SessionSettings>
+  goalObjective?: string
 }
 
 export type InputBoxRef = {
   setQuote: (quote: string) => void
+}
+
+export type QueueFollowUpPayload = Omit<InputBoxPayload, 'onUserMessageReady'> & {
+  intent: FollowUpIntent
+  webBrowsing: boolean
 }
 
 export type InputBoxProps = {
@@ -125,10 +141,42 @@ export type InputBoxProps = {
   fullWidth?: boolean
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
+  followUpBehavior?: FollowUpIntent
+  followUpItems?: FollowUpQueueItem[]
+  followUpQueueStatus?: FollowUpQueueScopeStatus
+  onQueueFollowUp?(payload: QueueFollowUpPayload): Promise<void>
+  onEditFollowUp?(itemId: string, message: Message, intent?: FollowUpIntent): void | Promise<void>
+  onDeleteFollowUp?(itemId: string): void | Promise<void>
+  onReorderFollowUps?(orderedItemIds: string[]): void | Promise<void>
+  onSendFollowUpNow?(itemId: string): void | Promise<void>
+  onOpenFollowUpSideChat?(itemId: string): void | Promise<void>
+  onCloseFollowUpQueue?(): void | Promise<void>
+  onResumeFollowUpQueue?(): void | Promise<void>
   onStopGenerating?(): boolean
   onStartNewThread?(): boolean
   onRollbackThread?(): boolean
   onClickSessionSettings?(): boolean | Promise<boolean>
+}
+
+export async function dispatchInputBoxPayload(options: {
+  generating: boolean
+  payload: InputBoxPayload
+  intent: FollowUpIntent
+  webBrowsing: boolean
+  onSubmit?: InputBoxProps['onSubmit']
+  onQueueFollowUp?: InputBoxProps['onQueueFollowUp']
+}): Promise<'queued' | 'sent'> {
+  if (options.generating) {
+    if (!options.onQueueFollowUp) {
+      throw new Error('Follow-up queue is unavailable for this chat')
+    }
+    const { onUserMessageReady, ...queuePayload } = options.payload
+    await options.onQueueFollowUp({ ...queuePayload, intent: options.intent, webBrowsing: options.webBrowsing })
+    onUserMessageReady?.()
+    return 'queued'
+  }
+  await options.onSubmit?.(options.payload)
+  return 'sent'
 }
 
 function mergeSessionAttachmentStatesIntoFiles(
@@ -211,6 +259,17 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       fullWidth = false,
       onSelectModel,
       onSubmit,
+      followUpBehavior,
+      followUpItems = [],
+      followUpQueueStatus,
+      onQueueFollowUp,
+      onEditFollowUp,
+      onDeleteFollowUp,
+      onReorderFollowUps,
+      onSendFollowUpNow,
+      onOpenFollowUpSideChat,
+      onCloseFollowUpQueue,
+      onResumeFollowUpQueue,
       onStopGenerating,
       onStartNewThread,
       onRollbackThread,
@@ -221,7 +280,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const modelRegistryVersion = useModelRegistryVersion()
 
     const { t } = useTranslation()
-    const navigate = useNavigate()
     const isSmallScreen = useIsSmallScreen()
     const toolbarIconSize = isSmallScreen ? 22 : 18
     const { height: viewportHeight } = useViewportSize()
@@ -237,14 +295,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const sessionWebBrowsingMap = useUIStore((s) => s.sessionWebBrowsingMap)
     const setSessionWebBrowsing = useUIStore((s) => s.setSessionWebBrowsing)
     const updateCurrentWebBrowsingDisplay = useUIStore((s) => s.updateCurrentWebBrowsingDisplay)
-    // Get session-specific value, or use default based on provider (ChatboxAI defaults to true)
+    // New conversations start online. Persisted sessions still use their explicit value.
     const webBrowsingMode = useMemo(() => {
       const sessionValue = sessionWebBrowsingMap[currentSessionId || 'new']
       if (sessionValue !== undefined) {
         return sessionValue
       }
-      // Default: true for ChatboxAI, false for others
-      return model?.provider === ModelProviderEnum.ChatboxAI
+      return currentSessionId === 'new' || model?.provider === ModelProviderEnum.ChatboxAI
     }, [sessionWebBrowsingMap, currentSessionId, model?.provider])
 
     // this is used for keyboard shortcut. if we don't provide this, kbd wont know what to set when it's a new session(it doesnt have provider info)
@@ -377,6 +434,14 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
 
     const { session: currentSession } = useSession(sessionId || null)
     const { sessionSettings: currentSessionMergedSettings } = useSessionSettings(sessionId || null)
+    const effectiveFollowUpBehavior = followUpBehavior ?? currentSessionMergedSettings?.followUpBehavior ?? 'queue'
+    const [conversationMode, setConversationMode] = useState<ConversationMode>('default')
+    const [pendingGoalObjective, setPendingGoalObjective] = useState<string>()
+
+    useEffect(() => {
+      setConversationMode(currentSession?.goal?.status === 'active' ? 'goal' : 'default')
+      setPendingGoalObjective(undefined)
+    }, [currentSessionId, currentSession?.goal?.status])
     const isAwaitingToolApproval = useMemo(
       () => hasPendingApprovalToolCall(currentSession?.messages ?? []),
       [currentSession?.messages]
@@ -416,6 +481,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const [showCompressionModal, setShowCompressionModal] = useState(false)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const isSubmittingRef = useRef(false)
     const [unreadyAttachmentSubmitPrompt, setUnreadyAttachmentSubmitPrompt] = useState<{
       opened: boolean
       count: number
@@ -570,10 +636,12 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       if (!model) {
         return t('Select Model')
       }
-      const modelInfo = (selectedProviderInfo?.models || selectedProviderInfo?.defaultSettings?.models)?.find(
-        (m) => m.modelId === model.modelId
+      const configuredModel = selectedProviderInfo?.models?.find((candidate) => candidate.modelId === model.modelId)
+      const catalogModel = selectedProviderInfo?.defaultSettings?.models?.find(
+        (candidate) => candidate.modelId === model.modelId
       )
-      return `${modelInfo?.nickname || model.modelId}`
+      const officialDisplayName = model.modelId === 'gpt-5.6-sol' ? 'GPT-5.6 Sol' : undefined
+      return `${configuredModel?.nickname || catalogModel?.nickname || officialDisplayName || model.modelId}`
     }, [selectedProviderInfo, model, t])
 
     // When agent mode is on, block models that don't support agent tools in the model selector.
@@ -779,8 +847,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const handleSubmit = async (needGenerating = true, options: SubmitOptions = {}) => {
       if (
         disableSubmit ||
-        generating ||
-        isSubmitting ||
+        (generating && !onQueueFollowUp) ||
+        isSubmittingRef.current ||
         isPreprocessing ||
         isAwaitingToolApproval ||
         hasPreprocessErrors ||
@@ -804,6 +872,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       // Cancel any pending debounce so it won't overwrite the reset after send
       clearTimeout(debouncedUpdateTimerRef.current)
 
+      if (!acquireSubmissionLock(isSubmittingRef)) return
       setIsSubmitting(true)
       try {
         let preprocessedFilesForSubmit = preConstructedMessage.preprocessedFiles
@@ -845,6 +914,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
           console.error('No constructed message available')
           return
         }
+        latestMessage.conversationMode = conversationMode
 
         const messageTextForHistory = latestMessage.contentParts.find((p) => p.type === 'text')?.text || ''
 
@@ -852,6 +922,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
           constructedMessage: latestMessage,
           needGenerating,
           settingsPatch: reasoningSettingsPatch,
+          goalObjective:
+            conversationMode === 'goal' && !currentSession?.goal ? pendingGoalObjective?.trim() : undefined,
           onUserMessageReady: () => {
             messageInputFieldRef.current?.clearDraft()
             draftMessageIdRef.current = undefined
@@ -875,6 +947,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             })
             setShowRollbackThreadButton(false)
             markReasoningSettingsCommitted()
+            if (conversationMode === 'plan') setConversationMode('default')
+            if (conversationMode === 'goal') setPendingGoalObjective(undefined)
             if (platform.type !== 'mobile' && messageTextForHistory) {
               addInputBoxHistory(messageTextForHistory)
             }
@@ -884,13 +958,22 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         // Ensure an in-flight reasoning-level persist has landed before generation reads session settings
         await waitForReasoningPersist()
 
-        await onSubmit?.(params)
-
-        trackingEvent('send_message', { event_category: 'user' })
+        const submissionTarget = await dispatchInputBoxPayload({
+          generating,
+          payload: params,
+          intent: effectiveFollowUpBehavior,
+          webBrowsing: webBrowsingMode,
+          onSubmit,
+          onQueueFollowUp,
+        })
+        if (submissionTarget === 'sent') {
+          trackingEvent('send_message', { event_category: 'user' })
+        }
       } catch (e) {
         console.error('Error submitting message:', e)
         toastActions.add((e as Error)?.message || t('An error occurred while sending the message.'))
       } finally {
+        releaseSubmissionLock(isSubmittingRef)
         setIsSubmitting(false)
       }
     }
@@ -1328,9 +1411,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             <Text size="sm" c="chatbox-tertiary" ta="center">
               {t('This image session is no longer active. Please use the new Image Creator for image generation.')}
             </Text>
-            <Button variant="light" size="xs" onClick={() => navigate({ to: '/image-creator' })}>
-              {t('Go to Image Creator')}
-            </Button>
           </Stack>
         </Box>
       )
@@ -1341,6 +1421,17 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         <input className="hidden" {...getInputProps()} />
         <Stack className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
           {currentSessionId && <CompactionStatus sessionId={currentSessionId} />}
+          <FollowUpQueueBar
+            items={followUpItems}
+            status={followUpQueueStatus}
+            onEdit={onEditFollowUp}
+            onDelete={onDeleteFollowUp}
+            onReorder={onReorderFollowUps}
+            onSendNow={onSendFollowUpNow}
+            onOpenSideChat={onOpenFollowUpSideChat}
+            onCloseQueue={onCloseFollowUpQueue}
+            onResumeQueue={onResumeFollowUpQueue}
+          />
           <Stack
             className={cn(
               'relative rounded-md bg-chatbox-background-secondary justify-between px-3 py-2',
@@ -1401,6 +1492,38 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 onPaste={onPaste}
               />
 
+              {generating && onQueueFollowUp && (
+                <Tooltip
+                  label={effectiveFollowUpBehavior === 'queue' ? t('Queue follow-up') : t('Adjust direction')}
+                  position="top"
+                  withArrow
+                >
+                  <ActionIcon
+                    disabled={
+                      disableSubmit ||
+                      isPreprocessing ||
+                      isSubmitting ||
+                      isCompactionRunning ||
+                      isAwaitingToolApproval ||
+                      hasPreprocessErrors ||
+                      hasBlockedSessionRagFiles
+                    }
+                    size={32}
+                    variant="light"
+                    color="chatbox-brand"
+                    radius="xl"
+                    aria-label={effectiveFollowUpBehavior === 'queue' ? t('Queue follow-up') : t('Adjust direction')}
+                    onClick={() => handleSubmit()}
+                    className="shrink-0 mb-1"
+                  >
+                    <ScalableIcon
+                      icon={effectiveFollowUpBehavior === 'queue' ? IconMessage2Plus : IconCornerDownRight}
+                      size={16}
+                    />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
               {/* Send Button */}
               <ActionIcon
                 disabled={
@@ -1417,6 +1540,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 variant="filled"
                 color={generating ? 'dark' : 'chatbox-brand'}
                 radius="xl"
+                aria-label={generating ? t('Stop generating') : t('Send message')}
                 onClick={generating ? onStopGenerating : () => handleSubmit()}
                 className={cn(
                   'shrink-0 mb-1',
@@ -1680,23 +1804,60 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   onChange={(level) => void handleReasoningLevelChange(level)}
                 />
 
+                <ConversationModeButton
+                  mode={conversationMode}
+                  goal={currentSession?.goal}
+                  pendingGoalObjective={pendingGoalObjective}
+                  iconSize={toolbarIconSize}
+                  disabled={generating || isSubmitting}
+                  onModeChange={setConversationMode}
+                  onCreateGoal={async (objective) => {
+                    if (currentSessionId) {
+                      await goalActions.createGoal(currentSessionId, objective)
+                    } else {
+                      setPendingGoalObjective(objective.trim())
+                    }
+                    setConversationMode('goal')
+                  }}
+                  onPauseGoal={async () => {
+                    if (currentSessionId) await goalActions.pauseGoal(currentSessionId)
+                    setConversationMode('default')
+                  }}
+                  onResumeGoal={async () => {
+                    if (currentSessionId) await goalActions.resumeGoal(currentSessionId)
+                    setConversationMode('goal')
+                  }}
+                  onCompleteGoal={async () => {
+                    if (currentSessionId) await goalActions.completeGoal(currentSessionId)
+                    setConversationMode('default')
+                  }}
+                  onClearGoal={async () => {
+                    if (currentSessionId) await goalActions.clearGoal(currentSessionId)
+                    setPendingGoalObjective(undefined)
+                    setConversationMode('default')
+                  }}
+                />
+
                 {/* Agent Mode Panel - desktop only */}
                 {platform.type === 'desktop' && (
-                  <AgentModeButton
-                    sessionId={currentSessionId || 'new'}
-                    providerId={model?.provider}
-                    modelId={model?.modelId}
-                    iconSize={toolbarIconSize}
-                    modelSupportsAgentMode={model ? modelSupportsAgentMode : true}
-                    webBrowsingMode={webBrowsingMode}
-                    onWebBrowsingChange={(v) => {
-                      setWebBrowsingMode(v)
-                      dom.focusMessageInput()
-                    }}
-                    currentKnowledgeBaseId={knowledgeBase?.id}
-                    onKnowledgeBaseSelect={handleKnowledgeBaseSelect}
-                    onSkillSelect={insertSkillCommand}
-                  />
+                  <>
+                    <AgentModeButton
+                      sessionId={currentSessionId || 'new'}
+                      providerId={model?.provider}
+                      modelId={model?.modelId}
+                      iconSize={toolbarIconSize}
+                      modelSupportsAgentMode={model ? modelSupportsAgentMode : true}
+                      webBrowsingMode={webBrowsingMode}
+                      onWebBrowsingChange={(v) => {
+                        setWebBrowsingMode(v)
+                        dom.focusMessageInput()
+                      }}
+                      currentKnowledgeBaseId={knowledgeBase?.id}
+                      onKnowledgeBaseSelect={handleKnowledgeBaseSelect}
+                      onSkillSelect={insertSkillCommand}
+                    />
+                    <ExecutionPermissionButton sessionId={currentSessionId || 'new'} iconSize={toolbarIconSize} />
+                  </>
                 )}
 
                 {!isSmallScreen &&

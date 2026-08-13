@@ -11,7 +11,6 @@ import {
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconMessageChatbot,
-  IconPhotoPlus,
   IconSearch,
   IconSettingsFilled,
   IconUserCircle,
@@ -84,14 +83,6 @@ export default function Sidebar() {
     }
     trackingEvent('create_new_conversation', { event_category: 'user' })
   }, [navigate, setShowSidebar, isSmallScreen])
-
-  const handleCreateNewPictureSession = useCallback(() => {
-    navigate({ to: '/image-creator' })
-    if (isSmallScreen) {
-      setShowSidebar(false)
-    }
-    trackingEvent('open_image_creator', { event_category: 'user' })
-  }, [isSmallScreen, setShowSidebar, navigate])
 
   const handleOpenInfiniteCanvas = useCallback(() => {
     navigate({ to: '/infinite-canvas' })
@@ -254,10 +245,6 @@ export default function Sidebar() {
             <Button variant="light" fullWidth data-testid="new-chat-button" onClick={handleCreateNewSession}>
               <ScalableIcon icon={IconCirclePlus} className="mr-2" />
               {t('New Chat')}
-            </Button>
-            <Button variant="light" fullWidth data-testid="new-image-button" onClick={handleCreateNewPictureSession}>
-              <ScalableIcon icon={IconPhotoPlus} className="mr-2" />
-              {t('Create Image')}
             </Button>
             <Button variant="light" fullWidth data-testid="infinite-canvas-button" onClick={handleOpenInfiniteCanvas}>
               <ScalableIcon icon={IconCode} className="mr-2" />

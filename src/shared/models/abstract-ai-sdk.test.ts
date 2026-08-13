@@ -68,7 +68,7 @@ function createDependencies(): ModelDependencies {
   }
 }
 
-function createModel(apiHost?: string): TestModel {
+function createModel(apiHost?: string, apiPath?: string): TestModel {
   const options = {
     model: {
       modelId: 'test-model',
@@ -76,6 +76,7 @@ function createModel(apiHost?: string): TestModel {
       capabilities: ['tool_use' as const],
     },
     ...(apiHost ? { apiHost } : {}),
+    ...(apiPath ? { apiPath } : {}),
   }
   return new TestModel(options, createDependencies())
 }
@@ -169,10 +170,38 @@ describe('AbstractAISDKModel tool errors', () => {
 describe('AbstractAISDKModel request retry policy', () => {
   it('disables status retries for the fixed sub2api gateway', () => {
     expect(createModel('https://naonaoai.shop/v1').allowsStatusRetryForTests()).toBe(false)
+    expect(createModel('https://naonaoai.shop', '/v1/responses').allowsStatusRetryForTests()).toBe(false)
   })
 
   it('keeps status retries available for other providers', () => {
     expect(createModel('https://api.openai.com/v1').allowsStatusRetryForTests()).toBe(true)
     expect(createModel().allowsStatusRetryForTests()).toBe(true)
+  })
+})
+
+describe('AbstractAISDKModel stream errors', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('extracts a readable message from object-shaped provider errors', async () => {
+    aiMocks.streamText.mockReturnValue({
+      fullStream: (async function* () {
+        yield {
+          type: 'error',
+          error: { error: { message: 'Gateway response timed out' } },
+        }
+      })(),
+      totalUsage: Promise.resolve({ inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+      finishReason: Promise.resolve('error'),
+    })
+
+    const error = await createModel()
+      .chat([], {})
+      .catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('Gateway response timed out')
+    expect((error as Error).message).not.toContain('[object Object]')
   })
 })

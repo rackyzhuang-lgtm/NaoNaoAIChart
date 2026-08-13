@@ -703,12 +703,19 @@ export function mergeSettings(
 export function initEmptyChatSession(): Omit<Session, 'id'> {
   const settings = settingsStore.getState().getSettings()
   const { chat: lastUsedChatModel } = lastUsedModelStore.getState()
+  const chatDefaults = defaults.chatSessionSettings()
   const defaultChatModel = settings.defaultChatModel
     ? {
         provider: settings.defaultChatModel.provider,
         modelId: settings.defaultChatModel.model,
       }
-    : lastUsedChatModel || resolveChatboxLicenseDefaultModel(settings)
+    : lastUsedChatModel ||
+      resolveChatboxLicenseDefaultModel(settings) || {
+        provider: chatDefaults.provider,
+        modelId: chatDefaults.modelId,
+      }
+  const usesProductOpenAIDefault =
+    defaultChatModel.provider === chatDefaults.provider && defaultChatModel.modelId === chatDefaults.modelId
   const newSession: Omit<Session, 'id'> = {
     name: 'Untitled',
     type: 'chat',
@@ -717,7 +724,10 @@ export function initEmptyChatSession(): Omit<Session, 'id'> {
       maxContextMessageCount: settings.maxContextMessageCount ?? Number.MAX_SAFE_INTEGER,
       temperature: settings.temperature || undefined,
       topP: settings.topP || undefined,
+      stream: true,
+      followUpBehavior: settings.followUpBehavior ?? chatDefaults.followUpBehavior,
       ...defaultChatModel,
+      ...(usesProductOpenAIDefault ? { providerOptions: chatDefaults.providerOptions } : {}),
     },
   }
   if (settings.defaultPrompt) {
@@ -745,7 +755,10 @@ export function getSessionMeta(session: SessionMeta) {
     'name',
     'starred',
     'hidden',
+    'status',
+    'lastActivityAt',
     'archivedAt',
+    'archiveSource',
     'assistantAvatarKey',
     'picUrl',
     'backgroundImage',
@@ -762,7 +775,16 @@ function _searchSessions(query: string, s: Session) {
 const SEARCH_PAGE_SIZE = 30
 const SEARCH_RESULT_LIMIT = 50
 
-export async function searchSessions(searchInput: string, sessionId?: string, onResult?: (result: Session[]) => void) {
+export type SearchSessionsOptions = {
+  includeArchived?: boolean
+}
+
+export async function searchSessions(
+  searchInput: string,
+  sessionId?: string,
+  onResult?: (result: Session[]) => void,
+  options: SearchSessionsOptions = {}
+) {
   let matchedMessageTotal = 0
 
   const emitBatch = (batch: Session[]) => {
@@ -783,36 +805,47 @@ export async function searchSessions(searchInput: string, sessionId?: string, on
   }
 
   const metaStorage = await getMetaStorage()
-  let cursor: number | null = 0
+  const visitedSessionIds = new Set<string>()
 
-  while (cursor !== null) {
-    const page = await metaStorage.getPage(cursor, SEARCH_PAGE_SIZE)
+  const scanPages = async (
+    getPage: (cursor: number, limit: number) => Promise<Awaited<ReturnType<typeof metaStorage.getPage>>>
+  ) => {
+    let cursor: number | null = 0
 
-    // Load full sessions for this page in parallel to amortize I/O latency.
-    const sessions = await Promise.all(
-      page.items.map((meta) => storage.getItem<Session | null>(StorageKeyGenerator.session(meta.id), null))
-    )
+    while (cursor !== null && matchedMessageTotal < SEARCH_RESULT_LIMIT) {
+      const page = await getPage(cursor, SEARCH_PAGE_SIZE)
 
-    const batch: Session[] = []
-    for (const session of sessions) {
-      if (!session) continue
-      const messages = _searchSessions(searchInput, session)
-      if (messages.length === 0) continue
-      matchedMessageTotal += messages.length
-      batch.push({ ...session, messages })
+      // Load full sessions for this page in parallel to amortize I/O latency.
+      const sessionIds = page.items.map((meta) => meta.id).filter((id) => !visitedSessionIds.has(id))
+      for (const id of sessionIds) {
+        visitedSessionIds.add(id)
+      }
+      const sessions = await Promise.all(
+        sessionIds.map((id) => storage.getItem<Session | null>(StorageKeyGenerator.session(id), null))
+      )
+
+      const batch: Session[] = []
+      for (const session of sessions) {
+        if (!session) continue
+        const messages = _searchSessions(searchInput, session)
+        if (messages.length === 0) continue
+        matchedMessageTotal += messages.length
+        batch.push({ ...session, messages })
+      }
+      emitBatch(batch)
+
+      cursor = page.nextCursor
+      if (cursor !== null && matchedMessageTotal < SEARCH_RESULT_LIMIT) {
+        // Yield to the event loop so the UI can render progressive results
+        // before we start scanning the next page.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
     }
-    emitBatch(batch)
+  }
 
-    if (matchedMessageTotal >= SEARCH_RESULT_LIMIT) {
-      break
-    }
-
-    cursor = page.nextCursor
-    if (cursor !== null) {
-      // Yield to the event loop so the UI can render progressive results
-      // before we start scanning the next page.
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    }
+  await scanPages((cursor, limit) => metaStorage.getPage(cursor, limit))
+  if (options.includeArchived && matchedMessageTotal < SEARCH_RESULT_LIMIT) {
+    await scanPages((cursor, limit) => metaStorage.getArchivedPage(cursor, limit))
   }
 }
 
@@ -834,7 +867,7 @@ export function getCurrentThreadHistoryHash(s: Session) {
     }
     if (s.messages && s.messages.length > 0) {
       ret[s.messages[0].id] = {
-        id: s.id,
+        id: s.activeThreadId || s.id,
         name: s.threadName || '',
         firstMessageId: s.messages[0].id,
         messageCount: s.messages.length,

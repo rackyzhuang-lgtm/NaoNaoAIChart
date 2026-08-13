@@ -3,7 +3,8 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { assertRendererInvokeChannel } from 'src/shared/electron-ipc-channels'
 import type { ElectronIPC } from 'src/shared/electron-types'
-import { SUB2API_IPC_CHANNELS } from 'src/shared/sub2api/ipc'
+import { type Sub2ApiDirectGatewayStreamEvent, sub2ApiDirectGatewayStreamAckSchema } from 'src/shared/sub2api/contracts'
+import { SUB2API_IPC_CHANNELS, SUB2API_IPC_EVENTS } from 'src/shared/sub2api/ipc'
 
 // export type Channels = 'ipc-example';
 
@@ -14,6 +15,17 @@ function createListener<T extends unknown[]>(channel: string) {
     return () => ipcRenderer.removeListener(channel, handler)
   }
 }
+
+const directGatewayStreamListeners = new Map<string, (event: Sub2ApiDirectGatewayStreamEvent) => void>()
+
+ipcRenderer.on(SUB2API_IPC_EVENTS.directGatewayStream, (_event, streamEvent: Sub2ApiDirectGatewayStreamEvent) => {
+  const listener = directGatewayStreamListeners.get(streamEvent.requestId)
+  if (!listener) return
+  listener(streamEvent)
+  if (streamEvent.type === 'complete' || streamEvent.type === 'error') {
+    directGatewayStreamListeners.delete(streamEvent.requestId)
+  }
+})
 
 const electronHandler: ElectronIPC = {
   invoke: (channel, ...args) => {
@@ -87,9 +99,26 @@ const electronHandler: ElectronIPC = {
     deleteApiKey: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.deleteApiKey, id),
     copyApiKey: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.copyApiKey, id),
     prepareProviderBinding: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareProviderBinding, id),
-    prepareInfiniteCanvasImport: (id, capability) =>
-      ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, id, capability),
-    directGatewayRequest: (request) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.directGatewayRequest, request),
+    prepareInfiniteCanvasImport: (id) => ipcRenderer.invoke(SUB2API_IPC_CHANNELS.prepareInfiniteCanvasImport, id),
+    openDirectGatewayStream: async (requestId, request, onEvent) => {
+      if (directGatewayStreamListeners.has(requestId)) {
+        throw new Error('A direct gateway stream with this request ID is already registered')
+      }
+      directGatewayStreamListeners.set(requestId, onEvent)
+      try {
+        return sub2ApiDirectGatewayStreamAckSchema.parse(
+          await ipcRenderer.invoke(SUB2API_IPC_CHANNELS.startDirectGatewayStream, { requestId, request })
+        )
+      } catch (error) {
+        directGatewayStreamListeners.delete(requestId)
+        throw error
+      }
+    },
+    cancelDirectGatewayStream: (requestId) =>
+      ipcRenderer.invoke(SUB2API_IPC_CHANNELS.cancelDirectGatewayStream, requestId),
+    releaseDirectGatewayStream: (requestId) => {
+      directGatewayStreamListeners.delete(requestId)
+    },
   },
 
   // Auto-updater events

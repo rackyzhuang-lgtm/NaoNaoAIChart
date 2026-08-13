@@ -711,3 +711,36 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 已执行：无限画布定向 Vitest 3 个文件、10 项通过；Node 22 TypeScript、变更文件 Biome 和 `git diff --check` 通过。
 - Electron 手工验收：通过。进入无限画布并新建项目后，Agent 显示“工具列表加载完成，可以开始对话”，输入框已解除禁用。真实线上模型发送未执行。
 - 任务记录：`docs/tasks/0051-infinite-canvas-agent-initialization.md`。
+# EazyAI-Chat 功能同步到 NaoNaoAI（2026-08-13）
+
+- 从只读目录 `D:\project\EazyAI-Chat` 按树差异迁入已选功能；源目录未写入。
+- 保留 NaoNaoAI 品牌、Logo、`https://naonaoai.shop` 主服务、`https://pay.ldxp.cn/shop/naonaoai` 兑换地址、GPL-3.0 和现有发布元数据；`https://eazyai.shop` 仅作为画布次级可信来源及负向 URL 测试数据保留。
+- `corepack pnpm install --frozen-lockfile`、`corepack pnpm check`、`corepack pnpm lint` 和 `git diff --check` 已执行；前三者/后者分别为通过、通过（911 条既有 warning）、通过。
+- 高风险定向 Vitest 用例执行到结束且无断言失败，但 runner 因 worker 意外退出以退出码 1 结束，不能记为通过；全量 Vitest 仍未记为通过。
+- 未执行：桌面 E2E、真实模型请求、打包、推送和 Release。
+- 遗留风险：无限画布独立 typecheck 仍在 `vendor/infinite-canvas/web/src/lib/canvas/canvas-generation-helpers.ts:51` 报告 `node.metadata` 可能为 undefined；该问题未在本轮修改。
+# 清理本地账号与缓存并启动测试客户端（2026-08-13）
+
+- 已停止使用旧用户数据的读取路径，并将 `C:\Users\Administrator\AppData\Roaming\NaoNaoAI Chat` 旧目录移入隔离目录后删除；未修改 `D:\project\EazyAI-Chat`。
+- 旧目录包含约 114 MB 的缓存、IndexedDB、聊天数据库、配置备份和本地凭证相关数据；隔离备份已删除，不再保留旧账号信息。
+- 使用 `corepack pnpm start:clean` 启动全新 Electron 客户端，启动环境同时清理可重建 Chromium 缓存。
+- 验证：renderer `http://localhost:1212/` 返回 HTTP 200，页面标题为 `NaoNaoAI Chat`；新 `config.json` 未发现 `sub2apiAutoLogin`、`authInfo`、`accessToken`、`refreshToken`、`apiKey` 或 `providers` 字段；Electron 进程仍在运行供手工测试。
+- 未执行：账号登录、真实 API Key 请求、真实模型请求和桌面交互点击验收。
+
+## 移除“关于”页 GitHub 入口（2026-08-13）
+
+- 已移除“关于”页的 Github 图标、标题和代码仓库链接，同时删除仅供该入口使用的展示属性；NaoNaoAI 官网 `https://naonaoai.shop/` 和更新检查功能保持不变。
+- 定向 Vitest 2 个文件、6 项通过；`corepack pnpm check`、生产构建和 `git diff --check` 通过。构建保留既有依赖 `eval`、循环分块、Browserslist 数据过期和大 chunk warning。
+- renderer 返回 HTTP 200，Electron 客户端保持运行供手工验收；“关于”页实际点击复核未执行。
+- 未修改 `D:\project\EazyAI-Chat`，未执行推送、打包、标签或 Release 发布。
+- 任务记录：`docs/tasks/0055-remove-about-github.md`。
+
+## NaoNaoAI Chat v1.22.9 发布准备（2026-08-13）
+
+- 项目所有者已授权提交 GitHub 并打包 Release，且明确无需等待远程打包成功；版本已从 `1.22.8` 递增为 `1.22.9`，目标标签为 `v1.22.9`。
+- 发布范围包含当前工作区的 EazyAI 功能同步、NaoNaoAI 品牌保留、“关于”页 GitHub 入口移除、相关测试/ADR 和重新生成的无限画布产物；未修改 `D:\project\EazyAI-Chat`。
+- `corepack pnpm check` 和共享边界检查通过；Biome 退出码 0，0 error、911 条既有 warning；全量 Vitest 291 个文件、2,740 项通过，3 个文件/61 项跳过；生产构建通过；桌面 E2E 1 项通过。
+- 首次全量 Vitest 因本机 `src/node_modules` junction 被误收集而失败；已将 Vitest 排除模式改为匹配任意层级的依赖/发布目录并增加回归测试，重跑后通过。
+- 构建仍保留既有依赖 `eval`、循环分块、Browserslist 数据过期和大 chunk warning；未执行真实账户、真实 API Key 或真实模型请求。
+- GitHub 提交、分支/标签推送和 Release 工作流触发待执行；按用户要求不等待远程 Windows/macOS 打包结果。
+- 任务记录：`docs/tasks/0056-release-v1.22.9.md`。

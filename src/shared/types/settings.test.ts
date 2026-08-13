@@ -34,6 +34,16 @@ describe('SettingsSchema RAG default models', () => {
   })
 })
 
+describe('SettingsSchema follow-up behavior compatibility', () => {
+  test('keeps the field optional for legacy settings and accepts both behaviors', () => {
+    expect(SettingsSchema.parse(defaultSettings()).followUpBehavior).toBe('queue')
+    const legacy = { ...defaultSettings() } as Record<string, unknown>
+    delete legacy.followUpBehavior
+    expect(SettingsSchema.parse(legacy).followUpBehavior).toBeUndefined()
+    expect(SettingsSchema.parse({ ...defaultSettings(), followUpBehavior: 'steer' }).followUpBehavior).toBe('steer')
+  })
+})
+
 describe('SettingsSchema shortcut compatibility', () => {
   test('adds the new thread shortcut when loading settings without the historical key', () => {
     const shortcuts: Record<string, unknown> = { ...defaultSettings().shortcuts }
@@ -107,5 +117,42 @@ describe('SettingsSchema VibeDrop publication history', () => {
     })
 
     expect(parsed.vibedropSessionPublications).toBeUndefined()
+  })
+})
+
+describe('SettingsSchema session retention', () => {
+  test('defaults all automatic retention behavior to disabled', () => {
+    const parsed = SettingsSchema.parse(defaultSettings())
+
+    expect(parsed.sessionRetention).toEqual({
+      enabled: false,
+      autoArchiveEnabled: false,
+      archiveAfterDays: 30,
+      autoDeleteEnabled: false,
+      deleteAfterDays: 30,
+      deleteBasis: 'archivedAt',
+    })
+  })
+
+  test('adds disabled retention defaults when parsing legacy settings', () => {
+    const legacy = { ...defaultSettings() } as Record<string, unknown>
+    delete legacy.sessionRetention
+
+    expect(SettingsSchema.parse(legacy).sessionRetention.enabled).toBe(false)
+  })
+
+  test('rejects retention days outside the supported local range', () => {
+    expect(() =>
+      SettingsSchema.parse({
+        ...defaultSettings(),
+        sessionRetention: { ...defaultSettings().sessionRetention, archiveAfterDays: 0 },
+      })
+    ).toThrow()
+    expect(() =>
+      SettingsSchema.parse({
+        ...defaultSettings(),
+        sessionRetention: { ...defaultSettings().sessionRetention, deleteAfterDays: 3651 },
+      })
+    ).toThrow()
   })
 })

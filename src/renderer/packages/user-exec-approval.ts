@@ -1,5 +1,6 @@
 /** User exec approval assessment and persistent-pause errors. */
 
+import type { AgentApprovalPolicy } from '@shared/agent-approval-policy'
 import type { UserExecApprovalSource } from '@shared/types/user-exec'
 import type { CommandExplanationResult } from '@/packages/model-calls/command-explanation'
 import { getAiAutoApprovalEligibility } from './user-exec-ai-policy'
@@ -70,8 +71,13 @@ export async function requestUserExecApproval(
   toolCallId: string,
   command: string,
   explanationCtx?: ExplanationContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  policy: AgentApprovalPolicy = 'risk'
 ): Promise<UserExecApprovalSource> {
+  if (policy === 'ask') {
+    const assessment = await generateApprovalAssessment(command, explanationCtx, signal)
+    throw new UserExecApprovalPausedError(toolCallId, command, assessment.explanation, assessment.explanationError)
+  }
   // Auto-approve safe read-only commands (no caching needed — idempotent)
   if (isCommandAutoApprovable(command)) {
     return 'whitelist'

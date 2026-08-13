@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AgentApprovalPolicySchema } from '../agent-approval-policy'
 import { ModelProviderEnum, ModelProviderType } from './provider'
 import { DEFAULT_ENABLED_BUILTIN_SKILL_NAMES, SkillSettingsSchema } from './skills'
 
@@ -186,7 +187,14 @@ export const GlobalSessionSettingsSchema = z.object({
   temperature: z.number().optional().catch(undefined),
   topP: z.number().optional().catch(undefined),
   maxTokens: z.number().optional().catch(undefined),
-  stream: z.boolean().optional().catch(true),
+  // Historical false values remain readable but are normalized because non-streaming
+  // generation is intentionally unavailable in the current product phase.
+  stream: z
+    .boolean()
+    .transform(() => true)
+    .optional()
+    .catch(true),
+  followUpBehavior: z.enum(['queue', 'steer']).optional().catch(undefined),
 })
 
 export const SessionSettingsSchema = GlobalSessionSettingsSchema.extend({
@@ -202,6 +210,8 @@ export const SessionSettingsSchema = GlobalSessionSettingsSchema.extend({
   workingDirectories: z.array(z.string()).optional().catch(undefined),
   // When enabled, Work Mode skips per-action approval for user_exec and real filesystem mutations.
   agentFullAccess: z.boolean().optional().catch(undefined),
+  // New three-level permission policy. agentFullAccess remains for backward compatibility.
+  agentApprovalPolicy: AgentApprovalPolicySchema.optional().catch(undefined),
   agentMode: AgentModeEntrySchema.optional().catch(undefined),
 })
 
@@ -387,6 +397,26 @@ const DefaultModelSelectionSchema = z
   .optional()
   .catch(undefined)
 
+const DEFAULT_SESSION_RETENTION_SETTINGS = {
+  enabled: false,
+  autoArchiveEnabled: false,
+  archiveAfterDays: 30,
+  autoDeleteEnabled: false,
+  deleteAfterDays: 30,
+  deleteBasis: 'archivedAt' as const,
+}
+
+export const SessionRetentionSettingsSchema = z.object({
+  enabled: z.boolean(),
+  autoArchiveEnabled: z.boolean(),
+  archiveAfterDays: z.number().int().min(1).max(3650),
+  autoDeleteEnabled: z.boolean(),
+  deleteAfterDays: z.number().int().min(1).max(3650),
+  deleteBasis: z.enum(['archivedAt', 'lastActivityAt']),
+})
+
+export type SessionRetentionSettings = z.infer<typeof SessionRetentionSettingsSchema>
+
 export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   providers: z.record(z.string(), ProviderSettingsSchema).optional().catch(undefined),
   customProviders: z.array(CustomProviderBaseInfoSchema).optional().catch(undefined),
@@ -488,6 +518,8 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   spellCheck: z.boolean().optional(),
 
   startupPage: z.enum(['home', 'session']).optional(),
+
+  sessionRetention: SessionRetentionSettingsSchema.default(DEFAULT_SESSION_RETENTION_SETTINGS),
 
   // disableQuickToggleShortcut?: boolean // 是否关闭快捷键切换窗口显隐（弃用，为了兼容历史数据，这个字段永远不要使用）
 

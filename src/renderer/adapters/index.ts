@@ -38,7 +38,7 @@ interface ApiRequestClient {
     url: string,
     headers: Record<string, string>,
     body: RequestInit['body'] | undefined,
-    options: { signal?: AbortSignal; retry?: number; useProxy?: boolean }
+    options: { signal?: AbortSignal; retry?: number; useProxy?: boolean; requestId?: string }
   ): Promise<Response>
   get(
     url: string,
@@ -116,6 +116,7 @@ function createRequestAdapter(
           signal: options.signal,
           retry: options.retry,
           useProxy: options.useProxy,
+          requestId: options.requestId,
         })
       }
       return apiRequestClient.get(options.url, options.headers || {}, {

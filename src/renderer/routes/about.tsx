@@ -4,7 +4,6 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { ReactElement } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
-import BrandGithub from '@/components/icons/BrandGithub'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import useVersion from '@/hooks/useVersion'
@@ -39,15 +38,6 @@ function RouteComponent() {
               <Text c="chatbox-tertiary">{t('about-introduction')}</Text>
             </Stack>
           </Flex>
-
-          <List>
-            <ListItem
-              icon={<BrandGithub className="w-full h-full" />}
-              title={t('Github')}
-              link="https://gitee.com/ribbog77/nao-nao-aichart"
-              value="nao-nao-aichart"
-            />
-          </List>
 
           <List>
             <ListItem
@@ -189,13 +179,11 @@ function ListItem({
   icon,
   title,
   link,
-  value,
   right,
 }: {
   icon: ReactElement
   title: string
   link?: string
-  value?: string
   right?: ReactElement
 }) {
   return (
@@ -219,11 +207,6 @@ function ListItem({
         right
       ) : (
         <>
-          {value && (
-            <Text size="md" c="chatbox-tertiary">
-              {value}
-            </Text>
-          )}
           {link && <ScalableIcon icon={IconChevronRight} size={20} className="!text-inherit" />}
         </>
       )}

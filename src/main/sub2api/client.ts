@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto'
+import { createParser } from 'eventsource-parser'
 import type { z } from 'zod'
 import {
+  areSub2ApiDirectGatewayRequestsEqual,
   SUB2API_ROUTES,
   type Sub2ApiAnnouncement,
   type Sub2ApiApiKeyCreateRequest,
@@ -9,8 +10,7 @@ import {
   type Sub2ApiAvailableGroup,
   type Sub2ApiChannelMonitorResponse,
   type Sub2ApiDirectGatewayRequest,
-  type Sub2ApiDirectGatewayResponse,
-  type Sub2ApiInfiniteCanvasCapability,
+  type Sub2ApiDirectGatewayStreamEvent,
   type Sub2ApiInfiniteCanvasImport,
   type Sub2ApiLoginRequest,
   type Sub2ApiLoginResult,
@@ -39,7 +39,6 @@ import {
   sub2ApiAuthResponseSchema,
   sub2ApiAvailableGroupsSchema,
   sub2ApiChannelMonitorResponseSchema,
-  sub2ApiInfiniteCanvasCapabilitySchema,
   sub2ApiInfiniteCanvasImportSchema,
   sub2ApiLoginResponseSchema,
   sub2ApiLogoutResponseSchema,
@@ -62,6 +61,7 @@ import {
 import { Sub2ApiContractError, Sub2ApiError } from '../../shared/sub2api/errors'
 import { buildSub2ApiGatewayUrl, buildSub2ApiPanelUrl, SUB2API_GATEWAY_BASE_URL } from '../../shared/sub2api/url'
 import { getLogger } from '../util'
+import { classifyInfiniteCanvasModels } from './canvas-model-capability'
 import { Sub2ApiSession } from './session'
 
 type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -81,8 +81,21 @@ interface PanelEnvelope {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000
-const GATEWAY_POST_REPLAY_WINDOW_MS = 20_000
 const log = getLogger('sub2api:gateway')
+
+const RESPONSES_TERMINAL_EVENTS = new Set(['response.completed', 'response.failed', 'response.incomplete'])
+
+interface GatewayRequestEntry {
+  requestId: string
+  request: Sub2ApiDirectGatewayRequest
+  target: URL
+  headers: Headers
+  emit: (event: Sub2ApiDirectGatewayStreamEvent) => void
+  controller: AbortController
+  promise: Promise<void>
+  resolve: () => void
+  reject: (error: unknown) => void
+}
 
 function isTimeoutError(error: unknown): boolean {
   return (
@@ -123,8 +136,11 @@ async function readJson(response: Response): Promise<unknown> {
 
 export class Sub2ApiClient {
   #refreshInFlight: { generation: number; promise: Promise<void> } | null = null
-  #gatewayPostsInFlight = new Map<string, Promise<Sub2ApiDirectGatewayResponse>>()
-  #recentGatewayPostResponses = new Map<string, { expiresAt: number; response: Sub2ApiDirectGatewayResponse }>()
+  // A request ID is accepted at most once for the lifetime of this process.
+  // Different IDs represent explicit independent generations and may run in
+  // parallel; requests are never queued for delayed, automatic dispatch.
+  #gatewayAcceptedRequestIds = new Set<string>()
+  #gatewayRequestsInFlight = new Map<string, GatewayRequestEntry>()
   #autoLoginStore: Sub2ApiAutoLoginStore | undefined
   #autoLoginEnabled = false
   #autoLoginRequested = false
@@ -219,11 +235,33 @@ export class Sub2ApiClient {
     return { status: 'authenticated', user: response.user }
   }
 
-  async directGatewayRequest(request: Sub2ApiDirectGatewayRequest): Promise<Sub2ApiDirectGatewayResponse> {
-    const target = new URL(request.url)
+  streamDirectGatewayRequest(
+    requestId: string,
+    request: Sub2ApiDirectGatewayRequest,
+    emit: (event: Sub2ApiDirectGatewayStreamEvent) => void
+  ): Promise<void> {
+    const existing = this.#gatewayRequestsInFlight.get(requestId)
+    if (existing) {
+      if (!areSub2ApiDirectGatewayRequestsEqual(existing.request, request)) {
+        return Promise.reject(new Sub2ApiError('Conflicting sub2api gateway request ID', 'REQUEST_ID_CONFLICT'))
+      }
+      log.debug(`[gateway-stream] reuse requestId=${requestId}`)
+      return existing.promise
+    }
+
+    if (this.#gatewayAcceptedRequestIds.has(requestId)) {
+      return Promise.reject(new Sub2ApiError('sub2api gateway request ID was already accepted', 'REQUEST_ID_REPLAY'))
+    }
+
+    let target: URL
+    try {
+      target = new URL(request.url)
+    } catch {
+      return Promise.reject(new Sub2ApiError('Unsupported sub2api gateway URL', 'GATEWAY_ERROR'))
+    }
     const gateway = new URL(SUB2API_GATEWAY_BASE_URL)
     if (target.origin !== gateway.origin || !target.pathname.startsWith('/v1/')) {
-      throw new Sub2ApiError('Unsupported sub2api gateway URL', 'GATEWAY_ERROR')
+      return Promise.reject(new Sub2ApiError('Unsupported sub2api gateway URL', 'GATEWAY_ERROR'))
     }
     const headers = new Headers()
     for (const name of ['Accept', 'Authorization', 'Cache-Control', 'Content-Type']) {
@@ -232,66 +270,69 @@ export class Sub2ApiClient {
     }
     headers.set('Cache-Control', 'no-cache, no-store, max-age=0')
 
-    if (request.method !== 'POST') {
-      return this.performDirectGatewayRequest(request, target, headers)
-    }
+    // Consume the ID before dispatch. Completion, failure, or cancellation can
+    // never turn this logical action into another network request later.
+    this.#gatewayAcceptedRequestIds.add(requestId)
 
-    const requestKey = createHash('sha256')
-      .update(request.method)
-      .update('\0')
-      .update(target.toString())
-      .update('\0')
-      .update(headers.get('Authorization') || '')
-      .update('\0')
-      .update(request.body || '')
-      .digest('hex')
-    const fingerprint = requestKey.slice(0, 12)
-    const now = Date.now()
-    for (const [key, entry] of this.#recentGatewayPostResponses) {
-      if (entry.expiresAt <= now) {
-        this.#recentGatewayPostResponses.delete(key)
+    let resolvePromise!: () => void
+    let rejectPromise!: (error: unknown) => void
+    const pending = new Promise<void>((resolve, reject) => {
+      resolvePromise = resolve
+      rejectPromise = reject
+    })
+    const entry: GatewayRequestEntry = {
+      requestId,
+      request,
+      target,
+      headers,
+      emit,
+      controller: new AbortController(),
+      promise: pending,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+    }
+    this.#gatewayRequestsInFlight.set(requestId, entry)
+    log.debug(`[gateway-stream] start requestId=${entry.requestId}`)
+
+    const finish = () => {
+      if (this.#gatewayRequestsInFlight.get(entry.requestId) === entry) {
+        this.#gatewayRequestsInFlight.delete(entry.requestId)
       }
-    }
-    const recent = this.#recentGatewayPostResponses.get(requestKey)
-    if (recent && recent.expiresAt > now) {
-      log.debug(`[gateway-post] replay fingerprint=${fingerprint}`)
-      return recent.response
-    }
-    if (recent) {
-      this.#recentGatewayPostResponses.delete(requestKey)
+      log.debug(`[gateway-stream] finish requestId=${entry.requestId}`)
     }
 
-    const existing = this.#gatewayPostsInFlight.get(requestKey)
-    if (existing) {
-      log.debug(`[gateway-post] coalesce fingerprint=${fingerprint}`)
-      return existing
-    }
-
-    log.debug(`[gateway-post] send fingerprint=${fingerprint}`)
-    const pending = this.performDirectGatewayRequest(request, target, headers)
-    this.#gatewayPostsInFlight.set(requestKey, pending)
-    try {
-      const response = await pending
-      this.#recentGatewayPostResponses.set(requestKey, {
-        expiresAt: Date.now() + GATEWAY_POST_REPLAY_WINDOW_MS,
-        response,
-      })
-      return response
-    } finally {
-      if (this.#gatewayPostsInFlight.get(requestKey) === pending) {
-        this.#gatewayPostsInFlight.delete(requestKey)
+    void this.performDirectGatewayStream(
+      entry.requestId,
+      entry.request,
+      entry.target,
+      entry.headers,
+      entry.controller,
+      entry.emit
+    ).then(
+      () => {
+        finish()
+        entry.resolve()
+      },
+      (error: unknown) => {
+        finish()
+        entry.reject(error)
       }
-    }
+    )
+    return pending
   }
 
-  private async performDirectGatewayRequest(
+  cancelDirectGatewayRequest(requestId: string): void {
+    this.#gatewayRequestsInFlight.get(requestId)?.controller.abort()
+  }
+
+  private async performDirectGatewayStream(
+    requestId: string,
     request: Sub2ApiDirectGatewayRequest,
     target: URL,
-    headers: Headers
-  ): Promise<Sub2ApiDirectGatewayResponse> {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
+    headers: Headers,
+    controller: AbortController,
+    emit: (event: Sub2ApiDirectGatewayStreamEvent) => void
+  ): Promise<void> {
     try {
       const response = await this.fetchImplementation(target, {
         method: request.method,
@@ -300,30 +341,90 @@ export class Sub2ApiClient {
         redirect: 'manual',
         signal: controller.signal,
       })
-      // SSE streams can legitimately remain open for longer than the connect timeout.
-      clearTimeout(timeoutId)
 
       if (response.status >= 300 && response.status < 400) {
         throw new Sub2ApiError('sub2api gateway redirects are not allowed', 'GATEWAY_ERROR', response.status)
       }
-      return {
-        status: response.status,
-        headers: {
-          'content-type': response.headers.get('content-type') || 'application/octet-stream',
-        },
-        body: await response.text(),
+
+      const contentType = response.headers.get('content-type') || 'application/octet-stream'
+      const isEventStream = contentType.toLowerCase().includes('text/event-stream')
+      if (!response.body && isEventStream) {
+        throw new Sub2ApiError('sub2api gateway stream ended before a terminal event', 'NETWORK_ERROR')
       }
+      emit({
+        requestId,
+        type: 'response',
+        status: response.status,
+        headers: this.getSafeGatewayResponseHeaders(response.headers, contentType),
+      })
+
+      if (!response.body) {
+        emit({ requestId, type: 'complete' })
+        return
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let terminalEventReceived = false
+      const parser = isEventStream
+        ? createParser({
+            onEvent(event) {
+              if (event.data.trim() === '[DONE]') {
+                terminalEventReceived = true
+                return
+              }
+              try {
+                const payload = JSON.parse(event.data) as { type?: unknown }
+                if (typeof payload.type === 'string' && RESPONSES_TERMINAL_EVENTS.has(payload.type)) {
+                  terminalEventReceived = true
+                }
+              } catch {
+                // The AI SDK remains the authority for validating provider events.
+              }
+            },
+          })
+        : null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const data = decoder.decode(value, { stream: true })
+        if (data) {
+          emit({ requestId, type: 'data', data })
+          parser?.feed(data)
+        }
+        if (terminalEventReceived) {
+          await reader.cancel().catch(() => undefined)
+          break
+        }
+      }
+      const trailingData = decoder.decode()
+      if (trailingData) {
+        emit({ requestId, type: 'data', data: trailingData })
+        parser?.feed(trailingData)
+      }
+      if (parser && !terminalEventReceived) {
+        throw new Sub2ApiError('sub2api gateway stream ended before a terminal event', 'NETWORK_ERROR')
+      }
+      emit({ requestId, type: 'complete' })
     } catch (error) {
       if (error instanceof Sub2ApiError) {
         throw error
       }
-      if (isTimeoutError(error)) {
-        throw new Sub2ApiError('sub2api gateway connection timed out', 'TIMEOUT_ERROR')
+      if (controller.signal.aborted) {
+        throw new Sub2ApiError('sub2api gateway request cancelled', 'REQUEST_CANCELLED')
       }
       throw new Sub2ApiError('Unable to read sub2api gateway response', 'NETWORK_ERROR')
-    } finally {
-      clearTimeout(timeoutId)
     }
+  }
+
+  private getSafeGatewayResponseHeaders(headers: Headers, contentType: string): Record<string, string> {
+    const result: Record<string, string> = { 'content-type': contentType }
+    for (const name of ['cache-control', 'content-length', 'x-request-id', 'retry-after']) {
+      const value = headers.get(name)
+      if (value) result[name] = value
+    }
+    return result
   }
 
   async completeTwoFactor(code: string): Promise<Sub2ApiLoginResult> {
@@ -512,25 +613,24 @@ export class Sub2ApiClient {
     })
   }
 
-  async prepareInfiniteCanvasImport(
-    id: number,
-    capability: Sub2ApiInfiniteCanvasCapability
-  ): Promise<Sub2ApiInfiniteCanvasImport> {
+  async prepareInfiniteCanvasImport(id: number): Promise<Sub2ApiInfiniteCanvasImport> {
     const parsedId = sub2ApiApiKeyIdSchema.parse(id)
-    const parsedCapability = sub2ApiInfiniteCanvasCapabilitySchema.parse(capability)
     const { data: apiKey } = await this.requestAuthenticated(
       `${SUB2API_ROUTES.apiKeys}/${parsedId}`,
       { method: 'GET' },
       sub2ApiApiKeySchema
     )
     const models = await this.requestGatewayModels(apiKey.key)
+    const classifiedModels = classifyInfiniteCanvasModels(models.data)
+    if (classifiedModels.length === 0) {
+      throw new Sub2ApiContractError('The selected API key did not return any importable models')
+    }
     return sub2ApiInfiniteCanvasImportSchema.parse({
       keyId: apiKey.id,
       keyName: apiKey.name,
       baseUrl: SUB2API_GATEWAY_BASE_URL.replace(/\/v1\/?$/, ''),
       apiKey: apiKey.key,
-      capability: parsedCapability,
-      models: models.data,
+      models: classifiedModels,
     })
   }
 

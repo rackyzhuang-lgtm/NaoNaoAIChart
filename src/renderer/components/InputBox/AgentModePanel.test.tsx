@@ -40,7 +40,10 @@ const mocks = vi.hoisted(() => {
     setSettings: vi.fn(),
   }
   const uiState = {
-    newSessionState: {},
+    newSessionState: {} as {
+      agentApprovalPolicy?: 'ask' | 'risk' | 'full'
+      agentFullAccess?: boolean
+    },
     setAgentModeSmartSwitchingDefault: vi.fn(),
     setNewSessionState: vi.fn(),
   }

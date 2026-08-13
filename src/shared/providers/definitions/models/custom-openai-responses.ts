@@ -78,9 +78,11 @@ export default class CustomOpenAIResponses extends AbstractAISDKModel {
 
   protected getChatModel(options: CallChatCompletionOptions) {
     const { apiHost, apiPath } = this.options
-    const provider = this.getProvider(options, (_input, init) =>
-      createFetchWithProxy(this.options.useProxy, this.dependencies)(`${apiHost}${apiPath}`, init)
-    )
+    const fetchWithProxy = createFetchWithProxy(this.options.useProxy, this.dependencies, {
+      requestId: options.requestId,
+      requestSequence: options.requestSequence,
+    })
+    const provider = this.getProvider(options, (_input, init) => fetchWithProxy(`${apiHost}${apiPath}`, init))
     return wrapLanguageModel({
       model: provider.responses(this.options.model.modelId),
       middleware: extractReasoningMiddleware({ tagName: 'think' }),

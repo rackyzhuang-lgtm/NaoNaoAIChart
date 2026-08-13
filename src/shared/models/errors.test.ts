@@ -29,6 +29,18 @@ describe('ApiError', () => {
     expect(error.requestId).toBe('req-123')
   })
 
+  it('stores only explicitly supplied safe response headers', () => {
+    const error = new ApiError('rate limited', undefined, 429, undefined, {
+      'retry-after': '7',
+      authorization: 'Bearer secret',
+      'x-request-id': 'upstream-id',
+    })
+
+    expect(error.responseHeaders).toEqual({ 'retry-after': '7' })
+    expect(error.responseHeaders).not.toHaveProperty('authorization')
+    expect(error.responseHeaders).not.toHaveProperty('x-request-id')
+  })
+
   it('keeps responseBody undefined when not provided', () => {
     const error = new ApiError('missing payload')
 

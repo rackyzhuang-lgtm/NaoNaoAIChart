@@ -6,7 +6,6 @@ import {
   Group,
   Loader,
   Modal,
-  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -16,7 +15,6 @@ import {
 } from '@mantine/core'
 import type { Sub2ApiApiKeySummary, Sub2ApiProviderBinding } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { ModelProviderEnum } from '@shared/types'
 import {
   IconAlertCircle,
   IconCheck,
@@ -29,16 +27,13 @@ import {
   IconUpload,
 } from '@tabler/icons-react'
 import type { FormEvent } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import PopoverConfirm from '@/components/common/PopoverConfirm'
 import { router } from '@/router'
-import { createSession } from '@/stores/chatStore'
 import { setPendingInfiniteCanvasImport } from '@/stores/infiniteCanvasImportStore'
 import { switchCurrentSession } from '@/stores/sessionActions'
-import { initEmptyChatSession } from '@/stores/sessionHelpers'
-import { settingsStore } from '@/stores/settingsStore'
-import { buildSub2ApiProviderSettings } from './sub2api-provider-binding'
+import { applySub2ApiProviderBinding } from './sub2api-provider-binding'
 
 interface Props {
   api: Sub2ApiRendererApi
@@ -71,8 +66,8 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [importKey, setImportKey] = useState<Sub2ApiApiKeySummary | null>(null)
-  const [importCapability, setImportCapability] = useState<'text' | 'image' | 'video'>('text')
   const [importing, setImporting] = useState(false)
+  const bindingInFlight = useRef(false)
 
   const loadKeys = useCallback(async () => {
     setLoading(true)
@@ -173,32 +168,25 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
   }
 
   const bindProvider = async (key: Sub2ApiApiKeySummary) => {
-    if (busyId !== null) {
+    if (busyId !== null || bindingInFlight.current) {
       return
     }
+    bindingInFlight.current = true
     setBusyId(key.id)
     setError(null)
     setNotice(null)
     try {
       const binding = await api.prepareProviderBinding(key.id)
-      settingsStore.setState((currentSettings) => buildSub2ApiProviderSettings(currentSettings, binding))
+      const applied = await applySub2ApiProviderBinding(binding)
       onBindProvider?.(binding)
-
-      const initialSession = initEmptyChatSession()
-      const firstModelId = binding.models[0]?.id
-      const newSession = await createSession({
-        ...initialSession,
-        settings: {
-          ...initialSession.settings,
-          provider: ModelProviderEnum.OpenAIResponses,
-          ...(firstModelId ? { modelId: firstModelId } : {}),
-        },
-      })
-      switchCurrentSession(newSession.id)
+      if (applied.sessionId) {
+        switchCurrentSession(applied.sessionId)
+      }
       setNotice(t('Provider connected with {{count}} models.', { count: binding.models.length }))
     } catch (bindError) {
       setError(safeError(bindError, t('Unable to connect provider.')))
     } finally {
+      bindingInFlight.current = false
       setBusyId(null)
     }
   }
@@ -208,7 +196,7 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
     setImporting(true)
     setError(null)
     try {
-      const payload = await api.prepareInfiniteCanvasImport(importKey.id, importCapability)
+      const payload = await api.prepareInfiniteCanvasImport(importKey.id)
       setPendingInfiniteCanvasImport(payload)
       setImportKey(null)
       await router.navigate({ to: '/infinite-canvas' })
@@ -287,17 +275,7 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
         centered
       >
         <Stack gap="md">
-          <Text size="sm">{t('Choose the model type to import.')}</Text>
-          <SegmentedControl
-            fullWidth
-            value={importCapability}
-            onChange={(value) => setImportCapability(value as 'text' | 'image' | 'video')}
-            data={[
-              { label: t('Text model'), value: 'text' },
-              { label: t('Image model'), value: 'image' },
-              { label: t('Video model'), value: 'video' },
-            ]}
-          />
+          <Text size="sm">{t('Available models will be detected and imported automatically.')}</Text>
           <Group justify="flex-end">
             <Button variant="default" disabled={importing} onClick={() => setImportKey(null)}>
               {t('Cancel')}
@@ -412,7 +390,6 @@ export default function Sub2ApiKeySettings({ api, onBindProvider }: Props) {
                   leftSection={<IconUpload size={15} />}
                   disabled={busyId !== null || key.status !== 'active'}
                   onClick={() => {
-                    setImportCapability('text')
                     setImportKey(key)
                   }}
                 >

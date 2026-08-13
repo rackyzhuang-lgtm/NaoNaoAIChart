@@ -84,6 +84,15 @@ export function settings(): Settings {
     fontSize: 14,
     spellCheck: true,
 
+    sessionRetention: {
+      enabled: false,
+      autoArchiveEnabled: false,
+      archiveAfterDays: 30,
+      autoDeleteEnabled: false,
+      deleteAfterDays: 30,
+      deleteBasis: 'archivedAt',
+    },
+
     defaultPrompt: getDefaultPrompt(),
 
     allowReportingAndTracking: true,
@@ -100,6 +109,10 @@ export function settings(): Settings {
     pasteLongTextAsAFile: true,
 
     autoGenerateTitle: true,
+
+    // Streaming is the only supported chat transport for this product phase.
+    stream: true,
+    followUpBehavior: 'queue',
 
     autoCompaction: true,
     compactionThreshold: 0.6,
@@ -171,9 +184,16 @@ export function getDefaultPrompt() {
 
 export function chatSessionSettings(): SessionSettings {
   return {
-    provider: ModelProviderEnum.OpenAI,
-    modelId: 'gpt-4o-mini',
+    provider: ModelProviderEnum.OpenAIResponses,
+    modelId: 'gpt-5.6-sol',
     maxContextMessageCount: Number.MAX_SAFE_INTEGER,
+    stream: true,
+    followUpBehavior: 'queue',
+    providerOptions: {
+      openai: {
+        reasoningEffort: 'high',
+      },
+    },
   }
 }
 

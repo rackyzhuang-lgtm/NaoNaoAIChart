@@ -296,6 +296,8 @@ const MessageUsageSchema = z.object({
   cachedInputTokens: z.number().optional().catch(undefined),
 })
 
+export const ConversationModeSchema = z.enum(['default', 'plan', 'goal'])
+
 export const MessageSchema = z.object({
   id: z.string(),
   role: z.nativeEnum(MessageRoleEnum),
@@ -331,6 +333,7 @@ export const MessageSchema = z.object({
   isSummary: z.boolean().optional(), // Marks message as a compaction summary
   isForkMarker: z.boolean().optional(), // Marks a UI-only fork boundary message
   forkedFromSessionId: z.string().optional(),
+  conversationMode: ConversationModeSchema.optional(),
 })
 
 // Compaction point schema (for context management)
@@ -342,6 +345,8 @@ export const CompactionPointSchema = z.object({
 
 // Session schemas
 export const SessionTypeSchema = z.enum(['chat', 'picture', 'guide'])
+export const SessionStatusSchema = z.enum(['active', 'archived'])
+export const SessionArchiveSourceSchema = z.enum(['manual', 'automatic'])
 
 export const MessageForkListSchema = z.object({
   id: z.string(),
@@ -354,12 +359,66 @@ export const MessageForkSchema = z.object({
   createdAt: z.number(),
 })
 
+export const ThreadGoalSchema = z.object({
+  id: z.string().min(1),
+  objective: z.string().refine((value) => value.trim().length > 0 && Array.from(value).length <= 4000),
+  status: z.enum(['active', 'paused', 'complete']),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+
 export const SessionThreadSchema = z.object({
   id: z.string(),
   name: z.string(),
   messages: z.array(MessageSchema),
   createdAt: z.number(),
   compactionPoints: z.array(CompactionPointSchema).optional(),
+  goal: ThreadGoalSchema.optional(),
+})
+
+export const FollowUpIntentSchema = z.enum(['queue', 'steer'])
+export const FollowUpQueueItemStatusSchema = z.enum(['ready', 'paused', 'dispatching'])
+export const FollowUpQueueScopeStatusSchema = z.enum(['active', 'paused', 'dispatching'])
+
+export const FollowUpQueueItemSchema = z.object({
+  id: z.string().min(1),
+  threadId: z.string().min(1),
+  userMessage: MessageSchema,
+  reservedAssistantMessageId: z.string().min(1),
+  intent: FollowUpIntentSchema,
+  status: FollowUpQueueItemStatusSchema,
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  sessionSettings: SessionSettingsSchema.optional(),
+  webBrowsing: z.boolean().optional(),
+  goalObjective: z.string().min(1).max(4000).optional(),
+  dispatchTargetMessageId: z.string().optional(),
+  dispatchAttemptId: z.string().optional(),
+  sideChatSessionId: z.string().optional(),
+})
+
+export const FollowUpQueueScopeSchema = z.object({
+  threadId: z.string().min(1),
+  status: FollowUpQueueScopeStatusSchema,
+  pausedReason: z.enum(['startup', 'navigation', 'thread-switch', 'renderer-destroyed', 'app-exit', 'user']).optional(),
+  items: z.array(FollowUpQueueItemSchema),
+})
+
+export const FollowUpStateSchema = z.object({
+  version: z.literal(1),
+  scopes: z.record(z.string(), FollowUpQueueScopeSchema),
+  sideChats: z
+    .record(
+      z.string(),
+      z.object({
+        queueItemId: z.string().min(1),
+        sessionId: z.string().min(1),
+        threadId: z.string().min(1).optional(),
+        createdAt: z.number(),
+        updatedAt: z.number(),
+      })
+    )
+    .optional(),
 })
 
 // Image source schema
@@ -376,15 +435,21 @@ export const SessionSchema = z.object({
   messages: z.array(MessageSchema),
   starred: z.boolean().optional(),
   hidden: z.boolean().optional(), // Hidden from session list (e.g., migrated picture sessions)
+  status: SessionStatusSchema.optional(),
+  lastActivityAt: z.number().optional(),
   archivedAt: z.number().optional(),
+  archiveSource: SessionArchiveSourceSchema.optional(),
   copilotId: z.string().optional(),
   assistantAvatarKey: z.string().optional(),
   backgroundImage: ImageSourceSchema.optional(),
   settings: SessionSettingsSchema.optional(),
   threads: z.array(SessionThreadSchema).optional(),
+  activeThreadId: z.string().optional(),
+  followUpState: FollowUpStateSchema.optional(),
   threadName: z.string().optional(),
   messageForksHash: z.record(z.string(), MessageForkSchema).optional(),
   compactionPoints: z.array(CompactionPointSchema).optional(),
+  goal: ThreadGoalSchema.optional(),
 })
 
 export const SessionMetaSchema = SessionSchema.pick({
@@ -392,7 +457,10 @@ export const SessionMetaSchema = SessionSchema.pick({
   name: true,
   starred: true,
   hidden: true,
+  status: true,
+  lastActivityAt: true,
   archivedAt: true,
+  archiveSource: true,
   assistantAvatarKey: true,
   picUrl: true,
   backgroundImage: true,
@@ -449,7 +517,17 @@ export type ModelProvider = z.infer<typeof ModelProviderSchema>
 export type MessageStatus = z.infer<typeof MessageStatusSchema>
 export type MessageBackgroundTask = z.infer<typeof MessageBackgroundTaskSchema>
 export type Message = z.infer<typeof MessageSchema>
+export type ConversationMode = z.infer<typeof ConversationModeSchema>
+export type ThreadGoal = z.infer<typeof ThreadGoalSchema>
+export type FollowUpIntent = z.infer<typeof FollowUpIntentSchema>
+export type FollowUpQueueItemStatus = z.infer<typeof FollowUpQueueItemStatusSchema>
+export type FollowUpQueueScopeStatus = z.infer<typeof FollowUpQueueScopeStatusSchema>
+export type FollowUpQueueItem = z.infer<typeof FollowUpQueueItemSchema>
+export type FollowUpQueueScope = z.infer<typeof FollowUpQueueScopeSchema>
+export type FollowUpState = z.infer<typeof FollowUpStateSchema>
 export type SessionType = z.infer<typeof SessionTypeSchema>
+export type SessionStatus = z.infer<typeof SessionStatusSchema>
+export type SessionArchiveSource = z.infer<typeof SessionArchiveSourceSchema>
 export type CompactionPoint = z.infer<typeof CompactionPointSchema>
 export type Session = z.infer<typeof SessionSchema>
 export type SessionMeta = z.infer<typeof SessionMetaSchema>

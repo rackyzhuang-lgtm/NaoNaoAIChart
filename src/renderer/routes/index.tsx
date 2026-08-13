@@ -1,11 +1,13 @@
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Avatar, Box, Divider, Flex, ScrollArea, Space, Stack, Text } from '@mantine/core'
+import { chatSessionSettings } from '@shared/defaults'
 import {
   type AgentModeEntry,
   type CopilotDetail,
   createMessage,
   type ImageSource,
   ModelProviderEnum,
+  type ProviderOptions,
   type Session,
   type SessionSettings,
 } from '@shared/types'
@@ -35,6 +37,8 @@ import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { createSession as createSessionStore } from '@/stores/chatStore'
 import { resolveChatboxLicenseDefaultModel } from '@/stores/defaultChatModel'
 import { getHasCompletedFirstSuccessfulChat } from '@/stores/firstSuccessfulChat'
+import { createDefaultNewSessionAgentModeEntry } from '@/stores/session/agent-mode'
+import * as goalActions from '@/stores/session/goal'
 import { generate, submitNewUserMessage, switchCurrentSession } from '@/stores/sessionActions'
 import { initEmptyChatSession } from '@/stores/sessionHelpers'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -43,16 +47,32 @@ import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 import { NewUserScenarioGrid } from './-new-user-scenarios/NewUserScenarioGrid'
 import { type NewUserScenario, newUserScenarios, resolveNewUserScenarioContent } from './-new-user-scenarios/scenarios'
 
-const scenarioAgentModeOff = {
-  value: 'off',
-  locked: false,
-  lockReason: null,
-} satisfies AgentModeEntry
+const scenarioAgentModeOn = createDefaultNewSessionAgentModeEntry() satisfies AgentModeEntry
 
 const firstChatScenarioDefaultModel = {
-  provider: ModelProviderEnum.OpenAI,
-  modelId: 'gpt-4o-mini',
-} satisfies Pick<SessionSettings, 'provider' | 'modelId'>
+  ...chatSessionSettings(),
+} satisfies SessionSettings
+
+function applyDefaultOpenAIReasoning(
+  provider: string | undefined,
+  modelId: string | undefined,
+  providerOptions: ProviderOptions | undefined
+): ProviderOptions | undefined {
+  if (
+    modelId !== 'gpt-5.6-sol' ||
+    (provider !== ModelProviderEnum.OpenAI && provider !== ModelProviderEnum.OpenAIResponses) ||
+    providerOptions?.openai?.reasoningEffort
+  ) {
+    return providerOptions
+  }
+  return {
+    ...providerOptions,
+    openai: {
+      ...providerOptions?.openai,
+      reasoningEffort: 'high',
+    },
+  }
+}
 
 export const Route = createFileRoute('/')({
   component: Index,
@@ -186,6 +206,11 @@ function Index() {
         settings: {
           ...(old.settings || {}),
           ...defaultModel,
+          providerOptions: applyDefaultOpenAIReasoning(
+            defaultModel.provider,
+            defaultModel.modelId,
+            old.settings?.providerOptions
+          ),
         },
       }
     })
@@ -275,6 +300,7 @@ function Index() {
       messages?: Session['messages']
       settingsPatch?: Partial<SessionSettings>
       settingsOverride?: Partial<SessionSettings>
+      navigateToSession?: boolean
     }) => {
       const newSession = await createSessionStore({
         name: options?.name ?? session.name,
@@ -288,19 +314,20 @@ function Index() {
         settings: {
           ...session.settings,
           ...options?.settingsPatch,
-          ...(sessionAgentModeMap.new ? { agentMode: sessionAgentModeMap.new } : {}),
+          agentMode: sessionAgentModeMap.new ?? createDefaultNewSessionAgentModeEntry(),
           // Working directories bound while the chat was still "new" (not yet persisted).
           ...(newSessionState.workingDirectories?.length
             ? { workingDirectories: newSessionState.workingDirectories }
             : {}),
           ...(newSessionState.agentFullAccess ? { agentFullAccess: true } : {}),
+          ...(newSessionState.agentApprovalPolicy ? { agentApprovalPolicy: newSessionState.agentApprovalPolicy } : {}),
           ...options?.settingsOverride,
         },
       })
 
       // Transfer knowledge base / Work Mode settings from newSessionState to the actual
       // session, then clear it so nothing bleeds into the next new chat. (workingDirectories
-      // and agentFullAccess are already baked into the created session's settings above;
+      // and permission settings are already baked into the created session's settings above;
       // this only clears them.)
       if (newSessionState.knowledgeBase) {
         addSessionKnowledgeBase(newSession.id, newSessionState.knowledgeBase)
@@ -308,24 +335,24 @@ function Index() {
       if (
         newSessionState.knowledgeBase ||
         newSessionState.workingDirectories?.length ||
-        newSessionState.agentFullAccess
+        newSessionState.agentFullAccess ||
+        newSessionState.agentApprovalPolicy
       ) {
         setNewSessionState({})
       }
 
       // Transfer web browsing setting from "new" session to the actual session
-      const newSessionWebBrowsing = sessionWebBrowsingMap.new
-      if (newSessionWebBrowsing !== undefined) {
-        setSessionWebBrowsing(newSession.id, newSessionWebBrowsing)
-        clearSessionWebBrowsing('new')
-      }
+      setSessionWebBrowsing(newSession.id, sessionWebBrowsingMap.new ?? true)
+      clearSessionWebBrowsing('new')
 
       // Transfer agent mode setting from "new" session to the actual session
       if (sessionAgentModeMap.new) {
         clearSessionAgentMode('new')
       }
 
-      switchCurrentSession(newSession.id)
+      if (options?.navigateToSession ?? true) {
+        switchCurrentSession(newSession.id)
+      }
       localStorage.removeItem('new-chat')
 
       return newSession
@@ -336,6 +363,7 @@ function Index() {
       newSessionState.knowledgeBase,
       newSessionState.workingDirectories,
       newSessionState.agentFullAccess,
+      newSessionState.agentApprovalPolicy,
       setNewSessionState,
       sessionWebBrowsingMap,
       setSessionWebBrowsing,
@@ -346,13 +374,24 @@ function Index() {
   )
 
   const handleSubmit = useCallback(
-    async ({ constructedMessage, needGenerating = true, onUserMessageReady, settingsPatch }: InputBoxPayload) => {
-      const newSession = await createPersistedChatSession({ settingsPatch })
+    async ({
+      constructedMessage,
+      needGenerating = true,
+      onUserMessageReady,
+      settingsPatch,
+      goalObjective,
+    }: InputBoxPayload) => {
+      const newSession = await createPersistedChatSession({ settingsPatch, navigateToSession: false })
 
-      void submitNewUserMessage(newSession.id, {
+      if (goalObjective) {
+        await goalActions.createGoal(newSession.id, goalObjective)
+      }
+
+      await submitNewUserMessage(newSession.id, {
         newUserMsg: constructedMessage,
         needGenerating,
         onUserMessageReady,
+        onUserMessageInserted: () => switchCurrentSession(newSession.id),
       })
     },
     [createPersistedChatSession]
@@ -376,7 +415,7 @@ function Index() {
           createMessage('user', scenarioContent.firstUserMessage),
           assistantMessage,
         ],
-        settingsOverride: { agentMode: scenarioAgentModeOff },
+        settingsOverride: { agentMode: scenarioAgentModeOn },
       })
 
       void generate(newSession.id, assistantMessage, { operationType: 'send_message' })
@@ -392,6 +431,7 @@ function Index() {
         ...(old.settings || {}),
         provider: p,
         modelId: m,
+        providerOptions: applyDefaultOpenAIReasoning(p, m, old.settings?.providerOptions),
       },
     }))
   }, [])

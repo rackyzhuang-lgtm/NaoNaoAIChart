@@ -29,10 +29,12 @@ import './setup/load_polyfill'
 import './setup/protect'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { initSessionAttachmentRagMaintenance } from './setup/session_attachment_rag_maintenance'
+import { initSessionRetentionScheduler } from './setup/session_retention'
 import { initLastUsedModelStore } from './stores/lastUsedModelStore'
 import { initOnboardingStore } from './stores/onboardingStore'
 import { initLoginLicenseStateReconciliation } from './stores/premiumActions'
 import { initRecentDirectoriesStore } from './stores/recentDirectoriesStore'
+import { pauseAllFollowUpQueuesForLifecycle } from './stores/session/follow-up-queue'
 import { initSettingsStore } from './stores/settingsStore'
 import { initUpdateListeners } from './stores/updateStore'
 
@@ -150,7 +152,14 @@ initializeApp()
     if (platform.type === 'desktop') {
       initUpdateListeners()
       initSessionAttachmentRagMaintenance()
+      initSessionRetentionScheduler()
     }
+    await pauseAllFollowUpQueuesForLifecycle('startup').catch((error) => {
+      log.error('follow-up startup pause failed', error)
+    })
+    window.addEventListener('beforeunload', () => {
+      void pauseAllFollowUpQueuesForLifecycle('app-exit')
+    })
     // Cleanup is intentionally not captured — listeners persist for the app lifetime
 
     // 初始化完成，可以开始渲染

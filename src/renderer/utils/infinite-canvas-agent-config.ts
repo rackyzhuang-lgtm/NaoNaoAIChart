@@ -12,8 +12,8 @@ export function resolveInfiniteCanvasAgentConfig(
   settings: Pick<Settings, 'providers' | 'customProviders' | 'defaultChatModel'>,
   pendingImport: Sub2ApiInfiniteCanvasImport | null
 ): InfiniteCanvasAgentConfig | null {
-  if (pendingImport?.capability === 'text') {
-    const model = pendingImport.models[0]?.id
+  if (pendingImport) {
+    const model = pendingImport.models.find((candidate) => candidate.capability === 'text')?.id
     if (model) {
       return { baseUrl: pendingImport.baseUrl, apiKey: pendingImport.apiKey, model }
     }

@@ -58,6 +58,9 @@ export default class OpenAIResponses extends AbstractAISDKModel {
         openai: {
           ...openaiProviderOptions,
           store: false,
+          // Keep application and mode rules above user-authored content on every
+          // Responses model, including gateway model ids the SDK cannot classify.
+          systemMessageMode: 'developer' as const,
         },
       },
     }
@@ -87,10 +90,13 @@ export default class OpenAIResponses extends AbstractAISDKModel {
 
   protected getChatModel(options: CallChatCompletionOptions) {
     const { apiHost, apiPath } = this.options
+    const fetchWithProxy = createFetchWithProxy(this.options.useProxy, this.dependencies, {
+      requestId: options.requestId,
+      requestSequence: options.requestSequence,
+    })
     const provider = this.getProvider(
       options,
-      this.options.customFetch ||
-        ((_input, init) => createFetchWithProxy(this.options.useProxy, this.dependencies)(`${apiHost}${apiPath}`, init))
+      this.options.customFetch || ((_input, init) => fetchWithProxy(`${apiHost}${apiPath}`, init))
     )
     return wrapLanguageModel({
       model: provider.responses(this.options.model.modelId),

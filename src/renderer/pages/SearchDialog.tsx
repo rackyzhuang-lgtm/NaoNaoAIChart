@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, useTheme } from '@mui/material'
+import { Checkbox, Dialog, DialogContent, FormControlLabel, useTheme } from '@mui/material'
 import type { Session } from '@shared/types'
 import { useAtomValue } from 'jotai'
 import { Loader2, ScanSearch } from 'lucide-react'
@@ -11,14 +11,13 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { currentSessionIdAtom } from '@/stores/atoms'
+import { restoreSession } from '@/stores/chatStore'
 import { searchSessions } from '@/stores/sessionHelpers'
 import { useUIStore } from '@/stores/uiStore'
 import * as scrollActions from '../stores/scrollActions'
 import { switchCurrentSession } from '../stores/sessionActions'
 
-type Props = {}
-
-export default function SearchDialog(props: Props) {
+export default function SearchDialog() {
   const isSmallScreen = useIsSmallScreen()
   const open = useUIStore((s) => s.openSearchDialog)
   const setOpen = useUIStore((s) => s.setOpenSearchDialog)
@@ -27,7 +26,7 @@ export default function SearchDialog(props: Props) {
   const [loading, setLoading] = useState<boolean>(false)
   const [searchInput, _setSearchInput] = useState('')
   const [searchResult, setSearchResult] = useState<Session[]>([])
-  const [searchResultMarks, setSearchResultMarks] = useState<string[]>([])
+  const [includeArchived, setIncludeArchived] = useState(false)
   const theme = useTheme()
   const { t } = useTranslation()
   const ref = useRef<HTMLInputElement>(null)
@@ -40,6 +39,11 @@ export default function SearchDialog(props: Props) {
         ref.current?.focus()
         ref.current?.select() // 全选
       }, 200) // 延迟200毫秒，等待组件元素挂载完成
+    }
+  }, [open])
+  useEffect(() => {
+    if (!open) {
+      setIncludeArchived(false)
     }
   }, [open])
   const onSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,10 +60,14 @@ export default function SearchDialog(props: Props) {
       setLoading(false)
       return
     }
-    searchSessions(searchInput, flag === 'current-session' ? (currentSessionId ?? undefined) : undefined, (batches) => {
-      setSearchResult((prev) => [...prev, ...batches])
-    })
-    setSearchResultMarks([searchInput])
+    searchSessions(
+      searchInput,
+      flag === 'current-session' ? (currentSessionId ?? undefined) : undefined,
+      (batches) => {
+        setSearchResult((prev) => [...prev, ...batches])
+      },
+      { includeArchived: flag === 'global' && includeArchived }
+    )
     setLoading(false)
     ref.current?.select() // 搜索后全选输入框，方便删除回退
   }
@@ -78,7 +86,7 @@ export default function SearchDialog(props: Props) {
       maxWidth={mode === 'search-result' ? 'md' : 'sm'}
     >
       <DialogContent sx={{ padding: '0.5rem' }}>
-        <Command shouldFilter={false} filter={(value, search) => 1}>
+        <Command shouldFilter={false} filter={() => 1}>
           <CommandInput
             ref={ref}
             autoFocus={!isSmallScreen}
@@ -86,8 +94,21 @@ export default function SearchDialog(props: Props) {
             onInput={onSearchInput}
             onKeyDown={onKeyDown}
             className={cn('border-none', 'shadow-none', theme.palette.mode === 'dark' ? 'text-white' : 'text-black')}
-            placeholder={globalOnly ? t('Search conversations') + '...' : t('Type a command or search') + '...'}
+            placeholder={globalOnly ? `${t('Search conversations')}...` : `${t('Type a command or search')}...`}
           />
+          {(globalOnly || mode === 'command') && (
+            <FormControlLabel
+              sx={{ marginX: 1, alignSelf: 'flex-start' }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={includeArchived}
+                  onChange={(event) => setIncludeArchived(event.currentTarget.checked)}
+                />
+              }
+              label={t('Include archived chats in global search')}
+            />
+          )}
           {mode === 'command' && !globalOnly && (
             <CommandList>
               <CommandEmpty>{t('No results found')}</CommandEmpty>
@@ -161,13 +182,13 @@ export default function SearchDialog(props: Props) {
                   <CommandEmpty>{t('No results found')}</CommandEmpty>
                   {searchResult.map((result, i) => (
                     <CommandGroup
-                      key={i}
+                      key={result.id}
                       heading={`${t('Chat')} "${result.name}":`}
                       className={cn('[&_[cmdk-group-heading]]:font-bold', '[&_[cmdk-group-heading]]:opacity-50')}
                     >
                       {result.messages.map((message, j) => (
                         <CommandItem
-                          key={`${i}-${j}`}
+                          key={message.id}
                           value={`result-${i}-${j}`}
                           className={cn(
                             theme.palette.mode === 'dark' ? 'bg-slate-600' : 'bg-slate-50',
@@ -176,10 +197,21 @@ export default function SearchDialog(props: Props) {
                             'cursor-pointer',
                             'bg-opacity-50'
                           )}
-                          onSelect={() => {
+                          onSelect={async () => {
                             const targetSessionId = result.id
                             const targetMessageId = message.id
                             const needsSwitch = currentSessionId !== targetSessionId
+
+                            // Archived search results are restored before navigation so the opened
+                            // session remains writable and cannot be removed by retention cleanup.
+                            if (result.status === 'archived' || result.archivedAt !== undefined) {
+                              try {
+                                await restoreSession(targetSessionId)
+                              } catch (error) {
+                                console.error('Failed to restore archived search result:', error)
+                                return
+                              }
+                            }
 
                             if (needsSwitch) {
                               switchCurrentSession(targetSessionId)
@@ -195,11 +227,11 @@ export default function SearchDialog(props: Props) {
                               const success = await scrollActions.scrollToMessage(targetSessionId, targetMessageId)
 
                               if (!success && attempt < maxAttempts) {
-                                tryScroll(attempt + 1, maxAttempts)
+                                await tryScroll(attempt + 1, maxAttempts)
                               }
                             }
 
-                            tryScroll()
+                            void tryScroll()
                           }}
                         >
                           {/* 下面这个隐藏元素，是为了避免这个问题：
@@ -210,7 +242,7 @@ export default function SearchDialog(props: Props) {
                           </span>
                           <Message
                             id={message.id}
-                            key={'msg-' + message.id}
+                            key={`msg-${message.id}`}
                             sessionId={result.id}
                             sessionType={result.type || 'chat'}
                             msg={message}

@@ -158,6 +158,7 @@ export const sub2ApiModelSchema = z
     id: z.string().min(1),
     object: z.string().optional(),
     owned_by: z.string().optional(),
+    capability: z.string().optional(),
   })
   .passthrough()
 
@@ -178,16 +179,19 @@ export const sub2ApiProviderBindingSchema = z.object({
 
 export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema>
 
-export const sub2ApiInfiniteCanvasCapabilitySchema = z.enum(['text', 'image', 'video'])
+export const sub2ApiInfiniteCanvasCapabilitySchema = z.enum(['text', 'image', 'video', 'audio'])
 export type Sub2ApiInfiniteCanvasCapability = z.infer<typeof sub2ApiInfiniteCanvasCapabilitySchema>
+
+export const sub2ApiInfiniteCanvasModelSchema = sub2ApiModelSchema.extend({
+  capability: sub2ApiInfiniteCanvasCapabilitySchema,
+})
 
 export const sub2ApiInfiniteCanvasImportSchema = z.object({
   keyId: z.number().int().positive(),
   keyName: z.string().min(1).max(100),
   baseUrl: z.string().url(),
   apiKey: z.string().min(1),
-  capability: sub2ApiInfiniteCanvasCapabilitySchema,
-  models: z.array(sub2ApiModelSchema).min(1),
+  models: z.array(sub2ApiInfiniteCanvasModelSchema).min(1),
 })
 export type Sub2ApiInfiniteCanvasImport = z.infer<typeof sub2ApiInfiniteCanvasImportSchema>
 
@@ -640,11 +644,45 @@ export const sub2ApiDirectGatewayRequestSchema = z
 
 export type Sub2ApiDirectGatewayRequest = z.infer<typeof sub2ApiDirectGatewayRequestSchema>
 
-export interface Sub2ApiDirectGatewayResponse {
-  status: number
-  headers: Record<string, string>
-  body: string
+/** Compare the request fields that the trusted gateway bridge is allowed to forward. */
+export function areSub2ApiDirectGatewayRequestsEqual(
+  left: Sub2ApiDirectGatewayRequest,
+  right: Sub2ApiDirectGatewayRequest
+): boolean {
+  if (left.url !== right.url || left.method !== right.method || left.body !== right.body) return false
+  const leftHeaders = new Headers(left.headers)
+  const rightHeaders = new Headers(right.headers)
+  for (const name of ['accept', 'authorization', 'cache-control', 'content-type']) {
+    if (leftHeaders.get(name) !== rightHeaders.get(name)) return false
+  }
+  return true
 }
+
+export const sub2ApiDirectGatewayRequestIdSchema = z.string().uuid()
+
+export const sub2ApiDirectGatewayStreamStartSchema = z
+  .object({
+    requestId: sub2ApiDirectGatewayRequestIdSchema,
+    request: sub2ApiDirectGatewayRequestSchema,
+  })
+  .strict()
+
+export type Sub2ApiDirectGatewayStreamStart = z.infer<typeof sub2ApiDirectGatewayStreamStartSchema>
+
+/** The start IPC call only acknowledges registration. Model bytes arrive as events. */
+export const sub2ApiDirectGatewayStreamAckSchema = z
+  .object({
+    requestId: sub2ApiDirectGatewayRequestIdSchema,
+  })
+  .strict()
+
+export type Sub2ApiDirectGatewayStreamAck = z.infer<typeof sub2ApiDirectGatewayStreamAckSchema>
+
+export type Sub2ApiDirectGatewayStreamEvent =
+  | { requestId: string; type: 'response'; status: number; headers: Record<string, string> }
+  | { requestId: string; type: 'data'; data: string }
+  | { requestId: string; type: 'complete' }
+  | { requestId: string; type: 'error'; error: string }
 
 export const sub2ApiTotpCodeSchema = z.string().regex(/^\d{6}$/)
 

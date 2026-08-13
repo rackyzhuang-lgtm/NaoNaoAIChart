@@ -37,6 +37,8 @@ export interface ModelInterface {
 
 export const CallChatCompletionOptionsSchema = z.object({
   sessionId: z.string().optional(),
+  requestId: z.string().optional(),
+  requestSequence: z.number().int().nonnegative().optional(),
   agentMode: z.boolean().optional(),
   signal: z.instanceof(AbortSignal).optional(),
   onResultChange: z.custom<OnResultChange>().optional(),
@@ -46,6 +48,10 @@ export const CallChatCompletionOptionsSchema = z.object({
 
 export interface CallChatCompletionOptions<Tools extends ToolSet = ToolSet> {
   sessionId?: string
+  /** Logical assistant-generation identity; never sent to the provider body. */
+  requestId?: string
+  /** First provider-step sequence represented by this model invocation. */
+  requestSequence?: number
   /** Whether Agent/Work Mode capabilities are active for this request. */
   agentMode?: boolean
   signal?: AbortSignal
@@ -72,6 +78,10 @@ export type OnStatusChange = (status: MessageStatus | null) => void
 // New types for chatStream() API
 export interface ChatStreamOptions {
   sessionId?: string
+  /** Logical assistant-generation identity; never sent to the provider body. */
+  requestId?: string
+  /** First provider-step sequence represented by this model invocation. */
+  requestSequence?: number
   /** Whether Agent/Work Mode capabilities are active for this request. */
   agentMode?: boolean
   signal?: AbortSignal

@@ -10,8 +10,9 @@ import type {
   Session,
   SessionSettings,
 } from '@shared/types'
-import { getMessageText } from '@shared/utils/message'
+import { cloneMessage, getMessageText } from '@shared/utils/message'
 import type { ModelMessage, ToolSet } from 'ai'
+import { v4 as uuidv4 } from 'uuid'
 import { createModel, createModelDependencies } from '@/adapters'
 import {
   type AgentModeEntrySource,
@@ -43,11 +44,21 @@ import {
   getLastUserMessage,
   isFirstUserTurn,
   parseAgentModeSuggestionDecision,
+  shouldRequestAgentModeSuggestion,
 } from './agent-mode-suggestion'
 import { createAttachmentResolver } from './attachment-resolver'
+import {
+  claimSteerAtPrepareStep,
+  completeFollowUpsForGeneration,
+  getFollowUpText,
+  pauseFollowUpsForCancelledGeneration,
+  resolveFollowUpThreadIdForMessage,
+} from './follow-up-queue'
 import { findMessageLocation } from './forks'
 import { withSessionGenerationLock } from './generation-lock'
 import { modifyMessage, persistStreamingMessage, updateStreamingCache } from './messages'
+import { usesFixedSub2ApiGateway } from './request-policy'
+import { createSessionRetryStatus, runSessionScopedGenerationRetry } from './session-generation-retry'
 import { createInitialState, processStreamChunk } from './stream-chunk-processor'
 import { buildToolsForSession } from './tools-builder'
 import {
@@ -445,18 +456,158 @@ export function shouldPersistStreamingChunk(
   return chunkType === 'tool-call' || elapsedMs >= persistInterval
 }
 
+interface OrchestrateGenerationOptions {
+  operationType?: 'send_message' | 'regenerate'
+  appendToMessage?: boolean
+  skipAgentModeSuggestion?: boolean
+  agentModeEntrySource?: AgentModeEntrySource
+  /** Present only for a user-confirmed or automatic retry of a terminal request. */
+  requestAttemptId?: string
+  onSteerClaimed?: (threadId: string) => void
+  /** Persisted enqueue-time generation settings for a queued follow-up. */
+  sessionSettingsOverride?: SessionSettings
+  /** Persisted enqueue-time browsing choice for a queued follow-up. */
+  webBrowsingOverride?: boolean
+  onGenerationCancelled?: () => void
+}
+
+interface DeferredGenerationFailure {
+  error: unknown
+  targetMsg: Message
+  settings: SessionSettings
+  session: Session
+}
+
+interface GenerationAttemptControl {
+  controller?: AbortController
+  deferErrorPersistence?: boolean
+  trackEvent?: boolean
+}
+
+/**
+ * Public chat-generation entry point. The fixed NaoNaoAI gateway gets a
+ * session/message-scoped retry chain; every other provider keeps its existing
+ * single orchestration call (and any provider-native policy it already had).
+ */
 export async function orchestrateGeneration(
   sessionId: string,
   targetMsg: Message,
-  options?: {
-    operationType?: 'send_message' | 'regenerate'
-    appendToMessage?: boolean
-    skipAgentModeSuggestion?: boolean
-    agentModeEntrySource?: AgentModeEntrySource
+  options?: OrchestrateGenerationOptions
+): Promise<void> {
+  let claimedFollowUpThreadId: string | undefined
+  let generationCancelled = false
+  const attemptOptions = {
+    ...options,
+    onSteerClaimed: (threadId: string) => {
+      claimedFollowUpThreadId = threadId
+      options?.onSteerClaimed?.(threadId)
+    },
+    onGenerationCancelled: () => {
+      generationCancelled = true
+      options?.onGenerationCancelled?.()
+    },
   }
+  const settings = options?.sessionSettingsOverride ?? (await chatStore.getSessionSettings(sessionId))
+  const globalSettings = settingsStore.getState().getSettings()
+  if (!settings || !usesFixedSub2ApiGateway(settings, globalSettings)) {
+    await orchestrateGenerationAttempt(sessionId, targetMsg, attemptOptions)
+    if (claimedFollowUpThreadId) {
+      await settleClaimedFollowUpsForGeneration(sessionId, claimedFollowUpThreadId, targetMsg.id, generationCancelled)
+    }
+    return
+  }
+
+  const retryBaseMessage = cloneMessage(targetMsg)
+  let currentTarget = targetMsg
+
+  await runSessionScopedGenerationRetry<DeferredGenerationFailure>({
+    sessionId,
+    messageId: targetMsg.id,
+    initialRequestAttemptId: options?.requestAttemptId,
+    createRequestAttemptId: uuidv4,
+    runAttempt: async ({ requestAttemptId, retryNumber, controller }) => {
+      const failure = await orchestrateGenerationAttempt(
+        sessionId,
+        currentTarget,
+        { ...attemptOptions, requestAttemptId },
+        {
+          controller,
+          deferErrorPersistence: true,
+          trackEvent: retryNumber === 0,
+        }
+      )
+      return failure ? { type: 'failed', error: failure.error, failure } : { type: 'complete' }
+    },
+    onRetryScheduled: async ({ retryNumber, controller }) => {
+      currentTarget = {
+        ...cloneMessage(retryBaseMessage),
+        generating: true,
+        cancel: undefined,
+        errorCode: undefined,
+        error: undefined,
+        errorExtra: undefined,
+        status: [createSessionRetryStatus(retryNumber)],
+        firstTokenLatency: undefined,
+      }
+      await persistStreamingMessage(sessionId, currentTarget)
+      currentTarget = { ...currentTarget, cancel: () => controller.abort() }
+      updateStreamingCache(sessionId, currentTarget)
+    },
+    onFinalFailure: async (failure, error) => {
+      const failedMessage = handleGenerationError(error, failure.targetMsg, failure.settings, {
+        agentMode: getSessionAgentModeEntry(sessionId, failure.session).value,
+        operationType: options?.operationType,
+      })
+      await persistStreamingMessage(sessionId, failedMessage, { refreshCounting: true })
+    },
+    onCancelled: async () => {
+      generationCancelled = true
+      currentTarget = {
+        ...currentTarget,
+        generating: false,
+        cancel: undefined,
+        status: [],
+      }
+      await persistStreamingMessage(sessionId, currentTarget, { refreshCounting: true })
+    },
+  })
+  if (claimedFollowUpThreadId) {
+    await settleClaimedFollowUpsForGeneration(sessionId, claimedFollowUpThreadId, targetMsg.id, generationCancelled)
+  }
+}
+
+export async function settleClaimedFollowUpsForGeneration(
+  sessionId: string,
+  threadId: string,
+  targetMessageId: string,
+  cancelled: boolean
 ) {
+  if (cancelled) {
+    await pauseFollowUpsForCancelledGeneration(sessionId, threadId, targetMessageId)
+    return
+  }
   const session = await chatStore.getSession(sessionId)
-  const settings = await chatStore.getSessionSettings(sessionId)
+  const location = session ? findMessageLocation(session, targetMessageId) : undefined
+  const message = location ? location.list[location.index] : undefined
+  if (
+    message &&
+    !message.generating &&
+    message.finishReason !== 'tool-call-paused' &&
+    Boolean(message.error || message.finishReason)
+  ) {
+    await completeFollowUpsForGeneration(sessionId, threadId, targetMessageId)
+  }
+}
+
+/** Executes exactly one provider attempt and never starts another request. */
+async function orchestrateGenerationAttempt(
+  sessionId: string,
+  targetMsg: Message,
+  options?: OrchestrateGenerationOptions,
+  attemptControl?: GenerationAttemptControl
+): Promise<DeferredGenerationFailure | undefined> {
+  const session = await chatStore.getSession(sessionId)
+  const settings = options?.sessionSettingsOverride ?? (await chatStore.getSessionSettings(sessionId))
   const globalSettings = settingsStore.getState().getSettings()
   const configs = await platform.getConfig()
 
@@ -464,7 +615,9 @@ export async function orchestrateGeneration(
     return
   }
 
-  trackGenerateEvent(sessionId, settings, globalSettings, session.type, options)
+  if (attemptControl?.trackEvent !== false) {
+    trackGenerateEvent(sessionId, settings, globalSettings, session.type, options)
+  }
 
   const startTime = Date.now()
   let firstTokenLatency: number | undefined
@@ -480,7 +633,7 @@ export async function orchestrateGeneration(
   const { messages, index: targetMsgIx } = found
   const promptTargetMsgIx = options?.appendToMessage ? targetMsgIx + 1 : targetMsgIx
 
-  const controller = new AbortController()
+  const controller = attemptControl?.controller ?? new AbortController()
   // Wire the stop button to this controller before any pre-stream network work
   // runs (agent-mode suggestion classifier, MCP/tool harness setup). Those steps
   // issue real requests that can hang; without a cancel handler in the message
@@ -496,23 +649,32 @@ export async function orchestrateGeneration(
     const model = await createModel(settings, dependencies)
     const sessionKnowledgeBaseMap = uiStore.getState().sessionKnowledgeBaseMap
     const knowledgeBase = sessionKnowledgeBaseMap[sessionId]
-    const webBrowsing = getSessionWebBrowsing(sessionId, settings.provider)
+    const webBrowsing = options?.webBrowsingOverride ?? getSessionWebBrowsing(sessionId, settings.provider)
     const agentModeSupported = platform.type === 'desktop' && model.isSupportToolUse('agent')
-    const agentModeEntry = getSessionAgentModeEntry(sessionId, session)
+    const generationSession = options?.sessionSettingsOverride
+      ? { ...session, settings: options.sessionSettingsOverride }
+      : session
+    const agentModeEntry = getSessionAgentModeEntry(sessionId, generationSession)
     const { value: storedAgentModeValue } = agentModeEntry
     const agentModeValue = agentModeSupported ? storedAgentModeValue : 'off'
     const lastUserMessage = getLastUserMessage(messages, promptTargetMsgIx)
+    const conversationMode = lastUserMessage?.conversationMode ?? 'default'
+    const followUpThreadId = resolveFollowUpThreadIdForMessage(session, targetMsg.id)
+    const attemptId = options?.requestAttemptId ?? targetMsg.id
 
     if (
-      options?.operationType === 'send_message' &&
-      !options?.appendToMessage &&
-      !options.skipAgentModeSuggestion &&
-      agentModeSupported &&
-      // Only 'auto' runs the suggestion classifier; 'on' is already enabled and
-      // 'off' opts out of suggestions entirely.
-      agentModeValue === 'auto' &&
-      lastUserMessage &&
-      isFirstUserTurn(messages, promptTargetMsgIx)
+      shouldRequestAgentModeSuggestion({
+        operationType: options?.operationType,
+        appendToMessage: options?.appendToMessage,
+        skipSuggestion: options?.skipAgentModeSuggestion,
+        agentModeSupported,
+        agentModeValue,
+        conversationMode,
+        hasUserMessage: Boolean(lastUserMessage),
+        isFirstUserTurn: isFirstUserTurn(messages, promptTargetMsgIx),
+        usesFixedGateway: usesFixedSub2ApiGateway(settings, globalSettings),
+      }) &&
+      lastUserMessage
     ) {
       const suggestionModel = await createAgentModeSuggestionModel(
         settings,
@@ -533,6 +695,7 @@ export async function orchestrateGeneration(
       // already-aborted controller. shouldSuggestAgentMode() swallows the abort
       // and returns normally, so this won't reach the catch block below.
       if (controller.signal.aborted) {
+        options?.onGenerationCancelled?.()
         targetMsg = { ...targetMsg, generating: false, cancel: undefined, status: [] }
         await persistStreamingMessage(sessionId, targetMsg, { refreshCounting: true })
         return
@@ -588,6 +751,8 @@ export async function orchestrateGeneration(
       agentModeValue,
       agentModeLocked: Boolean(agentModeEntry?.locked),
       agentModeSupported,
+      conversationMode,
+      goal: session.goal,
       signal: controller.signal,
       providerOptions: settings.providerOptions,
       preserveLastPromptMessageToolCalls: Boolean(options?.appendToMessage),
@@ -597,6 +762,17 @@ export async function orchestrateGeneration(
           void lockSessionAgentMode(sessionId, reason)
         },
       },
+      takeSteerFollowUp: async () => {
+        const followUp = await claimSteerAtPrepareStep({
+          sessionId,
+          threadId: followUpThreadId,
+          targetMessageId: targetMsg.id,
+          attemptId,
+        })
+        if (followUp) options?.onSteerClaimed?.(followUpThreadId)
+        const text = followUp ? getFollowUpText(followUp) : ''
+        return text || undefined
+      },
     })
     promptMsgs = prepared.promptMsgs
     if (!options?.appendToMessage) {
@@ -604,7 +780,16 @@ export async function orchestrateGeneration(
     }
     const { coreMessages, tools, fallbackToolCallPart } = prepared
 
-    const chatOptions = { ...prepared.chatOptions }
+    const initialParts = options?.appendToMessage
+      ? targetMsg.contentParts
+      : fallbackToolCallPart
+        ? [fallbackToolCallPart]
+        : undefined
+    const chatOptions = {
+      ...prepared.chatOptions,
+      requestId: options?.requestAttemptId ? `${targetMsg.id}:${options.requestAttemptId}` : targetMsg.id,
+      requestSequence: createInitialState(initialParts).stepIndex,
+    }
 
     if (Object.keys(tools).length > 0) {
       chatOptions.tools = withToolCallLimitPause(tools as ToolSet, MAX_TOOL_CALLS_BEFORE_CONFIRMATION)
@@ -612,9 +797,7 @@ export async function orchestrateGeneration(
 
     const stream = model.chatStream(coreMessages, chatOptions) as AsyncGenerator<ModelStreamPart<ToolSet>>
 
-    processorState = createInitialState(
-      options?.appendToMessage ? targetMsg.contentParts : fallbackToolCallPart ? [fallbackToolCallPart] : undefined
-    )
+    processorState = createInitialState(initialParts)
 
     const streamCallbacks = {
       onFileReceived: async (mediaType: string, base64: string) => {
@@ -741,6 +924,7 @@ export async function orchestrateGeneration(
     }
 
     if (controller.signal.aborted) {
+      options?.onGenerationCancelled?.()
       targetMsg = {
         ...targetMsg,
         generating: false,
@@ -749,6 +933,10 @@ export async function orchestrateGeneration(
       }
       await persistStreamingMessage(sessionId, targetMsg, { refreshCounting: true })
       return
+    }
+
+    if (attemptControl?.deferErrorPersistence) {
+      return { error: err, targetMsg, settings, session }
     }
 
     targetMsg = handleGenerationError(err, targetMsg, settings, {
@@ -833,8 +1021,10 @@ async function buildToolsForPausedToolCall(session: Session, settings: SessionSe
 }
 
 export function stopPausedToolCall(sessionId: string, messageId: string, toolCallId: string) {
-  return withSessionGenerationLock(sessionId, () =>
-    stopPausedToolCallWithoutSessionLock(sessionId, messageId, toolCallId)
+  return withSessionGenerationLock(
+    sessionId,
+    () => stopPausedToolCallWithoutSessionLock(sessionId, messageId, toolCallId),
+    `stop-tool:${messageId}:${toolCallId}`
   ).finally(() => wakeBackgroundTaskFollowUps(sessionId))
 }
 
@@ -937,8 +1127,10 @@ async function stopPausedToolCallWithoutSessionLock(sessionId: string, messageId
 }
 
 export function continuePausedToolCall(sessionId: string, messageId: string, toolCallId: string) {
-  return withSessionGenerationLock(sessionId, () =>
-    continuePausedToolCallWithoutSessionLock(sessionId, messageId, toolCallId)
+  return withSessionGenerationLock(
+    sessionId,
+    () => continuePausedToolCallWithoutSessionLock(sessionId, messageId, toolCallId),
+    `continue-tool:${messageId}:${toolCallId}`
   ).finally(() => wakeBackgroundTaskFollowUps(sessionId))
 }
 
@@ -1063,7 +1255,6 @@ async function continuePausedToolCallWithoutSessionLock(sessionId: string, messa
       provider: settings.provider,
       model: settings.modelId,
       agentMode: getSessionAgentModeEntry(sessionId, session).value,
-      fullAccess: settings.agentFullAccess === true,
       toolName: part.toolName,
       pauseType: part.pauseReason?.type,
     })
@@ -1087,8 +1278,10 @@ async function continuePausedToolCallWithoutSessionLock(sessionId: string, messa
 }
 
 export function retryFromLastToolCallAfterApiError(sessionId: string, messageId: string, toolCallId: string) {
-  return withSessionGenerationLock(sessionId, () =>
-    retryFromLastToolCallAfterApiErrorWithoutSessionLock(sessionId, messageId, toolCallId)
+  return withSessionGenerationLock(
+    sessionId,
+    () => retryFromLastToolCallAfterApiErrorWithoutSessionLock(sessionId, messageId, toolCallId),
+    `retry-tool:${messageId}:${toolCallId}`
   )
 }
 
@@ -1117,6 +1310,7 @@ async function retryFromLastToolCallAfterApiErrorWithoutSessionLock(
     errorExtra: undefined,
     contentParts: keepContentPartsThroughToolCall(message, toolCallId),
   }
+  const requestAttemptId = uuidv4()
 
   if (part.state === 'call') {
     const settings = await chatStore.getSessionSettings(sessionId)
@@ -1158,7 +1352,7 @@ async function retryFromLastToolCallAfterApiErrorWithoutSessionLock(
       await orchestrateGeneration(
         sessionId,
         { ...retryMessage, generating: true },
-        { operationType: 'regenerate', appendToMessage: true }
+        { operationType: 'regenerate', appendToMessage: true, requestAttemptId }
       )
     } catch (error) {
       captureAgentModeException(error, {
@@ -1166,7 +1360,6 @@ async function retryFromLastToolCallAfterApiErrorWithoutSessionLock(
         provider: settings.provider,
         model: settings.modelId,
         agentMode: getSessionAgentModeEntry(sessionId, session).value,
-        fullAccess: settings.agentFullAccess === true,
         toolName: part.toolName,
       })
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -1189,6 +1382,6 @@ async function retryFromLastToolCallAfterApiErrorWithoutSessionLock(
   await orchestrateGeneration(
     sessionId,
     { ...retrySourceMessage, generating: true },
-    { operationType: 'regenerate', appendToMessage: true }
+    { operationType: 'regenerate', appendToMessage: true, requestAttemptId }
   )
 }

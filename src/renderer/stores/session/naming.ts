@@ -1,5 +1,6 @@
 import { isExpectedGenerationError } from '@shared/models/error-classification'
-import type { ModelProvider } from '@shared/types'
+import type { ModelProvider, Session } from '@shared/types'
+import { getMessageText } from '@shared/utils/message'
 import { createModel } from '@/adapters'
 import { languageNameMap } from '@/i18n/locales'
 import { generateText } from '@/packages/model-calls'
@@ -7,7 +8,22 @@ import * as promptFormat from '@/packages/prompts'
 import { reportError } from '@/utils/sentry'
 import * as chatStore from '../chatStore'
 import { settingsStore } from '../settingsStore'
+import { usesFixedSub2ApiGateway } from './request-policy'
 import { activeNameGenerations, pendingNameGenerations } from './state'
+
+const LOCAL_NAME_MAX_LENGTH = 48
+
+export function deriveLocalConversationName(messages: Session['messages']): string | undefined {
+  const firstUserMessage = messages.find((message) => message.role === 'user')
+  if (!firstUserMessage) return undefined
+
+  const text = getMessageText(firstUserMessage).replace(/\s+/g, ' ').trim()
+  if (!text) return undefined
+
+  const characters = Array.from(text)
+  if (characters.length <= LOCAL_NAME_MAX_LENGTH) return text
+  return `${characters.slice(0, LOCAL_NAME_MAX_LENGTH - 3).join('')}...`
+}
 
 /**
  * Modify session name and thread name
@@ -48,6 +64,14 @@ async function _generateName(sessionId: string, modifyName: (sessionId: string, 
       : {}),
   }
   try {
+    if (usesFixedSub2ApiGateway(settings, globalSettings)) {
+      const localName = deriveLocalConversationName(session.messages)
+      if (localName) {
+        await modifyName(sessionId, localName)
+      }
+      return
+    }
+
     const model = await createModel(settings)
     const result = await generateText(
       model,

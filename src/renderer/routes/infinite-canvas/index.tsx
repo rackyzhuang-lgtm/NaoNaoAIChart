@@ -1,10 +1,14 @@
 import { Alert, Button, Center, Group, Loader, Stack, Switch, Text, TextInput } from '@mantine/core'
 import { IconAlertCircle, IconFolder, IconRefresh, IconRotateClockwise } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { CanvasAgentBroker } from '@/components/infinite-canvas/CanvasAgentBroker'
 import Page from '@/components/layout/Page'
-import { takePendingInfiniteCanvasImport } from '@/stores/infiniteCanvasImportStore'
+import {
+  acknowledgePendingInfiniteCanvasImport,
+  getPendingInfiniteCanvasImport,
+  subscribePendingInfiniteCanvasImport,
+} from '@/stores/infiniteCanvasImportStore'
 import { settingsStore } from '@/stores/settingsStore'
 import { resolveInfiniteCanvasAgentConfig } from '@/utils/infinite-canvas-agent-config'
 import { getInfiniteCanvasStoragePathApi } from '@/utils/infinite-canvas-storage-path-api'
@@ -14,7 +18,7 @@ export const Route = createFileRoute('/infinite-canvas/')({
   component: InfiniteCanvasPage,
 })
 
-function InfiniteCanvasPage() {
+export function InfiniteCanvasPage() {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
@@ -22,7 +26,11 @@ function InfiniteCanvasPage() {
   const [allowSkills, setAllowSkills] = useState(true)
   const [allowMcp, setAllowMcp] = useState(false)
   const [canvasRevision, setCanvasRevision] = useState(0)
-  const [pendingImport] = useState(() => takePendingInfiniteCanvasImport())
+  const pendingImport = useSyncExternalStore(
+    subscribePendingInfiniteCanvasImport,
+    getPendingInfiniteCanvasImport,
+    getPendingInfiniteCanvasImport
+  )
   const [storagePath, setStoragePath] = useState('')
   const [selectingStoragePath, setSelectingStoragePath] = useState(false)
   const [storageRestartRequired, setStorageRestartRequired] = useState(false)
@@ -44,7 +52,10 @@ function InfiniteCanvasPage() {
         if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') {
           throw new Error('Invalid canvas origin')
         }
-        const agentConfig = resolveInfiniteCanvasAgentConfig(settingsStore.getState().getSettings(), pendingImport)
+        const agentConfig = resolveInfiniteCanvasAgentConfig(
+          settingsStore.getState().getSettings(),
+          getPendingInfiniteCanvasImport()?.payload ?? null
+        )
         if (agentConfig && typeof window.electronAPI.configureInfiniteCanvasAgent === 'function') {
           try {
             await window.electronAPI.configureInfiniteCanvasAgent(agentConfig)
@@ -65,11 +76,69 @@ function InfiniteCanvasPage() {
         setUrl(agentUrl.toString())
       })
       .catch(() => setError('无限画布加载失败，请重试。'))
-  }, [canvasRevision, pendingImport])
+  }, [canvasRevision])
 
   useEffect(() => {
     loadCanvas()
   }, [loadCanvas])
+
+  useEffect(() => {
+    if (!url || !pendingImport) return
+    const canvasOrigin = new URL(url).origin
+    let completed = false
+    let bridgeReady = false
+    const timerIds: { retry?: number; timeout?: number } = {}
+    const stopDelivery = () => {
+      completed = true
+      if (timerIds.retry !== undefined) window.clearInterval(timerIds.retry)
+      if (timerIds.timeout !== undefined) window.clearTimeout(timerIds.timeout)
+    }
+    const postToCanvas = (message: unknown) => {
+      iframeRef.current?.contentWindow?.postMessage(message, canvasOrigin)
+    }
+    const sendImport = () => {
+      if (!bridgeReady || completed) return
+      postToCanvas({
+        type: 'naonao-import-ai-config',
+        requestId: pendingImport.requestId,
+        payload: pendingImport.payload,
+      })
+    }
+    const handleImportResult = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow || event.origin !== canvasOrigin) return
+      const result = event.data as { type?: unknown; requestId?: unknown; ok?: unknown; error?: unknown } | null
+      if (result?.type === 'naonao-embed-bridge-ready') {
+        bridgeReady = true
+        sendImport()
+        return
+      }
+      if (!result || result.type !== 'naonao-import-ai-config-result' || result.requestId !== pendingImport.requestId) {
+        return
+      }
+      stopDelivery()
+      if (result.ok === true) {
+        acknowledgePendingInfiniteCanvasImport(pendingImport.requestId)
+        setAgentError(null)
+      } else {
+        setAgentError(typeof result.error === 'string' ? result.error : '无法导入 API Key 到无限画布。')
+      }
+    }
+    window.addEventListener('message', handleImportResult)
+    postToCanvas({ type: 'naonao-embed-bridge-ping' })
+    timerIds.retry = window.setInterval(() => {
+      if (bridgeReady) sendImport()
+      else postToCanvas({ type: 'naonao-embed-bridge-ping' })
+    }, 500)
+    timerIds.timeout = window.setTimeout(() => {
+      if (completed) return
+      stopDelivery()
+      setAgentError('无法导入 API Key 到无限画布：画布未确认接收，请重试。')
+    }, 10_000)
+    return () => {
+      stopDelivery()
+      window.removeEventListener('message', handleImportResult)
+    }
+  }, [pendingImport, url])
 
   useEffect(() => {
     if (!window.electronAPI) return
@@ -181,12 +250,7 @@ function InfiniteCanvasPage() {
             referrerPolicy="no-referrer"
             ref={iframeRef}
             onLoad={() => {
-              if (pendingImport) {
-                iframeRef.current?.contentWindow?.postMessage(
-                  { type: 'naonao-import-ai-config', payload: pendingImport },
-                  new URL(url).origin
-                )
-              }
+              iframeRef.current?.contentWindow?.postMessage({ type: 'naonao-embed-bridge-ping' }, new URL(url).origin)
             }}
           />
         ) : error ? (

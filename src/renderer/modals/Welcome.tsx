@@ -2,7 +2,7 @@ import NiceModal, { useModal } from '@ebay/nice-modal-react'
 import { Button, Image, List, Paper, Stack, Text, Title } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
-import icon from '../static/icon.png'
+import brandLogo from '../static/icon.png'
 import { navigateToSettings } from './Settings'
 
 const Welcome = NiceModal.create(() => {
@@ -28,7 +28,7 @@ const Welcome = NiceModal.create(() => {
       <Stack gap="xl">
         <Stack gap="md" align="center">
           <Stack gap="sm" align="center">
-            <Image src={icon} w={86} h={86} />
+            <Image src={brandLogo} w={220} h={86} fit="contain" alt="NaoNaoAI Chat logo" />
             <Stack gap="3xs" align="center">
               <Title order={3}>NaoNaoAI Chat</Title>
               <Text size="md">{t('An easy-to-use AI client app')}</Text>

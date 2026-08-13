@@ -10,12 +10,18 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { scheduleGenerateNameAndThreadName, scheduleGenerateThreadName } from '@/stores/sessionActions'
 import * as settingActions from '@/stores/settingActions'
 import { useUIStore } from '@/stores/uiStore'
+import SideChatReopenButton, { type ReopenableSideChat } from '../chat/SideChatReopenButton'
 import Divider from '../common/Divider'
 import { ScalableIcon } from '../common/ScalableIcon'
 import Toolbar from './Toolbar'
 import WindowControls from './WindowControls'
 
-export default function Header(props: { session: Session }) {
+export default function Header(props: {
+  session: Session
+  sideChats?: ReopenableSideChat[]
+  selectedSideChatSessionId?: string
+  onOpenSideChat?: (sessionId: string) => void
+}) {
   const { t } = useTranslation()
   const showSidebar = useUIStore((s) => s.showSidebar)
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
@@ -96,6 +102,14 @@ export default function Header(props: { session: Session }) {
             </ActionIcon>
           </Tooltip>
         </Flex>
+
+        {props.onOpenSideChat && props.sideChats?.length ? (
+          <SideChatReopenButton
+            sideChats={props.sideChats}
+            selectedSessionId={props.selectedSideChatSessionId}
+            onOpen={props.onOpenSideChat}
+          />
+        ) : null}
 
         <Toolbar sessionId={currentSession.id} />
 

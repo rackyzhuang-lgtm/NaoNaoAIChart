@@ -208,12 +208,11 @@ const defaultSessionsForENAll: Session[] = [
   },
 ]
 
-// Keep the first-run sidebar focused on the examples shown in the product UI.
-export const defaultSessionsForEN: Session[] = defaultSessionsForENAll.filter(
-  (session) => !['e22ab364-4681-4e24-aaba-461ed0fccfd3', '55d92e88-02af-4c3b-a378-aa0a1970abb1'].includes(session.id)
-)
+// New profiles start with one empty chat. Historical templates remain defined
+// below so migrations can still identify data created by older versions.
+export const defaultSessionsForEN: Session[] = [defaultSessionsForENAll[0]]
 
-export const defaultSessionsForCN: Session[] = [
+const defaultSessionsForCNAll: Session[] = [
   {
     id: '81cfc426-48b4-4a13-ad42-bfcfc4544299',
     name: '小红书文案生成器 (示例)',
@@ -336,8 +335,14 @@ export const defaultSessionsForCN: Session[] = [
       },
     ].map(migrateMessage),
   },
-  ...defaultSessionsForEN,
+  ...defaultSessionsForENAll,
 ]
+
+export const defaultSessionsForCN: Session[] = [defaultSessionsForENAll[0]]
+
+export const historicalDefaultSessionIds = new Set(
+  [...defaultSessionsForENAll, ...defaultSessionsForCNAll].map((session) => session.id)
+)
 
 export const imageCreatorSessionForCN: Session = {
   id: 'chatbox-chat-demo-image-creator',

@@ -176,7 +176,12 @@ export async function removeMessage(sessionId: string, messageId: string) {
  */
 export function submitNewUserMessage(
   sessionId: string,
-  params: { newUserMsg: Message; needGenerating: boolean; onUserMessageReady?: () => void }
+  params: {
+    newUserMsg: Message
+    needGenerating: boolean
+    onUserMessageReady?: () => void
+    onUserMessageInserted?: () => void
+  }
 ) {
   return withSessionGenerationLock(
     sessionId,
@@ -187,7 +192,12 @@ export function submitNewUserMessage(
 
 async function submitNewUserMessageUnlocked(
   sessionId: string,
-  params: { newUserMsg: Message; needGenerating: boolean; onUserMessageReady?: () => void }
+  params: {
+    newUserMsg: Message
+    needGenerating: boolean
+    onUserMessageReady?: () => void
+    onUserMessageInserted?: () => void
+  }
 ) {
   // Import the unlocked generation helper lazily to avoid a circular dependency and
   // avoid reacquiring the session lock already held by submitNewUserMessage().
@@ -248,6 +258,11 @@ async function submitNewUserMessageUnlocked(
     newAssistantMsg.generating = true
     await insertMessage(sessionId, newAssistantMsg)
   }
+
+  // New-session navigation must wait for the generating placeholder too.
+  // Otherwise Header can briefly see a completed user-only session and launch
+  // auxiliary title generation while the real answer is still being prepared.
+  params.onUserMessageInserted?.()
 
   try {
     // 如果本次消息开启了联网问答，需要检查当前模型是否支持

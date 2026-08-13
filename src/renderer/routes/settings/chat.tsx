@@ -1,4 +1,17 @@
-import { Box, Button, FileButton, Flex, Slider, Stack, Switch, Text, Textarea, Title, Tooltip } from '@mantine/core'
+import {
+  Box,
+  Button,
+  FileButton,
+  Flex,
+  SegmentedControl,
+  Slider,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+  Title,
+  Tooltip,
+} from '@mantine/core'
 import { chatSessionSettings, getDefaultPrompt } from '@shared/defaults'
 import { IconInfoCircle } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -250,18 +263,6 @@ export function RouteComponent() {
             </Flex>
           </Flex>
         </Stack>
-
-        {/* Stream output */}
-        <Stack gap="xxs">
-          <Flex align="center" gap="xs" justify="space-between">
-            <Text size="sm">{t('Stream output')}</Text>
-            <Switch
-              // label={t('Stream output')}
-              checked={settings?.stream ?? true}
-              onChange={(v) => setSettings({ stream: v.target.checked })}
-            />
-          </Flex>
-        </Stack>
       </Stack>
       <Divider />
 
@@ -352,6 +353,8 @@ export function RouteComponent() {
         {/* Function */}
         <Stack gap="sm">
           <Text c="chatbox-tertiary">{t('Function')}</Text>
+
+          <FollowUpBehaviorSetting />
 
           <Switch
             label={t('Auto-collapse code blocks')}
@@ -454,6 +457,33 @@ export function RouteComponent() {
 
       {/* Context Management */}
       <ContextManagementSection />
+    </Stack>
+  )
+}
+
+export function FollowUpBehaviorSetting() {
+  const { t } = useTranslation()
+  const followUpBehavior = useSettingsStore((state) => state.followUpBehavior ?? 'queue')
+  const setSettings = useSettingsStore((state) => state.setSettings)
+
+  return (
+    <Stack gap={4}>
+      <Text size="sm">{t('Default follow-up behavior')}</Text>
+      <Text size="xs" c="chatbox-tertiary">
+        {t('Choose what Enter does while a response is being generated.')}
+      </Text>
+      <SegmentedControl
+        value={followUpBehavior}
+        onChange={(value) => {
+          if (value === 'queue' || value === 'steer') setSettings({ followUpBehavior: value })
+        }}
+        data={[
+          { label: t('Queue follow-up'), value: 'queue' },
+          { label: t('Adjust direction'), value: 'steer' },
+        ]}
+        aria-label={t('Default follow-up behavior') || undefined}
+        className="max-w-md"
+      />
     </Stack>
   )
 }

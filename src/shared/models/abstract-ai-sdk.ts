@@ -80,6 +80,33 @@ function isRetryableStatusError(error: unknown): boolean {
   return false
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name
+  }
+  if (typeof error === 'string') {
+    return error
+  }
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    if (typeof record.message === 'string' && record.message) {
+      return record.message
+    }
+    if (record.error !== error) {
+      const nested = getErrorMessage(record.error)
+      if (nested && nested !== 'undefined') {
+        return nested
+      }
+    }
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return 'Unknown error'
+    }
+  }
+  return String(error)
+}
+
 class StatusQueue {
   private queue: ModelStatus[] = []
   private version = 0
@@ -216,7 +243,11 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
   protected allowsStatusRetry(): boolean {
     const apiHost =
       'apiHost' in this.options && typeof this.options.apiHost === 'string' ? this.options.apiHost : undefined
-    return !apiHost || !isSub2ApiGatewayUrl(apiHost)
+    const apiPath =
+      'apiPath' in this.options && typeof this.options.apiPath === 'string' ? this.options.apiPath : undefined
+    if (!apiHost) return true
+    const endpoint = apiPath ? `${apiHost.replace(/\/$/, '')}/${apiPath.replace(/^\//, '')}` : apiHost
+    return !isSub2ApiGatewayUrl(endpoint)
   }
 
   // Resolves call settings while ensuring reasoning provider options are never sent
@@ -711,7 +742,7 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
     if (error instanceof ChatboxAIAPIError) {
       throw error
     }
-    throw new ApiError(`Error from ${this.name}${context}: ${error}`)
+    throw new ApiError(`Error from ${this.name}${context}: ${getErrorMessage(error)}`)
   }
 
   /**

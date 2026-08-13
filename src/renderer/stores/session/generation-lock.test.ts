@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetSessionGenerationLocksForTests, withSessionGenerationLock } from './generation-lock'
+import {
+  isSessionGenerationActive,
+  resetSessionGenerationLocksForTests,
+  withSessionGenerationLock,
+} from './generation-lock'
 
 describe('session generation lock', () => {
   afterEach(() => {
@@ -25,9 +29,12 @@ describe('session generation lock', () => {
     const second = withSessionGenerationLock('session-1', secondTask)
 
     await Promise.resolve()
+    expect(isSessionGenerationActive('session-1')).toBe(true)
+    expect(isSessionGenerationActive('session-2')).toBe(false)
     expect(secondTask).not.toHaveBeenCalled()
     releaseFirst()
     await Promise.all([first, second])
+    expect(isSessionGenerationActive('session-1')).toBe(false)
     expect(events).toEqual(['first:start', 'first:end', 'second'])
   })
 

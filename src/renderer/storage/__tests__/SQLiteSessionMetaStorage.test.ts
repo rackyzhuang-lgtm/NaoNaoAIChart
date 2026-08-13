@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionMetaRecord } from '@shared/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SQLiteSessionMetaStorage } from '../SQLiteSessionMetaStorage'
 
 const mockDatabase = vi.hoisted(() => ({
@@ -42,7 +42,9 @@ describe('SQLiteSessionMetaStorage', () => {
     mockDatabase.execute.mockResolvedValue({ changes: { changes: 0 } })
     mockDatabase.run.mockResolvedValue({ changes: { changes: 1 } })
     mockDatabase.executeSet.mockResolvedValue({ changes: { changes: 1 } })
-    mockDatabase.query.mockResolvedValue({ values: [{ name: 'archived_at' }] })
+    mockDatabase.query.mockResolvedValue({
+      values: [{ name: 'status' }, { name: 'last_activity_at' }, { name: 'archived_at' }, { name: 'archive_source' }],
+    })
   })
 
   it('createMany delegates batch writes to the Capacitor SQLite transaction API', async () => {
@@ -56,11 +58,11 @@ describe('SQLiteSessionMetaStorage', () => {
       [
         {
           statement: expect.stringContaining('INSERT OR REPLACE INTO session_meta'),
-          values: ['a', 'Test Session', 0, 0, null, null, null, null, 'chat', 100, 100],
+          values: ['a', 'Test Session', 0, 0, null, null, null, null, null, null, null, 'chat', 100, 100],
         },
         {
           statement: expect.stringContaining('INSERT OR REPLACE INTO session_meta'),
-          values: ['b', 'Test Session', 1, 0, null, null, null, null, 'chat', 100, 100],
+          values: ['b', 'Test Session', 1, 0, null, null, null, null, null, null, null, 'chat', 100, 100],
         },
       ],
       true
@@ -111,6 +113,9 @@ describe('SQLiteSessionMetaStorage', () => {
     await storage.initialize()
 
     expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE session_meta ADD COLUMN archived_at INTEGER')
+    expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE session_meta ADD COLUMN status TEXT')
+    expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE session_meta ADD COLUMN last_activity_at INTEGER')
+    expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE session_meta ADD COLUMN archive_source TEXT')
   })
 
   it('getArchivedPage queries archived rows with limit and offset', async () => {
@@ -135,7 +140,7 @@ describe('SQLiteSessionMetaStorage', () => {
     const page = await storage.getArchivedPage(2, 1)
 
     expect(mockDatabase.query).toHaveBeenCalledWith(
-      'SELECT * FROM session_meta WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ? OFFSET ?',
+      "SELECT * FROM session_meta WHERE status = 'archived' OR archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ? OFFSET ?",
       [1, 2]
     )
     expect(page.items.map((record) => record.id)).toEqual(['archived'])
@@ -152,7 +157,7 @@ describe('SQLiteSessionMetaStorage', () => {
     await expect(storage.getArchivedTotal()).resolves.toBe(7)
 
     expect(mockDatabase.query).toHaveBeenLastCalledWith(
-      'SELECT COUNT(*) as total FROM session_meta WHERE archived_at IS NOT NULL'
+      "SELECT COUNT(*) as total FROM session_meta WHERE status = 'archived' OR archived_at IS NOT NULL"
     )
   })
 

@@ -8,16 +8,15 @@ import { describe, expect, test, vi } from 'vitest'
 import Sub2ApiKeySettings from './Sub2ApiKeySettings'
 
 const navigationMocks = vi.hoisted(() => ({
-  createSession: vi.fn().mockResolvedValue({ id: 'new-chat-session' }),
   switchCurrentSession: vi.fn(),
   navigate: vi.fn().mockResolvedValue(undefined),
+  applySub2ApiProviderBinding: vi.fn().mockResolvedValue({ modelId: 'gpt-test', sessionId: 'current-chat-session' }),
 }))
 
 vi.mock('@/router', () => ({ router: { navigate: navigationMocks.navigate } }))
-vi.mock('@/stores/chatStore', () => ({ createSession: navigationMocks.createSession }))
 vi.mock('@/stores/sessionActions', () => ({ switchCurrentSession: navigationMocks.switchCurrentSession }))
-vi.mock('@/stores/sessionHelpers', () => ({
-  initEmptyChatSession: vi.fn(() => ({ name: 'Untitled', type: 'chat', messages: [], settings: {} })),
+vi.mock('./sub2api-provider-binding', () => ({
+  applySub2ApiProviderBinding: navigationMocks.applySub2ApiProviderBinding,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -99,8 +98,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       keyName: 'desktop-key',
       baseUrl: 'https://naonaoai.shop',
       apiKey: 'full-key-must-not-be-in-list',
-      capability: 'image',
-      models: [{ id: 'gpt-image-test' }],
+      models: [{ id: 'gpt-image-test', capability: 'image' }],
     }),
     ...overrides,
   }
@@ -146,14 +144,13 @@ describe('Sub2ApiKeySettings', () => {
       })
     )
     await waitFor(() =>
-      expect(navigationMocks.createSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'chat',
-          settings: expect.objectContaining({ provider: 'openai-responses', modelId: 'gpt-test' }),
-        })
-      )
+      expect(navigationMocks.applySub2ApiProviderBinding).toHaveBeenCalledWith({
+        apiKey: 'full-key-must-not-be-in-list',
+        apiHost: 'https://naonaoai.shop/v1',
+        models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
+      })
     )
-    expect(navigationMocks.switchCurrentSession).toHaveBeenCalledWith('new-chat-session')
+    expect(navigationMocks.switchCurrentSession).toHaveBeenCalledWith('current-chat-session')
   })
 
   test('asks the user to restart when an older preload does not expose group loading', async () => {
@@ -182,17 +179,17 @@ describe('Sub2ApiKeySettings', () => {
     expect(screen.queryByText('full-key-must-not-be-in-list')).toBeNull()
   })
 
-  test('selects a canvas capability before importing the key', async () => {
+  test('automatically imports the models available to the selected key', async () => {
     const api = createApi()
     renderKeys(api)
     await screen.findByText('desktop-key')
 
     fireEvent.click(screen.getByRole('button', { name: 'Import to Infinite Canvas' }))
     await screen.findByRole('dialog')
-    fireEvent.click(screen.getByRole('radio', { name: 'Image model' }))
+    expect(screen.getByText('Available models will be detected and imported automatically.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))
 
-    await waitFor(() => expect(api.prepareInfiniteCanvasImport).toHaveBeenCalledWith(7, 'image'))
+    await waitFor(() => expect(api.prepareInfiniteCanvasImport).toHaveBeenCalledWith(7))
     await waitFor(() => expect(navigationMocks.navigate).toHaveBeenCalledWith({ to: '/infinite-canvas' }))
   })
 })

@@ -23,6 +23,7 @@ const {
   listAllSessionsMetaMock,
   archiveSessionsMock,
   deleteSessionsMock,
+  deleteOwnedSideChatSessionsMock,
   routerNavigateMock,
   sessionAgentModeMapMock,
   setSessionAgentModeMock,
@@ -36,6 +37,7 @@ const {
   listAllSessionsMetaMock: vi.fn(),
   archiveSessionsMock: vi.fn(),
   deleteSessionsMock: vi.fn(),
+  deleteOwnedSideChatSessionsMock: vi.fn(),
   routerNavigateMock: vi.fn(),
   sessionAgentModeMapMock: {} as Record<
     string,
@@ -87,6 +89,7 @@ vi.mock('./chatStore', () => ({
   listAllSessionsMeta: listAllSessionsMetaMock,
   archiveSessions: archiveSessionsMock,
   deleteSessions: deleteSessionsMock,
+  deleteOwnedSideChatSessions: deleteOwnedSideChatSessionsMock,
 }))
 
 vi.mock('../platform', () => ({
@@ -200,6 +203,7 @@ beforeEach(() => {
   listAllSessionsMetaMock.mockReset()
   archiveSessionsMock.mockReset()
   deleteSessionsMock.mockReset()
+  deleteOwnedSideChatSessionsMock.mockReset()
   routerNavigateMock.mockReset()
   for (const key of Object.keys(sessionAgentModeMapMock)) {
     delete sessionAgentModeMapMock[key]
@@ -222,6 +226,42 @@ describe('conversation list cleanup', () => {
     expect(archiveSessionsMock).toHaveBeenCalledTimes(1)
     expect(archiveSessionsMock).toHaveBeenCalledWith(['archive-1', 'archive-2'])
     expect(deleteSessionsMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('session clear', () => {
+  test('clears source content before deleting owned hidden Side Chats', async () => {
+    const session: Session = {
+      id: 'session-clear',
+      name: 'Clear me',
+      messages: [makeMessage('system', 'system'), makeMessage('user')],
+      activeThreadId: 'thread-current',
+      followUpState: {
+        version: 1,
+        scopes: {},
+        sideChats: {
+          item: {
+            queueItemId: 'item',
+            sessionId: 'side-chat',
+            threadId: 'thread-current',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+    }
+    getSessionMock.mockResolvedValue(session)
+    updateSessionWithMessages.mockResolvedValue({
+      ...session,
+      followUpState: { ...session.followUpState!, scopes: {} },
+    })
+
+    await sessionActions.clear(session.id)
+
+    expect(deleteOwnedSideChatSessionsMock).toHaveBeenCalledWith(session.id)
+    expect(updateSessionWithMessages.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteOwnedSideChatSessionsMock.mock.invocationCallOrder[0]
+    )
   })
 })
 
@@ -564,6 +604,13 @@ describe('fork actions', () => {
       ...newSession,
       id: 'new-session-thread',
     }))
+    let updatedSource: Session | undefined
+    updateSessionWithMessages.mockImplementation(async (sessionId, updater) => {
+      expect(sessionId).toBe(session.id)
+      const result = typeof updater === 'function' ? updater(session) : updater
+      updatedSource = result as Session
+      return result
+    })
 
     await sessionActions.moveThreadToConversations(session.id, thread.id)
 
@@ -580,7 +627,8 @@ describe('fork actions', () => {
     const copiedFork = newSession.messageForksHash?.[copiedPivotId]
     expect(copiedFork).toBeDefined()
     expect(copiedFork?.lists[1].messages[0].id).not.toBe(threadAlternative.id)
-    expect(updateSessionWithMessages).toHaveBeenCalledWith(session.id, { threads: [] })
+    expect(updateSessionWithMessages).toHaveBeenCalledTimes(1)
+    expect(updatedSource?.threads).toEqual([])
     expect(routerNavigateMock).toHaveBeenCalledWith({
       to: '/session/$sessionId',
       params: { sessionId: 'new-session-thread' },
@@ -624,6 +672,13 @@ describe('fork actions', () => {
       ...newSession,
       id: 'new-session-current',
     }))
+    let updatedSource: Session | undefined
+    updateSessionWithMessages.mockImplementation(async (sessionId, updater) => {
+      expect(sessionId).toBe(session.id)
+      const result = typeof updater === 'function' ? updater(session) : updater
+      updatedSource = result as Session
+      return result
+    })
 
     await sessionActions.moveCurrentThreadToConversations(session.id)
 
@@ -638,11 +693,13 @@ describe('fork actions', () => {
     expect(copiedFork).toBeDefined()
     expect(copiedFork?.lists[1].messages[0].id).not.toBe(alternative.id)
 
-    expect(updateSessionWithMessages).toHaveBeenCalledWith(
-      session.id,
+    expect(updateSessionWithMessages).toHaveBeenCalledTimes(1)
+    expect(updatedSource).toEqual(
       expect.objectContaining({
         messages: [historyPivot, historyReply],
         threadName: 'History',
+        activeThreadId: 'history-1',
+        threads: [],
       })
     )
     expect(routerNavigateMock).toHaveBeenCalledWith({
@@ -710,6 +767,20 @@ describe('fork actions', () => {
       settings: {
         agentMode: { value: 'on', locked: true, lockReason: 'message_sent' },
       },
+      activeThreadId: 'active-thread-source',
+      followUpState: {
+        version: 1,
+        scopes: {
+          'active-thread-source': {
+            threadId: 'active-thread-source',
+            status: 'paused',
+            items: [],
+          },
+        },
+        sideChats: {
+          queued: { queueItemId: 'queued', sessionId: 'hidden-side-chat', createdAt: 1, updatedAt: 1 },
+        },
+      },
     }
 
     getSessionMock.mockResolvedValue(session)
@@ -739,6 +810,8 @@ describe('fork actions', () => {
     expect(newSession.messages.at(-1)?.isForkMarker).toBe(true)
     expect(newSession.messages.at(-1)?.forkedFromSessionId).toBe(session.id)
     expect(newSession.settings?.agentMode).toEqual({ value: 'on', locked: true, lockReason: 'message_sent' })
+    expect(newSession.activeThreadId).toBeUndefined()
+    expect(newSession.followUpState).toBeUndefined()
     expect(setSessionAgentModeMock).not.toHaveBeenCalled()
     expect(lockSessionAgentModeMock).not.toHaveBeenCalled()
     expect(routerNavigateMock).toHaveBeenCalledWith({

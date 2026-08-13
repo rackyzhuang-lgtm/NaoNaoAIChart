@@ -2,8 +2,7 @@ import type { Message, Session, SessionMetaRecord } from '@shared/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/packages/initial_data', () => ({
-  defaultSessionsForCN: [{ id: 'builtin-cn' }],
-  defaultSessionsForEN: [{ id: 'builtin-en' }],
+  historicalDefaultSessionIds: new Set(['builtin-cn', 'builtin-en']),
 }))
 
 vi.mock('./chatStore', () => ({

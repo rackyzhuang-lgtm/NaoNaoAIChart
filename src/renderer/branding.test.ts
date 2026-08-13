@@ -7,6 +7,7 @@ const rendererDir = __dirname
 const sidebarSource = readFileSync(path.join(rendererDir, 'Sidebar.tsx'), 'utf8')
 const productionTemplate = readFileSync(path.join(rendererDir, 'index.html'), 'utf8')
 const developmentTemplate = readFileSync(path.join(rendererDir, 'index.ejs'), 'utf8')
+const projectRoot = path.join(rendererDir, '../..')
 
 function visibleSplashMarkup(template: string) {
   return template.replace(/<template id="legacy-splash-assets">[\s\S]*?<\/template>/, '')
@@ -39,5 +40,16 @@ describe('NaoNaoAI branding entry points', () => {
     const visibleMarkup = visibleSplashMarkup(template)
     expect(visibleMarkup).not.toContain('splash-screen-logo-legacy')
     expect(visibleMarkup).not.toContain('splash-screen-logo-bg')
+  })
+
+  it('keeps visible product metadata and official links on the NaoNaoAI brand', () => {
+    const packageJson = readFileSync(path.join(projectRoot, 'package.json'), 'utf8')
+    const builderConfig = readFileSync(path.join(projectRoot, 'electron-builder.yml'), 'utf8')
+    const aboutSource = readFileSync(path.join(rendererDir, 'routes/about.tsx'), 'utf8')
+
+    expect(packageJson).toContain('"productName": "NaoNaoAI Chat"')
+    expect(builderConfig).toContain('productName: NaoNaoAI Chat')
+    expect(aboutSource).toContain('https://naonaoai.shop/')
+    expect([sidebarSource, productionTemplate, developmentTemplate, aboutSource].join('\n')).toContain('NaoNaoAI')
   })
 })

@@ -2,6 +2,7 @@ import platform from '@/platform'
 import { ApiError, BaseError, NetworkError } from '../../shared/models/errors'
 import { isSub2ApiGatewayUrl } from '../../shared/sub2api/url'
 import { handleMobileRequest } from './mobile-request'
+import { createSub2ApiGatewayRequestId, openSub2ApiGatewayStream } from './sub2api-gateway-stream'
 
 interface RequestOptions {
   method: string
@@ -10,6 +11,7 @@ interface RequestOptions {
   signal?: AbortSignal
   retry?: number
   useProxy?: boolean
+  requestId?: string
 }
 
 /** Number of retries used when a caller does not provide an explicit value. */
@@ -53,15 +55,18 @@ function buildHeaders(options: RequestOptions, _url: string): Headers {
   return headers
 }
 
+function getSafeGatewayErrorHeaders(headers: Headers): Record<string, string> | undefined {
+  const retryAfter = headers.get('retry-after')
+  return retryAfter ? { 'retry-after': retryAfter } : undefined
+}
+
 async function doRequest(url: string, options: RequestOptions): Promise<Response> {
-  const { signal, retry = DEFAULT_REQUEST_RETRIES, useProxy = false, body, method } = options
+  const { signal, retry = DEFAULT_REQUEST_RETRIES, useProxy = false, body, method, requestId } = options
   const requestUrl = await resolveDesktopProviderUrl(url)
   const headers = buildHeaders(options, url)
-  const directRequest = typeof window !== 'undefined' ? window.electronAPI?.sub2api?.directGatewayRequest : undefined
   const directGateway =
     platform.type === 'desktop' &&
     typeof window !== 'undefined' &&
-    typeof directRequest === 'function' &&
     (() => {
       try {
         return isSub2ApiGatewayUrl(requestUrl)
@@ -69,6 +74,7 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
         return false
       }
     })()
+  const directGatewayRequestId = directGateway ? requestId || createSub2ApiGatewayRequestId() : null
 
   if (directGateway) {
     headers.set('Cache-Control', 'no-cache, no-store, max-age=0')
@@ -80,22 +86,29 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
     }
 
     if (directGateway) {
-      const result = await directRequest({
-        url: requestUrl,
-        method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-        headers: (() => {
-          const values: Record<string, string> = {}
-          headers.forEach((value, key) => {
-            values[key] = value
-          })
-          return values
-        })(),
-        body: typeof body === 'string' ? body : undefined,
+      const values: Record<string, string> = {}
+      headers.forEach((value, key) => {
+        values[key] = value
       })
-      const res = new Response(result.body, { status: result.status, headers: result.headers })
+      const res = await openSub2ApiGatewayStream(
+        directGatewayRequestId as string,
+        {
+          url: requestUrl,
+          method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+          headers: values,
+          body: typeof body === 'string' ? body : undefined,
+        },
+        signal
+      )
       if (!res.ok) {
-        const err = await res.text().catch(() => null)
-        throw new ApiError(`Status Code ${res.status}`, err ?? undefined, res.status)
+        await res.text().catch(() => undefined)
+        throw new ApiError(
+          `Status Code ${res.status}`,
+          undefined,
+          res.status,
+          undefined,
+          getSafeGatewayErrorHeaders(res.headers)
+        )
       }
       return res
     }
@@ -108,10 +121,10 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
     return res
   }
 
-  // A model POST may already have been accepted and billed when its response is
-  // delayed or interrupted. Retrying it can submit the same chat message again.
-  const effectiveRetry = directGateway && method.toUpperCase() === 'POST' ? 0 : retry
-  return retryRequest(makeRequest, effectiveRetry, requestUrl, signal)
+  // Fixed-gateway calls bypass the retry helper entirely. Once the request-id
+  // is registered, only stream terminal events or explicit cancellation end it.
+  if (directGateway) return makeRequest()
+  return retryRequest(makeRequest, retry, requestUrl, signal)
 }
 
 export const apiRequest = {

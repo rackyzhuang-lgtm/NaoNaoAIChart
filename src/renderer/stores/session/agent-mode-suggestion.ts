@@ -1,4 +1,4 @@
-import type { Message } from '@shared/types'
+import type { AgentModeValue, ConversationMode, Message } from '@shared/types'
 import { getMessageText } from '@shared/utils/message'
 
 export const AGENT_MODE_SUGGESTION_PROMPT = `Decide whether this first user message should be answered in Agent Mode.
@@ -16,6 +16,30 @@ or
 export interface AgentModeSuggestionDecision {
   suggest: boolean
   reason?: string
+}
+
+export function shouldRequestAgentModeSuggestion(options: {
+  operationType?: 'send_message' | 'regenerate'
+  appendToMessage?: boolean
+  skipSuggestion?: boolean
+  agentModeSupported: boolean
+  agentModeValue: AgentModeValue
+  conversationMode: ConversationMode
+  hasUserMessage: boolean
+  isFirstUserTurn: boolean
+  usesFixedGateway: boolean
+}): boolean {
+  return (
+    options.operationType === 'send_message' &&
+    !options.appendToMessage &&
+    !options.skipSuggestion &&
+    options.agentModeSupported &&
+    options.agentModeValue === 'auto' &&
+    options.conversationMode === 'default' &&
+    options.hasUserMessage &&
+    options.isFirstUserTurn &&
+    !options.usesFixedGateway
+  )
 }
 
 /** True when exactly one user message exists in the prompt prefix (the first user turn). */

@@ -186,6 +186,89 @@ describe('computeEffectiveAgentMode', () => {
 })
 
 describe('prepareAgentGenerationHarness', () => {
+  test('plan mode uses developer-level instructions and removes all execution tools', async () => {
+    const messages: Message[] = [
+      {
+        id: 'plan-user',
+        role: MessageRoleEnum.User,
+        timestamp: Date.now(),
+        conversationMode: 'plan',
+        contentParts: [{ type: 'text', text: 'Plan a safe migration.' }],
+      },
+    ]
+
+    const lockAgentMode = vi.fn()
+    const prepared = await prepareAgentGenerationHarness({
+      session: createSession(),
+      settings: { provider: ModelProviderEnum.ChatboxAI, modelId: 'test-model' } as SessionSettings,
+      globalSettings: {} as Settings,
+      configs: { uuid: 'config-1' } as Config,
+      messages,
+      targetMsgIx: messages.length,
+      model: createMockModel(),
+      dependencies: createModelDependencies(),
+      webBrowsing: true,
+      conversationMode: 'plan',
+      agentModeValue: 'on',
+      agentModeLocked: false,
+      agentModeSupported: true,
+      signal: new AbortController().signal,
+      sandboxProviderFactory: () => sandboxProviderMock as unknown as SandboxProvider,
+      sideEffects: { lockAgentMode },
+    })
+
+    expect(prepared.debug.effectiveAgentMode).toBe('off')
+    expect(prepared.debug.instructions).toContain('concise, verifiable plan')
+    expect(prepared.tools).toEqual({})
+    expect(prepared.chatOptions.tools).toBeUndefined()
+    expect(prepared.chatOptions.agentMode).toBe(false)
+    expect(lockAgentMode).not.toHaveBeenCalled()
+  })
+
+  test('goal mode inserts active goal as user data before the real user request', async () => {
+    const messages: Message[] = [
+      {
+        id: 'goal-user',
+        role: MessageRoleEnum.User,
+        timestamp: Date.now(),
+        conversationMode: 'goal',
+        contentParts: [{ type: 'text', text: 'Continue with the next step.' }],
+      },
+    ]
+
+    const prepared = await prepareAgentGenerationHarness({
+      session: createSession(),
+      settings: { provider: ModelProviderEnum.ChatboxAI, modelId: 'test-model' } as SessionSettings,
+      globalSettings: {} as Settings,
+      configs: { uuid: 'config-1' } as Config,
+      messages,
+      targetMsgIx: messages.length,
+      model: createMockModel(),
+      dependencies: createModelDependencies(),
+      webBrowsing: false,
+      conversationMode: 'goal',
+      goal: {
+        id: 'goal-1',
+        objective: 'Finish the local archive feature.',
+        status: 'active',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      agentModeValue: 'off',
+      agentModeLocked: false,
+      agentModeSupported: true,
+      signal: new AbortController().signal,
+    })
+
+    const serializedUserMessages = JSON.stringify(prepared.coreMessages.filter((message) => message.role === 'user'))
+    expect(serializedUserMessages).toContain('Finish the local archive feature.')
+    expect(serializedUserMessages).toContain('Continue with the next step.')
+    expect(serializedUserMessages.indexOf('Finish the local archive feature.')).toBeLessThan(
+      serializedUserMessages.indexOf('Continue with the next step.')
+    )
+    expect(prepared.debug.instructions).not.toContain('Finish the local archive feature.')
+  })
+
   test('prepares the real context, system prompt, tools, and sandbox gating for an uploaded file', async () => {
     const userMessage: Message = {
       id: 'msg-1',
@@ -447,5 +530,42 @@ describe('prepareAgentGenerationHarness', () => {
     expect(prepared.chatOptions.prepareStep).toBeDefined()
     const stepSettings = await prepared.chatOptions.prepareStep?.({ steps: [] } as never)
     expect(stepSettings?.activeTools).not.toContain('chatbox_cli')
+  })
+
+  test('injects a steering follow-up at the next AI SDK prepareStep boundary', async () => {
+    const takeSteerFollowUp = vi
+      .fn()
+      .mockResolvedValueOnce('Use the safer migration path.')
+      .mockResolvedValue(undefined)
+    const prepared = await prepareAgentGenerationHarness({
+      session: createSession(),
+      settings: { provider: ModelProviderEnum.ChatboxAI, modelId: 'test-model' } as SessionSettings,
+      globalSettings: {} as Settings,
+      configs: { uuid: 'config-1' } as Config,
+      messages: [
+        {
+          id: 'user-1',
+          role: MessageRoleEnum.User,
+          contentParts: [{ type: 'text', text: 'Start the migration.' }],
+        },
+      ],
+      targetMsgIx: 1,
+      model: createMockModel(),
+      dependencies: createModelDependencies(),
+      webBrowsing: false,
+      agentModeValue: 'off',
+      agentModeLocked: false,
+      agentModeSupported: true,
+      signal: new AbortController().signal,
+      takeSteerFollowUp,
+    })
+
+    const messages = [{ role: 'user' as const, content: 'Start the migration.' }]
+    const first = await prepared.chatOptions.prepareStep?.({ steps: [], messages } as never)
+    const second = await prepared.chatOptions.prepareStep?.({ steps: [], messages } as never)
+
+    expect(first?.messages).toEqual([...messages, { role: 'user', content: 'Use the safer migration path.' }])
+    expect(second?.messages).toBeUndefined()
+    expect(takeSteerFollowUp).toHaveBeenCalledTimes(2)
   })
 })

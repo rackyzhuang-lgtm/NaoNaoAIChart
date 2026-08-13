@@ -1,11 +1,24 @@
 import { buildContext } from '@shared/context'
 import type { AttachmentResolver } from '@shared/context/types'
-import { type CompactionPoint, createMessage, type Message, type SessionSettings } from '@shared/types'
+import {
+  type CompactionPoint,
+  createMessage,
+  type FollowUpQueueItem,
+  type Message,
+  type SessionSettings,
+} from '@shared/types'
 import type { AgentModeEntrySource } from '@/analytics/agent-mode'
 import * as chatStore from '../chatStore'
 import { createAttachmentResolver } from './attachment-resolver'
+import {
+  dispatchFollowUpById,
+  dispatchReadyFollowUps,
+  resolveFollowUpThreadIdForMessage,
+  resumeFollowUpQueue,
+} from './follow-up-queue'
 import { createNewFork, findMessageLocation } from './forks'
-import { withSessionGenerationLock } from './generation-lock'
+import { isSessionGenerationActive, withSessionGenerationLock } from './generation-lock'
+import { createGoal } from './goal'
 import { insertMessageAfter } from './messages'
 import { orchestrateGeneration } from './orchestration'
 import { orchestratePictureGeneration } from './pictures'
@@ -28,10 +41,136 @@ export async function _generateWithoutSessionLock(
 
   if (session.type === 'chat' || session.type === undefined) {
     await orchestrateGeneration(sessionId, targetMsg, options)
+    // Re-read after generation: follow-ups may have been enqueued while the
+    // provider request was active, after the snapshot above was loaded.
+    await dispatchFollowUpsWithinGenerationLock(sessionId, targetMsg)
     return
   }
 
   await orchestratePictureGeneration(sessionId, targetMsg, session, settings, options)
+}
+
+async function dispatchFollowUpsWithinGenerationLock(sessionId: string, terminalMessage: Message): Promise<void> {
+  const session = await chatStore.getSession(sessionId)
+  if (!session || !session.followUpState || (session.type !== 'chat' && session.type !== undefined)) return
+  const location = findMessageLocation(session, terminalMessage.id)
+  const currentMessage = location ? location.list[location.index] : undefined
+  if (currentMessage?.generating || currentMessage?.finishReason === 'tool-call-paused') return
+  const threadId = resolveFollowUpThreadIdForMessage(session, terminalMessage.id)
+  await dispatchReadyFollowUps(sessionId, threadId, (item) => dispatchFollowUpItem(sessionId, item))
+}
+
+async function dispatchFollowUpItem(sessionId: string, item: FollowUpQueueItem) {
+  const userMessage = { ...item.userMessage, id: item.userMessage.id || item.id }
+  let session = await chatStore.getSession(sessionId)
+  if (!session) return { terminal: false }
+
+  if (item.goalObjective) {
+    await createGoal(sessionId, item.goalObjective)
+  }
+
+  if (!findMessageLocation(session, userMessage.id)) {
+    await chatStore.insertMessage(sessionId, userMessage, undefined, item.threadId)
+    session = (await chatStore.getSession(sessionId)) ?? session
+  }
+
+  const existingAssistant = findMessageLocation(session, item.reservedAssistantMessageId)
+  const storedAssistant = existingAssistant?.list[existingAssistant.index]
+  if (storedAssistant && isPersistedGenerationTerminal(storedAssistant)) {
+    return { terminal: true }
+  }
+
+  const assistantMessage =
+    storedAssistant ??
+    ({
+      ...createMessage('assistant', ''),
+      id: item.reservedAssistantMessageId,
+      generating: true,
+    } satisfies Message)
+  if (!storedAssistant) {
+    await insertMessageAfter(sessionId, assistantMessage, userMessage.id)
+  }
+  await orchestrateGeneration(sessionId, assistantMessage, {
+    operationType: 'send_message',
+    sessionSettingsOverride: item.sessionSettings,
+    webBrowsingOverride: item.webBrowsing,
+  })
+  const updated = await chatStore.getSession(sessionId)
+  const location = updated ? findMessageLocation(updated, assistantMessage.id) : undefined
+  const generated = location ? location.list[location.index] : undefined
+  return { terminal: Boolean(generated && isPersistedGenerationTerminal(generated)) }
+}
+
+function isPersistedGenerationTerminal(message: Message): boolean {
+  if (message.generating || message.finishReason === 'tool-call-paused') return false
+  return Boolean(message.error || message.finishReason)
+}
+
+export function dispatchQueuedFollowUpNow(sessionId: string, threadId: string, itemId: string) {
+  return withSessionGenerationLock(
+    sessionId,
+    () => dispatchFollowUpById(sessionId, threadId, itemId, (item) => dispatchFollowUpItem(sessionId, item)),
+    `follow-up:${itemId}`
+  )
+}
+
+/** Resumes a paused scope and drains it under the same per-session generation lock. */
+export function resumeAndDispatchQueuedFollowUps(sessionId: string, threadId: string) {
+  return withSessionGenerationLock(
+    sessionId,
+    async () => {
+      await resumeFollowUpQueue(sessionId, threadId)
+      await dispatchReadyFollowUps(sessionId, threadId, (item) => dispatchFollowUpItem(sessionId, item))
+    },
+    `follow-up-resume:${threadId}`
+  )
+}
+
+/**
+ * Registers a drain after a queue item has been persisted. A distinct wake key per item
+ * prevents a late enqueue from being hidden behind a drain that is just settling.
+ */
+export function wakeAndDispatchQueuedFollowUps(sessionId: string, threadId: string, queueItemId: string) {
+  return withSessionGenerationLock(
+    sessionId,
+    () => dispatchReadyFollowUps(sessionId, threadId, (item) => dispatchFollowUpItem(sessionId, item)),
+    `follow-up-wake:${threadId}:${queueItemId}`
+  )
+}
+
+export async function waitForConfirmedSessionGenerationStop(
+  sessionId: string,
+  messageId: string,
+  timeoutMs = 15_000
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const session = await chatStore.getSession(sessionId)
+    const location = session ? findMessageLocation(session, messageId) : undefined
+    const message = location ? location.list[location.index] : undefined
+    if (message && !message.generating && !isSessionGenerationActive(sessionId)) return true
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return false
+}
+
+/** Starts the initial response for a newly opened Side Chat exactly once. */
+export function generateSideChatReply(sessionId: string, userMessageId: string) {
+  return withSessionGenerationLock(
+    sessionId,
+    async () => {
+      const session = await chatStore.getSession(sessionId)
+      if (!session || session.hidden !== true || (session.type !== 'chat' && session.type !== undefined)) return
+      const location = findMessageLocation(session, userMessageId)
+      if (!location || location.list[location.index]?.role !== 'user') return
+      if (location.list.slice(location.index + 1).some((message) => message.role === 'assistant')) return
+
+      const assistantMessage = { ...createMessage('assistant', ''), generating: true }
+      await insertMessageAfter(sessionId, assistantMessage, userMessageId)
+      await _generateWithoutSessionLock(sessionId, assistantMessage, { operationType: 'send_message' })
+    },
+    `side-chat-reply:${userMessageId}`
+  )
 }
 
 export function generate(
@@ -43,7 +182,11 @@ export function generate(
     agentModeEntrySource?: AgentModeEntrySource
   }
 ) {
-  return withSessionGenerationLock(sessionId, () => _generateWithoutSessionLock(sessionId, targetMsg, options))
+  return withSessionGenerationLock(
+    sessionId,
+    () => _generateWithoutSessionLock(sessionId, targetMsg, options),
+    `generate:${targetMsg.id}`
+  )
 }
 
 /**
@@ -59,20 +202,32 @@ async function generateMoreWithoutSessionLock(sessionId: string, msgId: string) 
 }
 
 export function generateMore(sessionId: string, msgId: string) {
-  return withSessionGenerationLock(sessionId, () => generateMoreWithoutSessionLock(sessionId, msgId))
+  return withSessionGenerationLock(
+    sessionId,
+    () => generateMoreWithoutSessionLock(sessionId, msgId),
+    `generate-more:${msgId}`
+  )
 }
 
 export function generateMoreInNewFork(sessionId: string, msgId: string) {
-  return withSessionGenerationLock(sessionId, async () => {
-    await createNewFork(sessionId, msgId)
-    await generateMoreWithoutSessionLock(sessionId, msgId)
-  })
+  return withSessionGenerationLock(
+    sessionId,
+    async () => {
+      await createNewFork(sessionId, msgId)
+      await generateMoreWithoutSessionLock(sessionId, msgId)
+    },
+    `generate-more-fork:${msgId}`
+  )
 }
 
 type GenerateMoreFn = (sessionId: string, msgId: string) => Promise<void>
 
 export function regenerateInNewFork(sessionId: string, msg: Message, options?: { runGenerateMore?: GenerateMoreFn }) {
-  return withSessionGenerationLock(sessionId, () => regenerateInNewForkWithoutSessionLock(sessionId, msg, options))
+  return withSessionGenerationLock(
+    sessionId,
+    () => regenerateInNewForkWithoutSessionLock(sessionId, msg, options),
+    `regenerate-fork:${msg.id}`
+  )
 }
 
 async function regenerateInNewForkWithoutSessionLock(

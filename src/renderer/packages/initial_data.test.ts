@@ -1,41 +1,27 @@
-import { getMessageText } from '@shared/utils/message'
 import { describe, expect, it } from 'vitest'
-import { defaultSessionsForCN, defaultSessionsForEN } from './initial_data'
-
-function visibleMessageText(session: (typeof defaultSessionsForCN)[number]) {
-  return session.messages.map((message) => getMessageText(message)).join('\n')
-}
+import { defaultSessionsForCN, defaultSessionsForEN, historicalDefaultSessionIds } from './initial_data'
 
 describe('first-run session templates', () => {
-  it('keeps only the curated English templates', () => {
-    expect(defaultSessionsForEN.map((session) => session.name)).toEqual([
-      'Just chat',
-      'Markdown 101 (Example)',
-      'Software Developer (Example)',
-      'Translator (Example)',
-    ])
-    expect(defaultSessionsForEN.filter((session) => session.starred).map((session) => session.name)).toEqual([
-      'Just chat',
-      'Markdown 101 (Example)',
-      'Software Developer (Example)',
-    ])
+  it('creates only one English chat for a new profile', () => {
+    expect(defaultSessionsForEN).toHaveLength(1)
+    expect(defaultSessionsForEN[0]).toMatchObject({
+      id: 'justchat-b612-406a-985b-3ab4d2c482ff',
+      name: 'Just chat',
+      type: 'chat',
+      starred: true,
+    })
+    expect(defaultSessionsForEN[0].messages).toHaveLength(1)
+    expect(defaultSessionsForEN[0].messages[0].role).toBe('system')
   })
 
-  it('matches the curated Chinese sidebar examples and brand wording', () => {
-    expect(defaultSessionsForCN.map((session) => session.name)).toEqual([
-      '小红书文案生成器 (示例)',
-      '夸夸机 (示例)',
-      '翻译助手 (示例)',
-      '简单问候',
-      '做图表',
-      'Just chat',
-      'Markdown 101 (Example)',
-      'Software Developer (Example)',
-      'Translator (Example)',
-    ])
+  it('uses the same single chat for a Chinese new profile', () => {
+    expect(defaultSessionsForCN).toHaveLength(1)
+    expect(defaultSessionsForCN[0]).toBe(defaultSessionsForEN[0])
+  })
 
-    const text = defaultSessionsForCN.map(visibleMessageText).join('\n')
-    expect(text).not.toContain('Chatbox')
-    expect(text).toContain('NaoNaoAI Chat')
+  it('retains historical template IDs for migration compatibility', () => {
+    expect(historicalDefaultSessionIds).toContain('justchat-b612-406a-985b-3ab4d2c482ff')
+    expect(historicalDefaultSessionIds).toContain('81cfc426-48b4-4a13-ad42-bfcfc4544299')
+    expect(historicalDefaultSessionIds).toContain('776eac23-7b4a-40da-91cd-f233bb4742ed')
   })
 })

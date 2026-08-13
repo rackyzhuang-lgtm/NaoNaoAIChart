@@ -17,8 +17,11 @@ export interface Sub2ApiErrorDescriptor {
   retryAfterSeconds?: number
 }
 
-const SUB2API_IPC_ERROR_PREFIX = '__NAONAO_SUB2API_ERROR__'
+const SUB2API_IPC_ERROR_PREFIX = '__NAONAOAI_SUB2API_ERROR__'
 const SESSION_ERROR_CODES = new Set(['NOT_AUTHENTICATED', 'REFRESH_TOKEN_MISSING', 'SESSION_EXPIRED'])
+const NETWORK_ERROR_CODES = new Set(['NETWORK_ERROR', 'REQUEST_CANCELLED'])
+const INVALID_RESPONSE_CODES = new Set(['INVALID_RESPONSE', 'REQUEST_ID_CONFLICT', 'REQUEST_ID_REPLAY'])
+const SERVICE_ERROR_CODES = new Set(['GATEWAY_ERROR', 'REQUEST_IN_PROGRESS'])
 const ERROR_KINDS = new Set<Sub2ApiErrorKind>([
   'session_expired',
   'authentication_failed',
@@ -63,7 +66,7 @@ export function classifySub2ApiError(error: unknown): Sub2ApiErrorDescriptor {
   if (SESSION_ERROR_CODES.has(code)) {
     return { kind: 'session_expired', status: 401 }
   }
-  if (code === 'NETWORK_ERROR') {
+  if (NETWORK_ERROR_CODES.has(code)) {
     return { kind: 'network' }
   }
   if (code === 'TIMEOUT_ERROR') {
@@ -80,6 +83,12 @@ export function classifySub2ApiError(error: unknown): Sub2ApiErrorDescriptor {
   }
   if (error.status !== undefined) {
     return { kind: 'service_error', status: error.status }
+  }
+  if (INVALID_RESPONSE_CODES.has(code)) {
+    return { kind: 'invalid_response' }
+  }
+  if (SERVICE_ERROR_CODES.has(code)) {
+    return { kind: 'service_error' }
   }
   return { kind: 'unknown' }
 }

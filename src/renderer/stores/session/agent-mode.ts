@@ -11,6 +11,14 @@ export function createDefaultAgentModeEntry(smartSwitchingDefault = uiStore.getS
   } satisfies AgentModeEntry
 }
 
+export function createDefaultNewSessionAgentModeEntry(): AgentModeEntry {
+  return {
+    value: 'on',
+    locked: false,
+    lockReason: null,
+  }
+}
+
 export function getSessionAgentModeFromSession(
   session: Pick<Session, 'settings'> | null | undefined
 ): AgentModeEntry | undefined {
@@ -22,7 +30,11 @@ export function getSessionAgentModeEntry(
   session?: Pick<Session, 'settings'> | null,
   legacyMap = uiStore.getState().sessionAgentModeMap
 ): AgentModeEntry {
-  return getSessionAgentModeFromSession(session) ?? legacyMap[sessionId] ?? createDefaultAgentModeEntry()
+  return (
+    getSessionAgentModeFromSession(session) ??
+    legacyMap[sessionId] ??
+    (sessionId === 'new' ? createDefaultNewSessionAgentModeEntry() : createDefaultAgentModeEntry())
+  )
 }
 
 export function useSessionAgentMode(sessionId: string): AgentModeEntry {
@@ -34,7 +46,9 @@ export function useSessionAgentMode(sessionId: string): AgentModeEntry {
     return (
       getSessionAgentModeFromSession(session) ??
       legacyMap[sessionId] ??
-      createDefaultAgentModeEntry(smartSwitchingDefault)
+      (sessionId === 'new'
+        ? createDefaultNewSessionAgentModeEntry()
+        : createDefaultAgentModeEntry(smartSwitchingDefault))
     )
   }, [legacyMap, session, sessionId, smartSwitchingDefault])
 }

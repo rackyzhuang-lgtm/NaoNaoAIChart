@@ -8,8 +8,10 @@ const importedTextConfig: Sub2ApiInfiniteCanvasImport = {
   keyName: 'canvas',
   baseUrl: 'https://naonaoai.shop',
   apiKey: 'sk-imported',
-  capability: 'text',
-  models: [{ id: 'sub2api-text' }],
+  models: [
+    { id: 'gpt-image-2', capability: 'image' },
+    { id: 'sub2api-text', capability: 'text' },
+  ],
 }
 
 describe('resolveInfiniteCanvasAgentConfig', () => {

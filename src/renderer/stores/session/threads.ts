@@ -6,6 +6,12 @@ import * as dom from '@/hooks/dom'
 import * as chatStore from '../chatStore'
 import * as scrollActions from '../scrollActions'
 import { _copySession as copySession, switchCurrentSession } from './crud'
+import {
+  cleanupFollowUpThreadAttachments,
+  pauseFollowUpQueue,
+  removeFollowUpThreadState,
+  resolveActiveFollowUpThreadId,
+} from './follow-up-queue'
 
 /**
  * Edit a thread (currently only supports name modification)
@@ -18,7 +24,7 @@ export async function editThread(sessionId: string, threadId: string, newThread:
   if (!session || !session.threads) return
 
   // Special case: if editing the current thread, modify threadName directly
-  if (threadId === sessionId) {
+  if (threadId === resolveActiveFollowUpThreadId(session)) {
     await chatStore.updateSession(sessionId, { threadName: newThread.name })
     return
   }
@@ -44,13 +50,23 @@ export async function removeThread(sessionId: string, threadId: string) {
   if (!session) {
     return
   }
-  if (sessionId === threadId) {
+  if (resolveActiveFollowUpThreadId(session) === threadId) {
     await removeCurrentThread(sessionId)
     return
   }
-  return await chatStore.updateSessionWithMessages(sessionId, {
-    threads: session.threads?.filter((t) => t.id !== threadId),
+  if (!session.threads?.some((thread) => thread.id === threadId)) return
+  const updated = await chatStore.updateSessionWithMessages(sessionId, (current) => {
+    if (!current) throw new Error(`Session ${sessionId} not found`)
+    return {
+      ...current,
+      threads: current.threads?.filter((t) => t.id !== threadId),
+      // Keep Side Chat links until their data has been deleted successfully.
+      followUpState: removeFollowUpThreadState(current.followUpState, threadId, { preserveSideChats: true }),
+    }
   })
+  await cleanupFollowUpThreadAttachments(session, threadId)
+  await chatStore.deleteOwnedSideChatSessions(sessionId, threadId)
+  return updated
 }
 
 /**
@@ -67,21 +83,25 @@ export async function switchThread(sessionId: string, threadId: string) {
   if (!target) {
     return
   }
+  await pauseFollowUpQueue(sessionId, resolveActiveFollowUpThreadId(session), 'thread-switch')
   for (const m of session.messages) {
     m?.cancel?.()
   }
   const newThreads = session.threads.filter((h) => h.id !== threadId)
   newThreads.push({
-    id: uuidv4(),
+    id: resolveActiveFollowUpThreadId(session),
     name: session.threadName || session.name,
     messages: session.messages,
     createdAt: Date.now(),
+    goal: session.goal,
   })
   await chatStore.updateSessionWithMessages(session.id, {
     ...session,
     threads: newThreads,
     messages: target.messages,
     threadName: target.name,
+    goal: target.goal,
+    activeThreadId: target.id,
   })
   setTimeout(() => scrollActions.scrollToBottom('smooth'), 300)
 }
@@ -95,14 +115,16 @@ export async function refreshContextAndCreateNewThread(sessionId: string) {
   if (!session) {
     return
   }
+  await pauseFollowUpQueue(sessionId, resolveActiveFollowUpThreadId(session), 'thread-switch')
   for (const m of session.messages) {
     m?.cancel?.()
   }
   const newThread: SessionThread = {
-    id: uuidv4(),
+    id: resolveActiveFollowUpThreadId(session),
     name: session.threadName || session.name,
     messages: session.messages,
     createdAt: Date.now(),
+    goal: session.goal,
   }
 
   let systemPrompt = session.messages.find((m) => m.role === 'system')
@@ -114,6 +136,8 @@ export async function refreshContextAndCreateNewThread(sessionId: string) {
     threads: session.threads ? [...session.threads, newThread] : [newThread],
     messages: systemPrompt ? [systemPrompt] : [createMessage('system', defaults.getDefaultPrompt())],
     threadName: '',
+    goal: undefined,
+    activeThreadId: uuidv4(),
   })
 }
 
@@ -134,18 +158,32 @@ export async function removeCurrentThread(sessionId: string) {
   if (!session) {
     return
   }
-  const updatedSession: Session = {
-    ...session,
-    messages: session.messages.filter((m) => m.role === 'system').slice(0, 1), // Keep only one system prompt
-    threadName: undefined,
-  }
-  if (session.threads && session.threads.length > 0) {
-    const lastThread = session.threads[session.threads.length - 1]
-    updatedSession.messages = lastThread.messages
-    updatedSession.threads = session.threads.slice(0, session.threads.length - 1)
-    updatedSession.threadName = lastThread.name
-  }
-  await chatStore.updateSessionWithMessages(session.id, updatedSession)
+  const removedThreadId = resolveActiveFollowUpThreadId(session)
+  await pauseFollowUpQueue(sessionId, removedThreadId, 'thread-switch')
+  const updated = await chatStore.updateSessionWithMessages(session.id, (current) => {
+    if (!current) throw new Error(`Session ${sessionId} not found`)
+    const updatedSession: Session = {
+      ...current,
+      messages: current.messages.filter((m) => m.role === 'system').slice(0, 1), // Keep only one system prompt
+      threadName: undefined,
+      goal: undefined,
+      activeThreadId: current.id,
+      // Keep Side Chat links until their data has been deleted successfully.
+      followUpState: removeFollowUpThreadState(current.followUpState, removedThreadId, { preserveSideChats: true }),
+    }
+    if (current.threads && current.threads.length > 0) {
+      const lastThread = current.threads[current.threads.length - 1]
+      updatedSession.messages = lastThread.messages
+      updatedSession.threads = current.threads.slice(0, current.threads.length - 1)
+      updatedSession.threadName = lastThread.name
+      updatedSession.goal = lastThread.goal
+      updatedSession.activeThreadId = lastThread.id
+    }
+    return updatedSession
+  })
+  await cleanupFollowUpThreadAttachments(session, removedThreadId)
+  await chatStore.deleteOwnedSideChatSessions(sessionId, removedThreadId)
+  return updated
 }
 
 /**
@@ -159,6 +197,7 @@ export async function compressAndCreateThread(sessionId: string, summary: string
     return
   }
 
+  await pauseFollowUpQueue(sessionId, resolveActiveFollowUpThreadId(session), 'thread-switch')
   // Cancel all ongoing message generations
   for (const m of session.messages) {
     m?.cancel?.()
@@ -166,10 +205,11 @@ export async function compressAndCreateThread(sessionId: string, summary: string
 
   // Create new thread with all messages
   const newThread: SessionThread = {
-    id: uuidv4(),
+    id: resolveActiveFollowUpThreadId(session),
     name: session.threadName || session.name,
     messages: session.messages,
     createdAt: Date.now(),
+    goal: session.goal,
   }
 
   // Get original system prompt (if exists)
@@ -198,6 +238,7 @@ export async function compressAndCreateThread(sessionId: string, summary: string
     messages: newMessages,
     threadName: '',
     messageForksHash: undefined,
+    activeThreadId: uuidv4(),
   })
 
   // Auto-scroll to bottom and focus input
@@ -212,7 +253,7 @@ export async function moveThreadToConversations(sessionId: string, threadId: str
   if (!session) {
     return
   }
-  if (session.id === threadId) {
+  if (resolveActiveFollowUpThreadId(session) === threadId) {
     await moveCurrentThreadToConversations(sessionId)
     return
   }
@@ -228,6 +269,7 @@ export async function moveThreadToConversations(sessionId: string, threadId: str
     threadName: undefined,
     messageForksHash: session.messageForksHash,
     compactionPoints: targetThread.compactionPoints,
+    goal: targetThread.goal,
   })
   await removeThread(sessionId, threadId)
   switchCurrentSession(newSession.id)
@@ -245,6 +287,7 @@ export async function moveCurrentThreadToConversations(sessionId: string) {
     threads: [],
     threadName: undefined,
     messageForksHash: session.messageForksHash,
+    goal: session.goal,
   })
   await removeCurrentThread(sessionId)
   switchCurrentSession(newSession.id)

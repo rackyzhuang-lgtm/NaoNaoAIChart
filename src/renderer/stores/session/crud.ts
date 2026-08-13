@@ -16,6 +16,7 @@ import * as atoms from '../atoms'
 import * as chatStore from '../chatStore'
 import * as scrollActions from '../scrollActions'
 import { initEmptyChatSession, initEmptyPictureSession } from '../sessionHelpers'
+import { pauseFollowUpQueue, resolveActiveFollowUpThreadId } from './follow-up-queue'
 
 /**
  * Create a new session and switch to it
@@ -55,6 +56,7 @@ async function copySession(
     threadName?: Session['threadName']
     messageForksHash?: Session['messageForksHash']
     compactionPoints?: Session['compactionPoints']
+    goal?: Session['goal']
   },
   options?: {
     appendForkMarker?: boolean
@@ -111,12 +113,22 @@ async function copySession(
   }
 
   const newSession = {
-    ...omit(source, 'id', 'messages', 'threads', 'messageForksHash', 'compactionPoints'),
+    ...omit(
+      source,
+      'id',
+      'messages',
+      'threads',
+      'messageForksHash',
+      'compactionPoints',
+      'activeThreadId',
+      'followUpState'
+    ),
     ...(sourceMeta.name ? { name: sourceMeta.name } : {}),
     messages: copiedMessages,
     threads: newThreads,
     messageForksHash: newMessageForksHash,
     compactionPoints: newCompactionPoints?.length ? newCompactionPoints : undefined,
+    ...('goal' in sourceMeta ? { goal: sourceMeta.goal } : {}),
     ...(sourceMeta.threadName ? { threadName: sourceMeta.threadName } : {}),
   }
   return await chatStore.createSession(newSession, source.id)
@@ -261,6 +273,16 @@ export async function clear(sessionId: string) {
   if (!session) {
     return
   }
+  await pauseFollowUpQueue(sessionId, resolveActiveFollowUpThreadId(session), 'user')
+  session.messages.forEach((msg) => {
+    msg?.cancel?.()
+  })
+  const cleared = await chatStore.updateSessionWithMessages(session.id, {
+    messages: session.messages.filter((m) => m.role === 'system').slice(0, 1),
+    threads: undefined,
+    activeThreadId: session.id,
+    followUpState: session.followUpState ? { ...session.followUpState, scopes: {} } : undefined,
+  })
   if (platform.type === 'desktop') {
     try {
       await platform.getSessionAttachmentRagController().deleteSessionAttachments(sessionId)
@@ -268,13 +290,11 @@ export async function clear(sessionId: string) {
       console.warn('Failed to cleanup session attachment RAG entries while clearing session:', error)
     }
   }
-  session.messages.forEach((msg) => {
-    msg?.cancel?.()
-  })
-  return await chatStore.updateSessionWithMessages(session.id, {
-    messages: session.messages.filter((m) => m.role === 'system').slice(0, 1),
-    threads: undefined,
-  })
+  await chatStore.deleteOwnedSideChatSessions(sessionId)
+  if (cleared.followUpState) {
+    return await chatStore.updateSession(session.id, { followUpState: undefined })
+  }
+  return cleared
 }
 
 // Re-export copySession for use by threads.ts (moveThreadToConversations)

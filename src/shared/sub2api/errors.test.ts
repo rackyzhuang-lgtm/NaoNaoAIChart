@@ -11,7 +11,12 @@ describe('sub2api error classification', () => {
   it.each([
     ['SESSION_EXPIRED', 'session_expired'],
     ['NETWORK_ERROR', 'network'],
+    ['REQUEST_CANCELLED', 'network'],
     ['TIMEOUT_ERROR', 'timeout'],
+    ['REQUEST_ID_CONFLICT', 'invalid_response'],
+    ['REQUEST_ID_REPLAY', 'invalid_response'],
+    ['GATEWAY_ERROR', 'service_error'],
+    ['REQUEST_IN_PROGRESS', 'service_error'],
   ] as const)('classifies %s as %s', (code, kind) => {
     expect(classifySub2ApiError(new Sub2ApiError('internal detail', code))).toMatchObject({ kind })
   })
@@ -29,7 +34,7 @@ describe('sub2api error classification', () => {
   it('does not expose raw messages or malformed descriptors over IPC', () => {
     const serialized = serializeSub2ApiError(new Sub2ApiError('contains a token', 'AUTH', 401))
     expect(serialized).not.toContain('contains a token')
-    expect(parseSub2ApiIpcError(new Error('__NAONAO_SUB2API_ERROR__{"kind":"unknown","status":"bad"}'))).toEqual({
+    expect(parseSub2ApiIpcError(new Error('__NAONAOAI_SUB2API_ERROR__{"kind":"unknown","status":"bad"}'))).toEqual({
       kind: 'unknown',
       status: undefined,
       retryAfterSeconds: undefined,

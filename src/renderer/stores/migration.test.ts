@@ -349,8 +349,7 @@ vi.mock('store', () => ({
 vi.mock('@/packages/initial_data', () => ({
   artifactSessionCN: { id: 'artifact-cn' },
   artifactSessionEN: { id: 'artifact-en' },
-  defaultSessionsForCN: [],
-  defaultSessionsForEN: [],
+  historicalDefaultSessionIds: new Set(),
   imageCreatorSessionForCN: { id: 'image-cn' },
   imageCreatorSessionForEN: { id: 'image-en' },
   mermaidSessionCN: { id: 'mermaid-cn' },

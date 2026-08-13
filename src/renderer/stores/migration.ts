@@ -13,14 +13,13 @@ import {
 } from '@shared/types'
 import dayjs from 'dayjs'
 import { getDefaultStore } from 'jotai'
-import { difference, intersection, keyBy, uniq } from 'lodash'
+import { difference, intersection, keyBy } from 'lodash'
 import oldStore from 'store'
 import { v4 as uuidv4 } from 'uuid'
 import {
   artifactSessionCN,
   artifactSessionEN,
-  defaultSessionsForCN,
-  defaultSessionsForEN,
+  historicalDefaultSessionIds,
   imageCreatorSessionForCN,
   imageCreatorSessionForEN,
   mermaidSessionCN,
@@ -378,10 +377,7 @@ async function migrate_8_to_9(dataStore: MigrateStore): Promise<boolean> {
     oldSessions.map((session) => session.id)
   )
 
-  const defaultSessionIds = uniq([
-    ...defaultSessionsForEN.map((session) => session.id),
-    ...defaultSessionsForCN.map((session) => session.id),
-  ])
+  const defaultSessionIds = [...historicalDefaultSessionIds]
 
   // 如果 intersectSessionIds 里还有值，说明之前成功执行过 7-8 的 migration，跳过找回步骤
   if (difference(intersectSessionIds, defaultSessionIds).length !== 0) {
