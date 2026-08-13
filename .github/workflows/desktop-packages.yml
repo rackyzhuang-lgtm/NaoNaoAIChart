@@ -58,7 +58,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload Windows installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: naonaoai-windows-installers
           path: |
@@ -136,7 +136,7 @@ jobs:
           node ./node_modules/electron-builder/cli.js build --publish never --mac dmg zip
 
       - name: Upload macOS installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: naonaoai-macos-installers
           path: |
