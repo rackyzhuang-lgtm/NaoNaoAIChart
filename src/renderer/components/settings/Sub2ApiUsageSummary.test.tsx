@@ -97,21 +97,6 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     }),
     redeemCode: vi.fn(),
     getRedeemHistory: vi.fn().mockResolvedValue([]),
-    getSubscriptionSummary: vi.fn().mockResolvedValue({
-      active_count: 1,
-      total_used_usd: 2,
-      subscriptions: [
-        {
-          id: 4,
-          group_id: 2,
-          group_name: 'Pro plan',
-          status: 'active',
-          daily_used_usd: 1,
-          daily_limit_usd: 5,
-          expires_at: '2026-09-01T00:00:00Z',
-        },
-      ],
-    }),
     getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
     getAnnouncements: vi.fn().mockResolvedValue([]),
     markAnnouncementRead: vi.fn(),
@@ -136,27 +121,20 @@ function renderSummary(api: Sub2ApiRendererApi) {
 }
 
 describe('Sub2ApiUsageSummary', () => {
-  test('renders usage and active subscription data', async () => {
+  test('renders usage without the removed subscription section', async () => {
     renderSummary(createApi())
 
-    expect(await screen.findByText('Pro plan')).toBeTruthy()
+    expect(await screen.findByText('All time')).toBeTruthy()
     expect(screen.getByText('All time')).toBeTruthy()
     expect(screen.getByText('$1.2345')).toBeTruthy()
-    expect(screen.getByText('$1.00 / $5.00')).toBeTruthy()
     expect(screen.getByText('Recent usage trend')).toBeTruthy()
     expect(screen.getByText('Usage by model')).toBeTruthy()
     expect(screen.getByText('gpt-5')).toBeTruthy()
+    expect(screen.queryByText('Pro plan')).toBeNull()
+    expect(screen.queryByText('Active subscriptions')).toBeNull()
     expect(screen.queryByText('Usage details')).toBeNull()
     expect(screen.queryByText('Error requests')).toBeNull()
     expect(screen.queryByText('Platform quotas')).toBeNull()
-  })
-
-  test('keeps usage visible when the subscription request fails', async () => {
-    renderSummary(createApi({ getSubscriptionSummary: vi.fn().mockRejectedValue(new Error('unavailable')) }))
-
-    expect(await screen.findByText('Unable to load subscription summary.')).toBeTruthy()
-    expect(screen.getByText('All time')).toBeTruthy()
-    expect(screen.getByText('$1.2345')).toBeTruthy()
   })
 
   test('keeps the rest of the summary visible when trend and model requests fail', async () => {
