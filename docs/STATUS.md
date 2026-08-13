@@ -773,3 +773,10 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - `release/app/package.json` 版本已更新为 `1.22.12`；修复提交 `db8efdcf` 已推送到 `main`，`v1.22.12` 标签已推送并重新触发远程 Release；未移动已有 `v1.22.11` 标签。
 - 未执行本地生产构建、安装包打包或完整测试；源目录 `D:\project\EazyAI-Chat` 未修改。
 - 任务记录：`docs/tasks/0060-fix-stale-usage-summary-tests.md`、`docs/tasks/0061-release-v1.22.12-after-test-fix.md`。
+
+## v1.22.12 类型检查失败与 v1.22.13 修复准备（2026-08-14）
+
+- `v1.22.12` 的 Windows/macOS 流水线在 TypeScript 检查阶段失败：`Sub2ApiUsageSummary.test.tsx` 的 API mock 删除了共享接口仍要求的 `getSubscriptionSummary()` 方法。
+- 已补回不参与生产调用的类型 mock，并将发布版本提升为 `1.22.13`；已有 `v1.22.12` 标签不移动。
+- `pnpm check` 和用量摘要定向测试已执行并通过；未执行本地生产构建、安装包打包或完整测试。
+- 任务记录：`docs/tasks/0062-fix-usage-summary-api-mock-type.md`。

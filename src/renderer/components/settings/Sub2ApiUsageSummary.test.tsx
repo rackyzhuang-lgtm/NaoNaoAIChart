@@ -97,6 +97,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
     }),
     redeemCode: vi.fn(),
     getRedeemHistory: vi.fn().mockResolvedValue([]),
+    getSubscriptionSummary: vi.fn(),
     getChannelMonitors: vi.fn().mockResolvedValue({ items: [] }),
     getAnnouncements: vi.fn().mockResolvedValue([]),
     markAnnouncementRead: vi.fn(),
