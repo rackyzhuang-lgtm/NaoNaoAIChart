@@ -762,6 +762,6 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 
 ## v1.22.11 远程 Release 触发（2026-08-13）
 
-- 已按项目所有者要求准备将当前同步变更推送到 `github-build`（`rackyzhuang-lgtm/NaoNaoAIChart`）。工作流要求标签与 `release/app/package.json` 版本一致，因此版本更新为 `1.22.11`，触发标签为 `v1.22.11`。
+- 已将当前同步变更提交 `5764939c` 推送到 `github-build`（`rackyzhuang-lgtm/NaoNaoAIChart`）的 `main`，并推送带注释标签 `v1.22.11`。工作流要求标签与 `release/app/package.json` 版本一致，本次版本为 `1.22.11`。
 - 本轮不执行本地测试、构建或安装包打包，也不等待远程 Windows/macOS 工作流完成；结果以远程 GitHub Actions/Release 页面为准。
 - 任务记录：`docs/tasks/0059-release-v1.22.11.md`。
