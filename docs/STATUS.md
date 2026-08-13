@@ -792,6 +792,6 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 
 - `v1.22.13` 的 Windows/macOS 流水线在完整 Vitest 阶段失败：`src/main/file-parser.test.ts` 首个 PDF 测试在 PDF.js worker 冷启动时超过默认 10 秒超时，未进入打包步骤。
 - 已将 `parsePdf` 测试套件超时设置为 30 秒，不修改生产 PDF 解析逻辑；定向测试 6/6 通过。
-- `release/app/package.json` 版本已更新为 `1.22.14`，准备创建 `v1.22.14` 标签重新触发远程 Release；已有 `v1.22.13` 标签不移动。
+- `release/app/package.json` 版本已更新为 `1.22.14`；修复提交 `7c21d0bd` 已推送到 `github-build/main`，`v1.22.14` 标签已推送并重新触发远程 Release；已有 `v1.22.13` 标签不移动。
 - 未执行本地生产构建、安装包打包或完整测试；源目录 `D:\project\EazyAI-Chat` 未修改。
 - 任务记录：`docs/tasks/0064-fix-pdf-parser-ci-timeout.md`、`docs/tasks/0065-release-v1.22.14-after-pdf-test-fix.md`。
