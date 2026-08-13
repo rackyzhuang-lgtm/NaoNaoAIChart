@@ -742,5 +742,6 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - `corepack pnpm check` 和共享边界检查通过；Biome 退出码 0，0 error、911 条既有 warning；全量 Vitest 291 个文件、2,740 项通过，3 个文件/61 项跳过；生产构建通过；桌面 E2E 1 项通过。
 - 首次全量 Vitest 因本机 `src/node_modules` junction 被误收集而失败；已将 Vitest 排除模式改为匹配任意层级的依赖/发布目录并增加回归测试，重跑后通过。
 - 构建仍保留既有依赖 `eval`、循环分块、Browserslist 数据过期和大 chunk warning；未执行真实账户、真实 API Key 或真实模型请求。
-- GitHub 提交、分支/标签推送和 Release 工作流触发待执行；按用户要求不等待远程 Windows/macOS 打包结果。
+- 发布提交 `73a86c71563a95c46afa44de7dec05a4a38697fd` 已推送到 GitHub `main`，`v1.22.9` 带注释标签已推送并满足 Release 工作流的 `v*` 触发条件。
+- 按项目所有者要求未执行本地安装包打包，也不等待或轮询远程 Windows/macOS 打包结果；远程制品和 GitHub Release 当前未记录为成功。
 - 任务记录：`docs/tasks/0056-release-v1.22.9.md`。
