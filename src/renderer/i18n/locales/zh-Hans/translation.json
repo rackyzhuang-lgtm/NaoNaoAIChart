@@ -1234,6 +1234,8 @@
   "Account Status": "账户状态",
   "Account service is available in the desktop app only.": "账户服务仅在桌面应用中可用。",
   "Account status": "账户状态",
+  "My": "我的",
+  "Recharge": "充值",
   "Account unavailable": "账户服务不可用",
   "API Keys": "API 密钥",
   "Set up an API key for chat": "为聊天设置 API 密钥",

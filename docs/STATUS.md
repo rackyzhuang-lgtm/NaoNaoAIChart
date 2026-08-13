@@ -751,3 +751,17 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 项目所有者要求在新 GitHub 仓库 `rackyzhuang-lgtm/NaoNaoAIChart` 重新触发打包；已有 `v1.22.9` 标签不会重复触发标签工作流，因此准备新的 `v1.22.10` 标签。
 - 本轮仅更新发布版本、提交并推送新标签；不运行本地测试、构建或安装包打包，也不等待远程 Windows/macOS 工作流结果。
 - 任务记录：`docs/tasks/0057-retrigger-v1.22.10.md`。
+
+## 继续同步 EazyAI-Chat v1.22.12 功能（2026-08-13）
+
+- 已从只读目录 `D:\project\EazyAI-Chat` 的 `5b90a211..1fa072d3` 范围迁入无限画布 Agent 工具契约、输入校验、快照压缩、操作转换和网关注册；写操作继续通过现有画布确认事件执行。
+- 账户页已按当前 NaoNaoAI 品牌拆分为“我的 / 公告 / 充值 / API 密钥”四个分区；侧栏已移除 `My Copilots`、`Help` 和 `/guide` 入口。源端 EazyAi 品牌、版本号、发布记录、`LICENSE` 及未跟踪测试未迁入。
+- 已新增任务记录 `docs/tasks/0058-eazyai-chat-sync-continuation.md` 和 ADR-0031；源目录未修改，当前 NaoNaoAI 服务地址与发布远程未改变。
+- 本轮已执行：`git diff --check`、品牌/路径静态检查。未执行：`pnpm test`、`pnpm build`、桌面 E2E、真实线上请求、打包和 Git 推送。
+- 遗留风险：本轮未运行 TypeScript/lint，新增 Agent 工具文件和账户结构需在后续锁定环境中验证；无限画布上游既有 typecheck 风险仍存在。
+
+## v1.22.11 远程 Release 触发（2026-08-13）
+
+- 已按项目所有者要求准备将当前同步变更推送到 `github-build`（`rackyzhuang-lgtm/NaoNaoAIChart`）。工作流要求标签与 `release/app/package.json` 版本一致，因此版本更新为 `1.22.11`，触发标签为 `v1.22.11`。
+- 本轮不执行本地测试、构建或安装包打包，也不等待远程 Windows/macOS 工作流完成；结果以远程 GitHub Actions/Release 页面为准。
+- 任务记录：`docs/tasks/0059-release-v1.22.11.md`。

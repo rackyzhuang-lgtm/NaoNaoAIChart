@@ -1,6 +1,5 @@
 import { Alert, Badge, Group, Loader, Paper, Progress, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
 import type {
-  Sub2ApiSubscriptionSummaryItem,
   Sub2ApiUsageDashboardModels,
   Sub2ApiUsageDashboardStats,
   Sub2ApiUsageDashboardTrend,
@@ -8,7 +7,7 @@ import type {
   Sub2ApiUsageTrendItem,
 } from '@shared/sub2api/contracts'
 import type { Sub2ApiRendererApi } from '@shared/sub2api/ipc'
-import { IconAlertCircle, IconChartBar, IconReceipt } from '@tabler/icons-react'
+import { IconAlertCircle, IconChartBar } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -70,57 +69,6 @@ function UsagePeriod({
   )
 }
 
-function SubscriptionItem({ subscription }: { subscription: Sub2ApiSubscriptionSummaryItem }) {
-  const { t } = useTranslation()
-  const windows = [
-    { label: t('Daily'), used: subscription.daily_used_usd, limit: subscription.daily_limit_usd },
-    { label: t('Weekly'), used: subscription.weekly_used_usd, limit: subscription.weekly_limit_usd },
-    { label: t('Monthly'), used: subscription.monthly_used_usd, limit: subscription.monthly_limit_usd },
-  ].filter(({ used, limit }) => used !== undefined || limit !== undefined)
-
-  return (
-    <Paper withBorder radius="sm" p="md">
-      <Group justify="space-between" align="flex-start" gap="sm">
-        <div>
-          <Text fw={600}>{subscription.group_name || t('Subscription')}</Text>
-          {subscription.expires_at && (
-            <Text size="xs" c="dimmed" mt={3}>
-              {t('Expires')}: {formatDate(subscription.expires_at)}
-            </Text>
-          )}
-        </div>
-        <Badge variant="light" color="green">
-          {t('Active')}
-        </Badge>
-      </Group>
-      {windows.length > 0 && (
-        <Stack gap="sm" mt="md">
-          {windows.map(({ label, used = 0, limit }) => {
-            const percentage = limit && limit > 0 ? Math.min(100, (used / limit) * 100) : 0
-            return (
-              <div key={label}>
-                <Group justify="space-between" gap="sm" mb={4}>
-                  <Text size="xs" c="dimmed">
-                    {label}
-                  </Text>
-                  <Text size="xs" ff="monospace">
-                    {limit === null || limit === undefined
-                      ? `${formatCost(used)} / ${t('No limit')}`
-                      : `${formatCost(used)} / ${formatCost(limit)}`}
-                  </Text>
-                </Group>
-                {limit !== null && limit !== undefined && limit > 0 && (
-                  <Progress value={percentage} size="sm" radius="sm" />
-                )}
-              </div>
-            )
-          })}
-        </Stack>
-      )}
-    </Paper>
-  )
-}
-
 function UsageTrendItemView({ item, maxRequests }: { item: Sub2ApiUsageTrendItem; maxRequests: number }) {
   const { t } = useTranslation()
   return (
@@ -172,23 +120,20 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [usage, setUsage] = useState<Sub2ApiUsageDashboardStats | null>(null)
-  const [subscriptions, setSubscriptions] = useState<Sub2ApiSubscriptionSummaryItem[] | null>(null)
   const [usageTrend, setUsageTrend] = useState<Sub2ApiUsageDashboardTrend | null>(null)
   const [usageModels, setUsageModels] = useState<Sub2ApiUsageDashboardModels | null>(null)
   const [usageFailed, setUsageFailed] = useState(false)
   const [usageTrendFailed, setUsageTrendFailed] = useState(false)
   const [usageModelsFailed, setUsageModelsFailed] = useState(false)
-  const [subscriptionsFailed, setSubscriptionsFailed] = useState(false)
 
   useEffect(() => {
     let active = true
     setLoading(true)
     void Promise.allSettled([
       api.getUsageDashboardStats(),
-      api.getSubscriptionSummary(),
       api.getUsageDashboardTrend(),
       api.getUsageDashboardModels(),
-    ]).then(([usageResult, subscriptionResult, usageTrendResult, usageModelsResult]) => {
+    ]).then(([usageResult, usageTrendResult, usageModelsResult]) => {
       if (!active) {
         return
       }
@@ -198,13 +143,6 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
       } else {
         setUsage(null)
         setUsageFailed(true)
-      }
-      if (subscriptionResult.status === 'fulfilled') {
-        setSubscriptions(subscriptionResult.value.subscriptions)
-        setSubscriptionsFailed(false)
-      } else {
-        setSubscriptions(null)
-        setSubscriptionsFailed(true)
       }
       if (usageTrendResult.status === 'fulfilled') {
         setUsageTrend(usageTrendResult.value)
@@ -302,25 +240,6 @@ export default function Sub2ApiUsageSummary({ api }: Props) {
         </SimpleGrid>
       )}
 
-      <Group gap="sm" mt="xs">
-        <ThemeIcon variant="light" radius="sm" color="teal">
-          <IconReceipt size={18} />
-        </ThemeIcon>
-        <Text fw={600}>{t('Active subscriptions')}</Text>
-      </Group>
-      {subscriptionsFailed && <Alert color="yellow">{t('Unable to load subscription summary.')}</Alert>}
-      {subscriptions?.length === 0 && (
-        <Text size="sm" c="dimmed">
-          {t('No active subscriptions')}
-        </Text>
-      )}
-      {subscriptions && subscriptions.length > 0 && (
-        <Stack gap="sm">
-          {subscriptions.map((subscription) => (
-            <SubscriptionItem key={subscription.id} subscription={subscription} />
-          ))}
-        </Stack>
-      )}
     </Stack>
   )
 }

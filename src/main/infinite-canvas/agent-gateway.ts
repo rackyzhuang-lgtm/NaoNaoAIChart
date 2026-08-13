@@ -1,5 +1,12 @@
 import crypto from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import {
+  buildCanvasToolRequest,
+  CANVAS_AGENT_TOOL_DEFINITIONS,
+  CANVAS_AGENT_TOOL_NAMES,
+  compactCanvasSnapshot,
+  parseCanvasToolInput,
+} from './canvas-agent-tools'
 import { type OpenAIStreamToolCall, readOpenAIResponsesStream } from './openai-stream'
 
 const ALLOWED_AGENT_API_ORIGINS = new Set(['https://naonaoai.shop', 'https://eazyai.shop'])
@@ -302,7 +309,7 @@ export class InfiniteCanvasAgentGateway {
         stream: true,
         store: false,
         instructions:
-          'You are NaoNaoAI Canvas Agent. Use tools when needed and never claim a tool action succeeded without its result.',
+          'You are NaoNaoAI Canvas Agent. Operate the currently open Infinite Canvas. Before changing it, read canvas_get_state; use canvas_get_selection when the user refers to selected nodes. Use the canvas tools for canvas work, and never claim a write succeeded without its result. Prefer high-level tools such as canvas_create_text_node or canvas_move_nodes; their writes require user confirmation. When generating content, use the corresponding canvas_generate_* tool and report that generation started until the canvas result confirms completion.',
         input: thread.modelMessages,
         tools: this.#tools(),
       }),
@@ -337,8 +344,21 @@ export class InfiniteCanvasAgentGateway {
 
   async #executeTool(clientId: string, call: OpenAIStreamToolCall, signal: AbortSignal): Promise<unknown> {
     const input = parseToolInput(call.arguments)
-    if (call.name === 'canvas_get_state') return this.#snapshots.get(clientId) || { hasCanvas: false }
-    if (call.name === 'canvas_apply_ops') return await this.#requestCanvasTool(clientId, call.name, input, signal)
+    if (CANVAS_AGENT_TOOL_NAMES.has(call.name)) {
+      const parsed = parseCanvasToolInput(call.name, input)
+      const snapshot = this.#snapshots.get(clientId) as Record<string, unknown> | undefined
+      if (call.name === 'canvas_get_state' || call.name === 'canvas_export_snapshot')
+        return compactCanvasSnapshot(snapshot as never)
+      if (call.name === 'canvas_get_selection') {
+        const compact = compactCanvasSnapshot(snapshot as never) as Record<string, unknown>
+        const nodes = Array.isArray(compact.nodes) ? compact.nodes : []
+        const selected = new Set(Array.isArray(compact.selectedNodeIds) ? compact.selectedNodeIds : [])
+        return { ...compact, nodes: nodes.filter((node) => selected.has((node as { id?: unknown }).id as string)) }
+      }
+      const request = buildCanvasToolRequest(call.name, parsed, snapshot as never)
+      if (!request) return { hasCanvas: false }
+      return await this.#requestCanvasTool(clientId, request.name, request.input, signal)
+    }
     if (this.#hostTools.some((tool) => tool.name === call.name)) {
       if (!this.options.executeHostTool) return { error: 'Host tools are unavailable.' }
       return await this.options.executeHostTool(call.name, input, signal)
@@ -376,29 +396,15 @@ export class InfiniteCanvasAgentGateway {
 
   #tools() {
     return [
-      {
-        type: 'function',
-        name: 'canvas_get_state',
-        description: 'Read the current canvas snapshot.',
-        parameters: { type: 'object', properties: {}, additionalProperties: false },
-      },
-      {
-        type: 'function',
-        name: 'canvas_apply_ops',
-        description: 'Propose canvas operations. The user approves canvas writes before they are applied.',
-        parameters: {
-          type: 'object',
-          properties: { ops: { type: 'array', items: { type: 'object' } } },
-          required: ['ops'],
-          additionalProperties: false,
-        },
-      },
-      ...this.#hostTools.map((tool) => ({
-        type: 'function',
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      })),
+      ...CANVAS_AGENT_TOOL_DEFINITIONS,
+      ...this.#hostTools
+        .filter((tool) => !CANVAS_AGENT_TOOL_NAMES.has(tool.name))
+        .map((tool) => ({
+          type: 'function',
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        })),
     ]
   }
 

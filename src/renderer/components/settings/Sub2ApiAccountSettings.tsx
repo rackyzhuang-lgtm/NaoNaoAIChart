@@ -12,6 +12,7 @@ import {
   PasswordInput,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   TextInput,
   ThemeIcon,
@@ -91,9 +92,11 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [keyOnboardingOpened, setKeyOnboardingOpened] = useState(false)
+  const [accountSection, setAccountSection] = useState<'my' | 'announcements' | 'recharge' | 'api-keys'>('my')
 
   const completeExplicitAuthentication = useCallback((authenticatedUser: Sub2ApiUser) => {
     setUser(authenticatedUser)
+    setAccountSection('my')
     setPhase('signed_in')
     if (!hasUsableSub2ApiChatProvider(settingsStore.getState())) {
       setKeyOnboardingOpened(true)
@@ -376,6 +379,7 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
       await accountApi.logout()
       setUser(null)
       setKeyOnboardingOpened(false)
+      setAccountSection('my')
       setPhase('signed_out')
     } catch (logoutError) {
       setError(getSafeErrorMessage(logoutError, t, t('Unable to sign out. Please try again.')))
@@ -647,52 +651,69 @@ export default function Sub2ApiAccountSettings({ api = window.electronAPI?.sub2a
             </div>
           </Group>
 
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
-            <div>
-              <Text size="xs" c="dimmed">
-                {t('Balance')}
-              </Text>
-              <Text fw={600}>{user.balance}</Text>
-            </div>
-            <div>
-              <Text size="xs" c="dimmed">
-                {t('Concurrency')}
-              </Text>
-              <Text fw={600}>{user.concurrency}</Text>
-            </div>
-            <div>
-              <Text size="xs" c="dimmed">
-                {t('Run mode')}
-              </Text>
-              <Text fw={600}>{user.run_mode ?? t('Unknown')}</Text>
-            </div>
-          </SimpleGrid>
+          <Tabs value={accountSection} onChange={(value) => value && setAccountSection(value as typeof accountSection)}>
+            <Tabs.List grow mb="xs">
+              <Tabs.Tab value="my" fw={600}>
+                {t('My')}
+              </Tabs.Tab>
+              <Tabs.Tab value="announcements" fw={600}>
+                {t('Announcements')}
+              </Tabs.Tab>
+              <Tabs.Tab value="recharge" fw={600}>
+                {t('Recharge')}
+              </Tabs.Tab>
+              <Tabs.Tab value="api-keys" fw={600}>
+                {t('API Keys')}
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
 
-          <Divider />
-          <Sub2ApiUsageSummary api={accountApi} />
-          <Divider />
-          <Sub2ApiChannelMonitors
-            api={accountApi}
-            availableChannelsEnabled={publicSettings?.available_channels_enabled}
-            channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
-          />
-          <Divider />
-          <Sub2ApiAnnouncements api={accountApi} />
-          <Divider />
-          <Sub2ApiRedeem api={accountApi} user={user} onUserChange={setUser} />
-          <Divider />
-          <Sub2ApiKeySettings api={accountApi} />
-          <Divider />
-          <Button
-            variant="light"
-            color="red"
-            leftSection={<IconLogout size={18} />}
-            loading={busy}
-            onClick={() => void handleLogout()}
-            w="fit-content"
-          >
-            {t('Sign out')}
-          </Button>
+          {accountSection === 'my' && (
+            <Stack gap="lg">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+                <div>
+                  <Text size="xs" c="dimmed">
+                    {t('Balance')}
+                  </Text>
+                  <Text fw={600}>{user.balance}</Text>
+                </div>
+                <div>
+                  <Text size="xs" c="dimmed">
+                    {t('Concurrency')}
+                  </Text>
+                  <Text fw={600}>{user.concurrency}</Text>
+                </div>
+                <div>
+                  <Text size="xs" c="dimmed">
+                    {t('Run mode')}
+                  </Text>
+                  <Text fw={600}>{user.run_mode ?? t('Unknown')}</Text>
+                </div>
+              </SimpleGrid>
+              <Divider />
+              <Sub2ApiUsageSummary api={accountApi} />
+              <Divider />
+              <Sub2ApiChannelMonitors
+                api={accountApi}
+                availableChannelsEnabled={publicSettings?.available_channels_enabled}
+                channelMonitorEnabled={publicSettings?.channel_monitor_enabled}
+              />
+              <Divider />
+              <Button
+                variant="light"
+                color="red"
+                leftSection={<IconLogout size={18} />}
+                loading={busy}
+                onClick={() => void handleLogout()}
+                w="fit-content"
+              >
+                {t('Sign out')}
+              </Button>
+            </Stack>
+          )}
+          {accountSection === 'announcements' && <Sub2ApiAnnouncements api={accountApi} />}
+          {accountSection === 'recharge' && <Sub2ApiRedeem api={accountApi} user={user} onUserChange={setUser} />}
+          {accountSection === 'api-keys' && <Sub2ApiKeySettings api={accountApi} />}
         </Stack>
       )}
     </Stack>
