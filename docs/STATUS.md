@@ -745,3 +745,9 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 发布提交 `73a86c71563a95c46afa44de7dec05a4a38697fd` 已推送到 GitHub `main`，`v1.22.9` 带注释标签已推送并满足 Release 工作流的 `v*` 触发条件。
 - 按项目所有者要求未执行本地安装包打包，也不等待或轮询远程 Windows/macOS 打包结果；远程制品和 GitHub Release 当前未记录为成功。
 - 任务记录：`docs/tasks/0056-release-v1.22.9.md`。
+
+## 重新触发 v1.22.10 远程打包（2026-08-13）
+
+- 项目所有者要求在新 GitHub 仓库 `rackyzhuang-lgtm/NaoNaoAIChart` 重新触发打包；已有 `v1.22.9` 标签不会重复触发标签工作流，因此准备新的 `v1.22.10` 标签。
+- 本轮仅更新发布版本、提交并推送新标签；不运行本地测试、构建或安装包打包，也不等待远程 Windows/macOS 工作流结果。
+- 任务记录：`docs/tasks/0057-retrigger-v1.22.10.md`。
