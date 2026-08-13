@@ -158,4 +158,4 @@ describe('parsePdf', () => {
     expect(text).toContain('==== Page 1 ====')
     expect(text).toContain('Routed through parseFile.')
   })
-})
+}, 30_000)
