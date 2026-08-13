@@ -780,3 +780,10 @@ Remaining risk: legacy Chatbox compatibility modules and assets remain in the re
 - 已补回不参与生产调用的类型 mock，并将发布版本提升为 `1.22.13`；已有 `v1.22.12` 标签不移动。
 - `pnpm check` 和用量摘要定向测试已执行并通过；未执行本地生产构建、安装包打包或完整测试。
 - 任务记录：`docs/tasks/0062-fix-usage-summary-api-mock-type.md`。
+
+## v1.22.13 类型修复远程 Release（2026-08-14）
+
+- 已将 `Sub2ApiUsageSummary` API mock 类型修复提交 `f33f31e2` 推送到 `github-build/main`，并推送 `v1.22.13` 标签；标签与 `release/app/package.json` 的 `1.22.13` 一致，已触发远程 Release 流水线。
+- 已执行：定向 Vitest 2/2；较低堆上限的 TypeScript 检查通过；`git diff --check` 通过。标准 `pnpm check` 在本地 Node 进程以 Windows 访问冲突退出码 `3221225477` 结束，未发现 TypeScript 诊断，不能报告为标准命令通过。
+- 未执行本地生产构建、安装包打包或完整测试；不等待远程流水线结果。源目录 `D:\project\EazyAI-Chat` 未修改。
+- 任务记录：`docs/tasks/0063-release-v1.22.13-after-type-fix.md`。
