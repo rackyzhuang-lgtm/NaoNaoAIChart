@@ -1,6 +1,6 @@
 # 任务 0068：v1.22.15 Gemini 无限画布修复 Release
 
-- 状态：进行中
+- 状态：阻塞
 - 日期：2026-08-14
 
 ## 范围
@@ -19,3 +19,7 @@
 
 - 已通过本次修复的定向 Vitest 26 项、`corepack pnpm check` 和 `git diff --check`。
 - 发布前不执行本地打包；远程流水线结果以 GitHub Actions 页面为准。
+
+## 阻塞项
+
+- 推送目标 `git@github.com:rackyzhuang-lgtm/NaoNaoAIChart.git` 时，GitHub 拒绝当前 SSH 身份 `racky77-coder` 的写入权限。`v1.22.15` tag 未创建或推送，故远程打包和 Release 尚未触发。
