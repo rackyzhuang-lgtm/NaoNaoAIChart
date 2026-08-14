@@ -182,9 +182,14 @@ export type Sub2ApiProviderBinding = z.infer<typeof sub2ApiProviderBindingSchema
 export const sub2ApiInfiniteCanvasCapabilitySchema = z.enum(['text', 'image', 'video', 'audio'])
 export type Sub2ApiInfiniteCanvasCapability = z.infer<typeof sub2ApiInfiniteCanvasCapabilitySchema>
 
+export const sub2ApiInfiniteCanvasApiFormatSchema = z.enum(['openai', 'gemini'])
+export type Sub2ApiInfiniteCanvasApiFormat = z.infer<typeof sub2ApiInfiniteCanvasApiFormatSchema>
+
 export const sub2ApiInfiniteCanvasModelSchema = sub2ApiModelSchema.extend({
   capability: sub2ApiInfiniteCanvasCapabilitySchema,
+  apiFormat: sub2ApiInfiniteCanvasApiFormatSchema,
 })
+export type Sub2ApiInfiniteCanvasModel = z.infer<typeof sub2ApiInfiniteCanvasModelSchema>
 
 export const sub2ApiInfiniteCanvasImportSchema = z.object({
   keyId: z.number().int().positive(),

@@ -1,3 +1,25 @@
+# 无限画布 Gemini 密钥代理转发（2026-08-14）
+
+- 根因：Gemini 生图请求已按 `gemini` 协议携带 `x-goog-api-key`，但无限画布的本地 HTTPS 代理仅转发 `Accept`、`Authorization` 和 `Content-Type`，因此在到达模型网关前丢失密钥并报 `API key is required`。
+- 修复：代理请求头白名单和 CORS 预检均已加入 `X-Goog-Api-Key`。Cookie 与任意非白名单请求头仍不会被转发；未修改远程网关、密钥存储、模型导入数据、域名策略、账号信息、品牌内容或 `D:\project\EazyAI-Chat`。
+- 验证：`corepack pnpm exec vitest run src/main/infinite-canvas/static-server.test.ts src/main/infinite-canvas/embed-bridge.test.ts src/main/sub2api/canvas-model-capability.test.ts` 通过（3 个文件、26 项）；`corepack pnpm check` 和 `git diff --check` 均通过。
+- 未执行：真实 Gemini 生图请求、Electron 内手动生成图片、打包、Git 推送与 Release；验证过程未读取、记录或发送用户 API Key。
+
+# v1.22.15 Release 准备（2026-08-14）
+
+- `release/app/package.json` 已从 `1.22.14` 更新为 `1.22.15`，用于发布 Gemini 无限画布协议和代理鉴权修复。
+- 发布前已通过本次修复的定向 Vitest 26 项、`corepack pnpm check` 和 `git diff --check`。
+- 待执行：提交并推送 `github-build/main`、创建并推送 `v1.22.15` tag，由 GitHub Actions 远程构建 Windows/macOS 安装包并创建 Release；不执行本地打包。
+- 任务记录：`docs/tasks/0068-release-v1.22.15-gemini-canvas-fix.md`。
+
+# 无限画布 Gemini 生图协议分流（2026-08-14）
+
+- 根因：画布导入桥接此前将所有模型固定为 `apiFormat: 'openai'`，Gemini 生图模型因此错误调用 OpenAI Images API，并报 `Images API is not supported for this platform`。
+- 修复：导入契约现在逐模型传递协议；Gemini 生图模型导入 `gemini` 通道并使用画布已有的 Gemini `generateContent` 请求路径；GPT 生图模型和其他模型保持 `openai` 通道。混合密钥使用 `naonao-key-<id>-openai` 与 `naonao-key-<id>-gemini` 两个稳定通道。
+- 兼容：重新导入会迁移旧的无后缀托管通道；没有 `apiFormat` 的历史桥接消息默认使用 OpenAI 协议。未修改 sub2api 服务、公开 HTTPS 代理策略、凭证范围、品牌内容或 `D:\project\EazyAI-Chat`。
+- 验收：`corepack pnpm exec vitest run` 的 8 个聚焦测试文件共 82 项通过，覆盖 GPT/Gemini 分类、主进程导入载荷、混合模型通道、协议默认值和旧通道迁移；`node --check assets/infinite-canvas/naonao-embed-bridge.js`、`corepack pnpm check` 与 `git diff --check` 均通过。范围化 Biome 检查通过；`src/main/sub2api/ipc-handlers.test.ts` 在本次改动 hunk 外保留一处既有格式提示，其 12 项测试和 TypeScript 检查均通过。
+- 未执行：真实 API Key 生图请求、Electron 内手动进入无限画布并生成图片、打包、Git 推送与 Release。
+
 # GitHub 分支推送（不触发打包，2026-08-10）
 
 - 项目所有者明确要求推送代码但不触发打包。本轮未推送 `main`、未创建或推送 tag、未执行本地打包或 Release。

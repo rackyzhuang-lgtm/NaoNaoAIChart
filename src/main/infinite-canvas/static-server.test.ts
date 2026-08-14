@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createPinnedHttpsRequestOptions,
   INFINITE_CANVAS_PROXY_TIMEOUT_MS,
+  proxyRequestHeaders,
   type InfiniteCanvasServer,
   proxyResponseHeaders,
   startInfiniteCanvasServer,
@@ -50,6 +51,7 @@ describe('infinite canvas static server', () => {
     expect(preflight.status).toBe(204)
     expect(preflight.headers.get('access-control-allow-origin')).toBe('http://localhost:1212')
     expect(preflight.headers.get('access-control-allow-headers')).toContain('Authorization')
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('X-Goog-Api-Key')
     expect((await fetch(proxyUrl(server, 'https://other.example/v1/models'), { method: 'LINK' })).status).toBe(405)
   })
 
@@ -85,6 +87,26 @@ describe('infinite canvas static server', () => {
     const callback = vi.fn()
     options.lookup('models.example', {}, callback)
     expect(callback).toHaveBeenCalledWith(null, '93.184.216.34', 4)
+  })
+
+  it('forwards the Gemini API key header but not unrelated request headers', () => {
+    expect(
+      proxyRequestHeaders({
+        headers: {
+          accept: 'application/json',
+          authorization: 'Bearer synthetic-openai-key',
+          'content-type': 'application/json',
+          'x-goog-api-key': 'synthetic-gemini-key',
+          cookie: 'session=must-not-forward',
+          'x-untrusted-header': 'must-not-forward',
+        },
+      })
+    ).toEqual({
+      accept: 'application/json',
+      authorization: 'Bearer synthetic-openai-key',
+      'content-type': 'application/json',
+      'x-goog-api-key': 'synthetic-gemini-key',
+    })
   })
 
   it('does not forward an upstream content length onto the loopback response stream', () => {

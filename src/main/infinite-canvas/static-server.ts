@@ -20,7 +20,7 @@ export interface InfiniteCanvasServerDependencies {
 
 const PROXY_PREFIX = '/_naonao_proxy/'
 const ALLOWED_PROXY_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
-const FORWARDED_REQUEST_HEADERS = ['accept', 'authorization', 'content-type'] as const
+const FORWARDED_REQUEST_HEADERS = ['accept', 'authorization', 'content-type', 'x-goog-api-key'] as const
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition'] as const
 export const INFINITE_CANVAS_PROXY_TIMEOUT_MS = 5 * 60_000
 const CANVAS_CONTENT_SECURITY_POLICY =
@@ -101,7 +101,7 @@ async function serveStatic(root: string, index: string, pathname: string, res: S
   }
 }
 
-function proxyHeaders(req: IncomingMessage): Record<string, string> {
+export function proxyRequestHeaders(req: Pick<IncomingMessage, 'headers'>): Record<string, string> {
   const headers: Record<string, string> = {}
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = req.headers[name]
@@ -171,7 +171,7 @@ async function proxyRequest(
         ...proxyCorsHeaders(req),
         Allow: [...ALLOWED_PROXY_METHODS].join(', '),
         'Access-Control-Allow-Methods': [...ALLOWED_PROXY_METHODS].join(', '),
-        'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type',
+        'Access-Control-Allow-Headers': 'Accept, Authorization, Content-Type, X-Goog-Api-Key',
         'Access-Control-Max-Age': '600',
         'Cache-Control': 'no-store',
       })
@@ -187,7 +187,7 @@ async function proxyRequest(
       resolve()
     }
     const upstream = httpsRequest(
-      createPinnedHttpsRequestOptions(validation, method, proxyHeaders(req)),
+      createPinnedHttpsRequestOptions(validation, method, proxyRequestHeaders(req)),
       (response) => {
         const status = response.statusCode ?? 502
         if (status >= 300 && status < 400) {

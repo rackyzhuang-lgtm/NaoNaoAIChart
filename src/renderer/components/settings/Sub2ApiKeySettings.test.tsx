@@ -98,7 +98,7 @@ function createApi(overrides: Partial<Sub2ApiRendererApi> = {}): Sub2ApiRenderer
       keyName: 'desktop-key',
       baseUrl: 'https://naonaoai.shop',
       apiKey: 'full-key-must-not-be-in-list',
-      models: [{ id: 'gpt-image-test', capability: 'image' }],
+      models: [{ id: 'gpt-image-test', capability: 'image', apiFormat: 'openai' }],
     }),
     ...overrides,
   }

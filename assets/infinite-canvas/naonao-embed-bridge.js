@@ -61,48 +61,79 @@
       ? payload.models.filter(function (model) {
           return model && typeof model.id === 'string' && model.id.length > 0 && model.id.length <= 256 &&
             (model.capability === 'text' || model.capability === 'image' || model.capability === 'video' || model.capability === 'audio')
-        }).map(function (model) { return { name: model.id, capability: model.capability } })
+        }).map(function (model) {
+          return {
+            name: model.id,
+            capability: model.capability,
+            // Older import payloads predate per-model protocol selection.
+            apiFormat: model.apiFormat === 'gemini' ? 'gemini' : 'openai',
+          }
+        })
       : []
     if (!models.length) return rejectImport('No importable models were returned')
-    var marker = String(payload.keyId) + ':' + models.map(function (model) { return model.capability + ':' + model.name }).join('|')
+    var marker = String(payload.keyId) + ':' + models.map(function (model) { return model.apiFormat + ':' + model.capability + ':' + model.name }).join('|')
     var stored = {}
     try { stored = JSON.parse(localStorage.getItem(aiConfigStorageKey) || '{}') || {} } catch (_) { return rejectImport('Unable to read the existing Canvas configuration') }
     var config = stored.state && stored.state.config && typeof stored.state.config === 'object' ? stored.state.config : {}
-    var channelId = 'naonao-key-' + String(payload.keyId)
-    var currentChannel = Array.isArray(config.channels) ? config.channels.find(function (item) { return item && item.id === channelId }) : null
-    var currentModels = currentChannel && Array.isArray(currentChannel.models) ? currentChannel.models : []
-    var channelUnchanged = currentChannel && currentChannel.name === payload.keyName.slice(0, 100) &&
-      currentChannel.baseUrl === baseUrl.toString() && currentChannel.apiKey === payload.apiKey &&
-      currentModels.length === models.length && currentModels.every(function (model, index) {
-        return model && model.name === models[index].name && model.capability === models[index].capability
-      })
-    if (localStorage.getItem('naonaoai:last-canvas-import') === marker && channelUnchanged) return reply(true)
-    var channel = {
-      id: channelId,
-      name: payload.keyName.slice(0, 100),
-      baseUrl: baseUrl.toString(),
-      apiKey: payload.apiKey,
-      apiFormat: 'openai',
-      models: models,
+    var channelPrefix = 'naonao-key-' + String(payload.keyId)
+    var legacyChannelId = channelPrefix
+    var apiFormats = Array.from(new Set(models.map(function (model) { return model.apiFormat })))
+    var expectedChannels = apiFormats.map(function (apiFormat) {
+      var channelModels = models.filter(function (model) { return model.apiFormat === apiFormat })
+      return {
+        id: channelPrefix + '-' + apiFormat,
+        name: (apiFormats.length > 1 ? payload.keyName + ' (' + (apiFormat === 'gemini' ? 'Gemini' : 'OpenAI') + ')' : payload.keyName).slice(0, 100),
+        baseUrl: baseUrl.toString(),
+        apiKey: payload.apiKey,
+        apiFormat: apiFormat,
+        models: channelModels.map(function (model) { return { name: model.name, capability: model.capability } }),
+      }
+    })
+    function isManagedChannel(item) {
+      return item && (item.id === legacyChannelId || item.id === channelPrefix + '-openai' || item.id === channelPrefix + '-gemini')
     }
-    var channels = Array.isArray(config.channels) ? config.channels.filter(function (item) { return item && item.id !== channelId }) : []
-    channels.push(channel)
-    var encoded = models.map(function (model) { return channelId + '::' + model.name })
+    function hasSameModels(channel, expected) {
+      var currentModels = channel && Array.isArray(channel.models) ? channel.models : []
+      return currentModels.length === expected.models.length && currentModels.every(function (model, index) {
+        var expectedModel = expected.models[index]
+        return model && model.name === expectedModel.name && model.capability === expectedModel.capability
+      })
+    }
+    var existingChannels = Array.isArray(config.channels) ? config.channels : []
+    var channelsUnchanged = expectedChannels.every(function (expected) {
+      var current = existingChannels.find(function (item) { return item && item.id === expected.id })
+      return current && current.name === expected.name && current.baseUrl === expected.baseUrl && current.apiKey === expected.apiKey &&
+        current.apiFormat === expected.apiFormat && hasSameModels(current, expected)
+    }) && !existingChannels.some(function (item) { return item && item.id === legacyChannelId })
+    if (localStorage.getItem('naonaoai:last-canvas-import') === marker && channelsUnchanged) return reply(true)
+    var channels = existingChannels.filter(function (item) { return item && !isManagedChannel(item) })
+    expectedChannels.forEach(function (channel) { channels.push(channel) })
+    var channelByFormat = {}
+    expectedChannels.forEach(function (channel) { channelByFormat[channel.apiFormat] = channel })
+    var encoded = models.map(function (model) { return channelByFormat[model.apiFormat].id + '::' + model.name })
+    function isManagedModelValue(value) {
+      return typeof value === 'string' && (
+        value.indexOf(legacyChannelId + '::') === 0 ||
+        value.indexOf(channelPrefix + '-openai::') === 0 ||
+        value.indexOf(channelPrefix + '-gemini::') === 0
+      )
+    }
     var previousModels = Array.isArray(config.models) ? config.models.filter(function (value) {
-      return typeof value !== 'string' || value.indexOf(channelId + '::') !== 0
+      return !isManagedModelValue(value)
     }) : []
+    var primaryChannel = expectedChannels[0]
     var nextConfig = Object.assign({}, config, {
       channelMode: 'local',
-      baseUrl: channel.baseUrl,
-      apiKey: channel.apiKey,
-      apiFormat: 'openai',
+      baseUrl: primaryChannel.baseUrl,
+      apiKey: primaryChannel.apiKey,
+      apiFormat: primaryChannel.apiFormat,
       channels: channels,
       models: Array.from(new Set(previousModels.concat(encoded))),
     })
     ;['image', 'video', 'text', 'audio'].forEach(function (capability) {
       var index = models.findIndex(function (model) { return model.capability === capability })
       if (index >= 0) nextConfig[capability + 'Model'] = encoded[index]
-      else if (typeof nextConfig[capability + 'Model'] === 'string' && nextConfig[capability + 'Model'].indexOf(channelId + '::') === 0) nextConfig[capability + 'Model'] = ''
+      else if (isManagedModelValue(nextConfig[capability + 'Model'])) nextConfig[capability + 'Model'] = ''
     })
     nextConfig.model = encoded[0]
     try {

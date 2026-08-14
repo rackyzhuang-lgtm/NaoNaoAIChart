@@ -67,10 +67,11 @@ function importMessage(overrides: Record<string, unknown> = {}) {
       baseUrl: 'https://models.example',
       apiKey: 'synthetic-key',
       models: [
-        { id: 'gpt-image-2', capability: 'image' },
-        { id: 'gpt-5.5', capability: 'text' },
-        { id: 'seedance-video', capability: 'video' },
-        { id: 'gpt-4o-mini-tts', capability: 'audio' },
+        { id: 'gpt-image-2', capability: 'image', apiFormat: 'openai' },
+        { id: 'gemini-2.5-flash-image', capability: 'image', apiFormat: 'gemini' },
+        { id: 'gpt-5.5', capability: 'text', apiFormat: 'openai' },
+        { id: 'seedance-video', capability: 'video', apiFormat: 'openai' },
+        { id: 'gpt-4o-mini-tts', capability: 'audio', apiFormat: 'openai' },
       ],
       ...overrides,
     },
@@ -106,19 +107,30 @@ describe('Infinite Canvas embed bridge', () => {
     expect(stored.version).toBe(3)
     expect(stored.state.config.quality).toBe('high')
     expect(stored.state.webdav).toEqual({ url: 'https://storage.example/dav', directory: 'canvas' })
-    expect(stored.state.config.channels.map((channel: { id: string }) => channel.id)).toEqual(['other', 'naonao-key-7'])
-    expect(stored.state.config.channels[1].models).toEqual([
-      { name: 'gpt-image-2', capability: 'image' },
-      { name: 'gpt-5.5', capability: 'text' },
-      { name: 'seedance-video', capability: 'video' },
-      { name: 'gpt-4o-mini-tts', capability: 'audio' },
+    expect(stored.state.config.channels.map((channel: { id: string }) => channel.id)).toEqual([
+      'other',
+      'naonao-key-7-openai',
+      'naonao-key-7-gemini',
     ])
+    expect(stored.state.config.channels[1]).toMatchObject({
+      apiFormat: 'openai',
+      models: [
+        { name: 'gpt-image-2', capability: 'image' },
+        { name: 'gpt-5.5', capability: 'text' },
+        { name: 'seedance-video', capability: 'video' },
+        { name: 'gpt-4o-mini-tts', capability: 'audio' },
+      ],
+    })
+    expect(stored.state.config.channels[2]).toMatchObject({
+      apiFormat: 'gemini',
+      models: [{ name: 'gemini-2.5-flash-image', capability: 'image' }],
+    })
     expect(stored.state.config).toMatchObject({
-      model: 'naonao-key-7::gpt-image-2',
-      imageModel: 'naonao-key-7::gpt-image-2',
-      textModel: 'naonao-key-7::gpt-5.5',
-      videoModel: 'naonao-key-7::seedance-video',
-      audioModel: 'naonao-key-7::gpt-4o-mini-tts',
+      model: 'naonao-key-7-openai::gpt-image-2',
+      imageModel: 'naonao-key-7-openai::gpt-image-2',
+      textModel: 'naonao-key-7-openai::gpt-5.5',
+      videoModel: 'naonao-key-7-openai::seedance-video',
+      audioModel: 'naonao-key-7-openai::gpt-4o-mini-tts',
     })
     expect(bridge.postMessage).toHaveBeenCalledWith(
       {
@@ -143,12 +155,49 @@ describe('Infinite Canvas embed bridge', () => {
 
     const stored = JSON.parse(bridge.storage['infinite-canvas:ai_config_store'])
     expect(
-      stored.state.config.channels.filter((channel: { id: string }) => channel.id === 'naonao-key-7')
+      stored.state.config.channels.filter((channel: { id: string }) => channel.id === 'naonao-key-7-openai')
     ).toHaveLength(1)
-    expect(stored.state.config.channels.find((channel: { id: string }) => channel.id === 'naonao-key-7').apiKey).toBe(
-      'rotated-key'
-    )
+    expect(
+      stored.state.config.channels.find((channel: { id: string }) => channel.id === 'naonao-key-7-openai').apiKey
+    ).toBe('rotated-key')
     expect(bridge.reload).toHaveBeenCalledOnce()
+  })
+
+  it('defaults legacy imports without apiFormat to an OpenAI channel', async () => {
+    const bridge = await loadBridge()
+    bridge.listeners.get('message')?.({
+      source: bridge.parent,
+      data: importMessage({
+        models: [{ id: 'gpt-image-2', capability: 'image' }],
+      }),
+    })
+
+    const stored = JSON.parse(bridge.storage['infinite-canvas:ai_config_store'])
+    expect(stored.state.config.channels).toContainEqual(
+      expect.objectContaining({
+        id: 'naonao-key-7-openai',
+        apiFormat: 'openai',
+        models: [{ name: 'gpt-image-2', capability: 'image' }],
+      })
+    )
+  })
+
+  it('removes the legacy unsuffixed channel during protocol migration', async () => {
+    const existing = {
+      state: {
+        config: {
+          channels: [{ id: 'naonao-key-7', name: 'old', apiFormat: 'openai', models: [] }],
+          models: ['naonao-key-7::gpt-image-2'],
+        },
+      },
+      version: 3,
+    }
+    const bridge = await loadBridge({ 'infinite-canvas:ai_config_store': JSON.stringify(existing) })
+    bridge.listeners.get('message')?.({ source: bridge.parent, data: importMessage() })
+
+    const stored = JSON.parse(bridge.storage['infinite-canvas:ai_config_store'])
+    expect(stored.state.config.channels.map((channel: { id: string }) => channel.id)).not.toContain('naonao-key-7')
+    expect(stored.state.config.models).not.toContain('naonao-key-7::gpt-image-2')
   })
 
   it('rejects invalid model payloads without changing configuration', async () => {

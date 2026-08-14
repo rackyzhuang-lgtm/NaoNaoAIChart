@@ -55,7 +55,7 @@ const payload: Sub2ApiInfiniteCanvasImport = {
   keyName: 'desktop-key',
   baseUrl: 'https://models.example',
   apiKey: 'synthetic-key',
-  models: [{ id: 'gpt-image-2', capability: 'image' }],
+  models: [{ id: 'gpt-image-2', capability: 'image', apiFormat: 'openai' }],
 }
 
 describe('Infinite Canvas import delivery', () => {

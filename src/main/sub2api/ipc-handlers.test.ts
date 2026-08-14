@@ -99,8 +99,7 @@ describe('registerSub2ApiHandlers', () => {
         keyName: 'desktop-key',
         baseUrl: 'https://naonaoai.shop',
         apiKey: 'synthetic-user-api-key',
-        capability: 'text' as const,
-        models: [{ id: 'gpt-test' }],
+        models: [{ id: 'gpt-test', capability: 'text' as const, apiFormat: 'openai' as const }],
       })),
     } as unknown as Sub2ApiClient
 

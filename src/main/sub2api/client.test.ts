@@ -707,7 +707,12 @@ describe('Sub2ApiClient', () => {
         return Promise.resolve(success(apiKeyRecord))
       }
       if (url.endsWith('/v1/models')) {
-        return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'gpt-test' }, { id: 'codex-test' }] }))
+        return Promise.resolve(
+          jsonResponse({
+            object: 'list',
+            data: [{ id: 'gpt-test' }, { id: 'gemini-2.5-flash-image' }, { id: 'codex-test' }],
+          })
+        )
       }
       if (url.endsWith('/api/v1/keys/7') && method === 'DELETE') {
         return Promise.resolve(success({ message: 'deleted' }))
@@ -728,7 +733,7 @@ describe('Sub2ApiClient', () => {
     await expect(client.prepareProviderBinding(7)).resolves.toEqual({
       apiKey: 'synthetic-user-api-key',
       apiHost: 'https://naonaoai.shop/v1',
-      models: [{ id: 'gpt-test' }, { id: 'codex-test' }],
+      models: [{ id: 'gpt-test' }, { id: 'gemini-2.5-flash-image' }, { id: 'codex-test' }],
     })
     await expect(client.prepareInfiniteCanvasImport(7)).resolves.toEqual({
       keyId: 7,
@@ -736,8 +741,9 @@ describe('Sub2ApiClient', () => {
       baseUrl: 'https://naonaoai.shop',
       apiKey: 'synthetic-user-api-key',
       models: [
-        { id: 'gpt-test', capability: 'text' },
-        { id: 'codex-test', capability: 'text' },
+        { id: 'gpt-test', capability: 'text', apiFormat: 'openai' },
+        { id: 'gemini-2.5-flash-image', capability: 'image', apiFormat: 'gemini' },
+        { id: 'codex-test', capability: 'text', apiFormat: 'openai' },
       ],
     })
     await expect(client.deleteApiKey(7)).resolves.toBeUndefined()

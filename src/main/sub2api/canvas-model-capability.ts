@@ -1,4 +1,10 @@
-import type { Sub2ApiInfiniteCanvasCapability, Sub2ApiModel } from '../../shared/sub2api/contracts'
+import { isGeminiImageModel } from '../../shared/providers/definitions/image-models'
+import type {
+  Sub2ApiInfiniteCanvasApiFormat,
+  Sub2ApiInfiniteCanvasCapability,
+  Sub2ApiInfiniteCanvasModel,
+  Sub2ApiModel,
+} from '../../shared/sub2api/contracts'
 
 const VIDEO_KEYWORDS = ['seedance', 'video', 'sora', 'veo', 'kling', 'wan', 'hailuo']
 const AUDIO_KEYWORDS = ['audio', 'tts', 'speech', 'voice', 'music', 'sound']
@@ -52,14 +58,23 @@ export function inferInfiniteCanvasModelCapability(model: Sub2ApiModel): Sub2Api
   return 'text'
 }
 
-export function classifyInfiniteCanvasModels(models: Sub2ApiModel[]): Sub2ApiModel[] {
+export function inferInfiniteCanvasModelApiFormat(model: Sub2ApiModel): Sub2ApiInfiniteCanvasApiFormat {
+  return isGeminiImageModel(model.id.trim().toLowerCase()) ? 'gemini' : 'openai'
+}
+
+export function classifyInfiniteCanvasModels(models: Sub2ApiModel[]): Sub2ApiInfiniteCanvasModel[] {
   const seen = new Set<string>()
-  const classified: Sub2ApiModel[] = []
+  const classified: Sub2ApiInfiniteCanvasModel[] = []
   for (const model of models) {
     const id = model.id.trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
-    classified.push({ ...model, id, capability: inferInfiniteCanvasModelCapability({ ...model, id }) })
+    const classifiedModel = { ...model, id }
+    classified.push({
+      ...classifiedModel,
+      capability: inferInfiniteCanvasModelCapability(classifiedModel),
+      apiFormat: inferInfiniteCanvasModelApiFormat(classifiedModel),
+    })
   }
   return classified
 }
