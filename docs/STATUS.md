@@ -9,8 +9,8 @@
 
 - `release/app/package.json` 已从 `1.22.14` 更新为 `1.22.15`，用于发布 Gemini 无限画布协议和代理鉴权修复。
 - 发布前已通过本次修复的定向 Vitest 26 项、`corepack pnpm check` 和 `git diff --check`。
-- 已完成：修复提交 `3c8fd0f7` 已在本地创建。未执行本地打包。
-- 阻塞：推送 `github-build`（`git@github.com:rackyzhuang-lgtm/NaoNaoAIChart.git`）被 GitHub 拒绝，当前 SSH 身份 `racky77-coder` 没有目标仓库写权限。`v1.22.15` tag 尚未创建或推送，因此 GitHub Actions 远程打包和 Release 尚未触发。
+- 已完成：修复提交已推送至 `github-build/main`，`v1.22.15` tag 已推送至 `git@github.com:rackyzhuang-lgtm/NaoNaoAIChart.git`，并触发 GitHub Actions 的 Windows/macOS 安装包和 Release 流程。
+- 未执行：本地安装包打包，且未等待远程流水线完成。默认 SSH 身份 `racky77-coder` 和 `EazyAiShop` 对目标仓库均无写权限；本轮使用本机 `id_edracky_new` 完成目标仓库推送。
 - 任务记录：`docs/tasks/0068-release-v1.22.15-gemini-canvas-fix.md`。
 
 # 无限画布 Gemini 生图协议分流（2026-08-14）
